@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>跑步分析 · StrideHub</title>
+    <link rel="stylesheet" href="{{ relativeUrl(asset('css/stridehub-running.css'))|e('html_attr') }}">
+    <script defer src="{{ relativeUrl(asset('libraries/echarts/echarts.min.js'))|e('html_attr') }}"></script>
+    <script defer src="{{ relativeUrl(asset('js/stridehub-running.js'))|e('html_attr') }}"></script>
+</head>
+<body>
+<div id="running-app" data-api="{{ relativeUrl('admin/running/api')|e('html_attr') }}" data-detail-base="{{ relativeUrl('activities')|e('html_attr') }}">
+    <header class="shell topbar"><a class="brand" href="{{ relativeUrl('admin/training') }}">STRIDE<span>HUB</span></a><nav aria-label="主导航"><a href="{{ relativeUrl('activities') }}">运动记录</a><a href="{{ relativeUrl('admin/training') }}">训练课表</a><a href="{{ relativeUrl('admin/upload') }}">导入运动</a></nav></header>
+    <main class="shell">
+        <div class="hero"><div><p class="eyebrow">RUNNING ANALYTICS / 运动记录</p><h1>每一次出发，都有迹可循。</h1><p class="muted">从长期积累到单次复盘，用真实记录读懂你的跑步。</p></div><span class="tag">公里 · 分钟 · bpm</span></div>
+        <form id="filters" class="panel filters"><label>统计范围<select name="preset"><option value="90">近 90 天</option><option value="30">近 30 天</option><option value="365">近一年</option><option value="all">全部记录</option><option value="custom">自定义</option></select></label><label>开始日期<input name="from" type="date"></label><label>结束日期<input name="to" type="date"></label><label>运动类型<select name="sportType"><option value="all">全部跑步</option><option value="Run">户外跑步</option><option value="TrailRun">越野跑</option><option value="VirtualRun">虚拟跑步</option></select></label><button type="submit">更新看板</button></form>
+        <p id="status" role="status" aria-live="polite" class="muted">正在读取运动记录…</p>
+        <section id="overview" aria-label="长期跑步看板" hidden>
+            <div id="summary" class="stats"></div>
+            <div id="empty" class="panel empty" hidden><h2>等待你的第一份跑步数据</h2><p>导入 FIT、TCX 或 GPX 文件后，这里会生成真实统计。GPX 可能只有轨迹，心率和步频取决于原文件。</p><a class="button" href="{{ relativeUrl('admin/upload') }}">导入运动文件</a><p>Zepp / Amazfit 可通过独立 Zepp Connector 同步到 watch 目录；看板不会要求你在页面填写账号密码。</p></div>
+            <div id="overview-charts" class="grid">
+                <section class="panel"><h2>周跑量与频次</h2><p class="muted">跑量与次数一起看，了解训练节奏。</p><div id="weekly-chart" class="chart"></div></section>
+                <section class="panel"><h2>月度积累</h2><p class="muted">按日历月份统计，首尾月份可能不完整。</p><div id="monthly-chart" class="chart"></div></section>
+                <section class="panel"><h2>长距离与训练时间</h2><p class="muted">每周最长一次跑步，与累计运动时长。</p><div id="long-chart" class="chart"></div></section>
+                <section class="panel"><h2>配速与心率趋势</h2><p class="muted">周平均值受路线、天气和训练类型影响，不直接表示能力变化。</p><div id="trend-chart" class="chart"></div></section>
+                <section class="panel wide"><h2>跑步日历</h2><p id="calendar-caption" class="muted"></p><div id="calendar-chart" class="chart calendar"></div></section>
+            </div>
+            <section class="panel"><div class="section-head"><div><p class="eyebrow">PERSONAL BESTS</p><h2>本周期最佳片段</h2></div><span class="muted">来自已计算的运动内最佳表现</span></div><div id="bests" class="bests"></div></section>
+            <section class="panel"><div class="section-head"><div><p class="eyebrow">ACTIVITY LOG</p><h2>选择一次跑步，深入复盘</h2></div><button id="export" class="secondary" type="button">导出本页 CSV</button></div><div class="table-scroll record-table"><table><thead><tr><th>运动 / 日期</th><th>距离</th><th>时间</th><th>配速</th><th>心率</th><th>爬升</th><th></th></tr></thead><tbody id="activities"></tbody></table></div><div class="pagination"><button id="previous" class="secondary" type="button">上一页</button><span id="page-label"></span><button id="next" class="secondary" type="button">下一页</button></div></section>
+        </section>
+        <section id="detail" aria-label="单次跑步复盘" hidden>
+            <div class="section-head detail-heading"><div><p class="eyebrow">RUN DEEP DIVE / 单次复盘</p><h2 id="detail-title"></h2><p id="detail-meta" class="muted"></p></div><a id="native-detail" class="button secondary">原始详情与路线</a></div>
+            <p id="detail-status" role="status"></p><div id="detail-content" hidden>
+                <div id="detail-stats" class="stats"></div>
+                <section class="panel"><div class="section-head"><div><h2>全程联动曲线</h2><p class="muted">拖动下方滑块缩放；记录断档留空。各轨道共享位置指针。</p></div><label>横轴<select id="timeline-axis"><option value="seconds">经过时间</option><option value="distanceKm">累计距离</option></select></label></div><div id="timeline-chart" class="timeline"></div><p id="timeline-empty" class="muted" hidden>没有可用的逐点记录。请导入包含传感器数据的原始 FIT / TCX 文件。</p></section>
+                <div class="grid">
+                    <section class="panel"><h2>公里分段与坡度校正配速</h2><p class="muted">配速越小越快；GAP 只在原记录已计算时显示。</p><div id="splits-chart" class="chart"></div></section>
+                    <section class="panel"><h2>配速与心率关系</h2><p class="muted">每个点来自同一时刻的有效配速与心率；关联不代表因果。</p><div id="scatter-chart" class="chart"></div></section>
+                    <section class="panel"><h2>心率区间时间</h2><p class="muted">使用运动当天的个人区间，按有效采样间隔累计。</p><div id="zones-chart" class="chart"></div></section>
+                    <section class="panel"><h2>实际心率分布</h2><p class="muted">每 10 bpm 一档，不依赖最大心率估计。</p><div id="hr-chart" class="chart"></div></section>
+                </div>
+                <section class="panel"><h2>分段原始明细</h2><div class="table-scroll"><table><thead><tr><th>分段</th><th>距离 km</th><th>运动时间</th><th>配速 /km</th><th>GAP /km</th><th>高差 m</th></tr></thead><tbody id="split-table"></tbody></table></div><details><summary>设备圈 / 间歇记录</summary><div class="table-scroll"><table><thead><tr><th>圈</th><th>名称</th><th>距离 km</th><th>运动时间</th><th>心率 bpm</th></tr></thead><tbody id="lap-table"></tbody></table></div></details></section>
+                <section class="panel quality"><h2>数据覆盖与计算口径</h2><div id="coverage" class="coverage"></div><ul id="detail-notes"></ul></section>
+            </div>
+        </section>
+        <details class="panel methodology"><summary>总览统计口径与数据来源</summary><ul id="overview-notes"></ul><p>看板仅分析已导入记录；不会生成 VO₂max、HRV、触地时间或伤病风险评分。天气与身体状态请在训练课表中结合查看。</p></details>
+    </main><footer class="shell muted">StrideHub · 跑步分析 · 数据留在你的 Dreeve 实例</footer>
+</div>
+</body></html>

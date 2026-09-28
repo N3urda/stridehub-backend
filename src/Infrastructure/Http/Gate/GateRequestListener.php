@@ -49,6 +49,10 @@ final readonly class GateRequestListener implements EventSubscriberInterface
     {
         return 1 === preg_match('#^/(_(profiler|wdt)|css|images|js|files)/#', $path)
             || '/api/v1' === $path || str_starts_with($path, '/api/v1/')
+            // Training can be planned before importing the first activity. The admin
+            // firewall still authenticates these routes after this setup gate.
+            || '/admin/training' === $path || str_starts_with($path, '/admin/training/')
+            || '/admin/running' === $path || str_starts_with($path, '/admin/running/')
             || '/strava/webhook' === $path;
     }
 

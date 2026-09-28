@@ -4,7 +4,8 @@
 build
 config/app
 cron
-docs
+docs/*
+!docs/stridehub/
 tests
 ollama
 var
