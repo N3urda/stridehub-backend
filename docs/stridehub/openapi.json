@@ -43,6 +43,7 @@
             "name": "status",
             "in": "query",
             "required": false,
+            "description": "Omit to include all statuses; specify a value to filter.",
             "schema": {
               "type": "string",
               "enum": [
@@ -50,8 +51,7 @@
                 "completed",
                 "skipped",
                 "cancelled"
-              ],
-              "default": "planned"
+              ]
             }
           }
         ],

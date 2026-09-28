@@ -1,0 +1,633 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "StrideHub 健康背景 API",
+    "version": "1.0.0",
+    "description": "保存调用方提供的报告摘录、来源、医生建议、单独的 AI 解读、训练限制和生活偏好，供 HTTP API + Skill 工作流读取。服务端只验证结构及引用，不诊断、不生成医学参考范围、不验证医嘱真实性，也不提供报告文件上传。默认空背景 version=0；PUT 的顶层字段省略时保留现值，显式数组整体替换。请求体限 1 MiB。所有健康响应均 no-store, private。"
+  },
+  "servers": [
+    {
+      "url": "/"
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "paths": {
+    "/api/v1/health/context": {
+      "get": {
+        "operationId": "getHealthContext",
+        "summary": "读取当前健康背景",
+        "responses": {
+          "200": {
+            "description": "当前背景；未保存时 version=0 且 updatedAt=null",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthContext"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "缺少或无效 Bearer token",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "updateHealthContext",
+        "summary": "按版本局部更新健康背景",
+        "description": "必须先读取当前 version。仅允许声明的字段；顶层字段省略时保留，数组出现时整体替换。报告与引用它的约束可在同一次写入一起更改；禁止悬空引用。原子乐观锁避免覆盖另一位用户或 AI 的更新。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HealthContextPatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "已保存的新版本",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthContext"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "缺少或无效 Bearer token",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "版本冲突；重新读取并比较，不可盲目重试写入",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "请求超过 1 MiB",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "必须为 application/json",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段、引用、类型、日期或 JSON 验证失败",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "缺少当前 version",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/health/openapi.json": {
+      "get": {
+        "operationId": "getHealthOpenApi",
+        "summary": "读取此接口说明（需要鉴权）",
+        "responses": {
+          "200": {
+            "description": "OpenAPI 3.1 文档",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "缺少或无效 Bearer token",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "使用服务端 DREEVE_API_KEY；仅通过 Authorization 头传递。"
+      }
+    },
+    "schemas": {
+      "Finding": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "pattern": ".*\\S.*"
+          },
+          "valueText": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "pattern": ".*\\S.*",
+            "description": "原报告的结果文本；保留原始写法，不自动解释或转换。"
+          },
+          "unit": {
+            "type": "string",
+            "maxLength": 80,
+            "default": ""
+          },
+          "referenceRangeText": {
+            "type": "string",
+            "maxLength": 500,
+            "default": "",
+            "description": "只记录原报告明确提供的参考范围；缺失时为空，不生成正常范围。"
+          },
+          "flag": {
+            "type": "string",
+            "enum": [
+              "normal",
+              "high",
+              "low",
+              "abnormal",
+              "unknown"
+            ],
+            "default": "unknown"
+          },
+          "page": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "maximum": 10000,
+            "default": null
+          }
+        },
+        "required": [
+          "name",
+          "valueText"
+        ]
+      },
+      "Report": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,80}$",
+            "maxLength": 80
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "pattern": ".*\\S.*"
+          },
+          "reportDate": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "sourceLabel": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "pattern": ".*\\S.*",
+            "description": "可追溯的报告来源标签，如文件名和机构；不接受文件上传。"
+          },
+          "findings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Finding"
+            },
+            "maxItems": 200,
+            "default": []
+          },
+          "clinicianAdvice": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 2000,
+              "minLength": 1,
+              "pattern": ".*\\S.*"
+            },
+            "maxItems": 30,
+            "default": []
+          },
+          "aiInterpretation": {
+            "type": "string",
+            "maxLength": 10000,
+            "default": "",
+            "description": "独立保存 AI 解读，与原始结果、医生原文分开；不是后端生成或认证的诊断。"
+          },
+          "needsReview": {
+            "type": "boolean",
+            "default": true,
+            "description": "调用方声明是否仍需核对原报告；false 不代表后端完成医学验证。"
+          },
+          "notes": {
+            "type": "string",
+            "maxLength": 4000,
+            "default": ""
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "reportDate",
+          "sourceLabel"
+        ]
+      },
+      "Constraint": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,80}$",
+            "maxLength": 80
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 1,
+            "pattern": ".*\\S.*"
+          },
+          "sourceType": {
+            "type": "string",
+            "enum": [
+              "clinician",
+              "user"
+            ],
+            "description": "调用方声明的来源：clinician 为转录医嘱，user 为用户约束。系统不核验医学真实性。不得把 AI 推断写成医嘱。"
+          },
+          "sourceReportId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9_-]{1,80}$",
+                "maxLength": 80
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "非空时必须指向本次保存后仍存在的 reports.id。"
+          },
+          "validFrom": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "reviewOn": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "复核日期，不得早于非空 validFrom；不会到期自动解除限制。"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "inactive"
+            ],
+            "default": "active"
+          }
+        },
+        "required": [
+          "id",
+          "description",
+          "sourceType"
+        ]
+      },
+      "HealthContext": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "reports": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Report"
+            },
+            "maxItems": 30,
+            "default": [],
+            "description": "ID 唯一；所有报告合计最多 1000 项 findings。数组更新为整体替换。"
+          },
+          "constraints": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Constraint"
+            },
+            "maxItems": 50,
+            "default": [],
+            "description": "ID 唯一；数组更新为整体替换。"
+          },
+          "lifestylePreferences": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 500,
+              "minLength": 1,
+              "pattern": ".*\\S.*"
+            },
+            "maxItems": 30,
+            "default": []
+          },
+          "notes": {
+            "type": "string",
+            "maxLength": 10000,
+            "default": ""
+          },
+          "id": {
+            "type": "string",
+            "const": "default",
+            "readOnly": true
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 0,
+            "readOnly": true
+          },
+          "updatedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "readOnly": true
+          }
+        },
+        "required": [
+          "reports",
+          "constraints",
+          "lifestylePreferences",
+          "notes",
+          "id",
+          "version",
+          "updatedAt"
+        ]
+      },
+      "HealthContextPatch": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "reports": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Report"
+            },
+            "maxItems": 30,
+            "default": [],
+            "description": "ID 唯一；所有报告合计最多 1000 项 findings。数组更新为整体替换。"
+          },
+          "constraints": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Constraint"
+            },
+            "maxItems": 50,
+            "default": [],
+            "description": "ID 唯一；数组更新为整体替换。"
+          },
+          "lifestylePreferences": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 500,
+              "minLength": 1,
+              "pattern": ".*\\S.*"
+            },
+            "maxItems": 30,
+            "default": []
+          },
+          "notes": {
+            "type": "string",
+            "maxLength": 10000,
+            "default": ""
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "version"
+        ]
+      },
+      "Error": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "error",
+          "message"
+        ]
+      }
+    },
+    "responses": {
+      "MethodNotAllowed": {
+        "description": "不支持的方法",
+        "headers": {
+          "Cache-Control": {
+            "schema": {
+              "type": "string"
+            },
+            "description": "no-store, private，包括鉴权和验证错误。"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "不存在的健康 API",
+        "headers": {
+          "Cache-Control": {
+            "schema": {
+              "type": "string"
+            },
+            "description": "no-store, private，包括鉴权和验证错误。"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      }
+    }
+  }
+}

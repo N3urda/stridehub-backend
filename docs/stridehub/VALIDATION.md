@@ -2,6 +2,17 @@
 
 验证日期：2026-09-28。基础版本：Dreeve `11a100cfa4007219d8c87eb04a019c6b1e81c0dc`。运行环境为 PHP 8.5.10、SQLite、锁定的 Composer 依赖与本机 Chromium。
 
+## HTTP API + Skill 增量验收
+
+- 合并健康接口后的同一组 PHP 回归：**335 个测试、1029 个断言通过**，其中新增健康接口 37 个测试、158 个断言。覆盖鉴权、健康响应禁止缓存、版本冲突、部分更新、数组替换、来源/日期/引用完整性和载荷边界。
+- Python API 客户端：**25 个测试通过**。真实临时 HTTP 服务覆盖 Bearer、UTF-8 JSON、配置覆盖、401/409、写入后丢失响应、5xx、无效/超大响应、拒绝重定向、路径校验与凭据脱敏。写结果不确定时要求回读，不自动重复写入。
+- 全库 PHPStan、新增 PHP 的 CS Fixer/Rector、Skill 格式验证通过。客户端只需要 Python 标准库；Skill 格式校验器的 PyYAML 安装在被忽略的独立验证环境中，不改变应用依赖。
+- 独立行为评估使用虚构资料：无 Skill 时确认缺少长期健康背景接口；加载 Skill 后验证“409 改期保留并发备注/补给”“保存新报告保留旧报告与偏好，并处理与医生限制冲突的间歇请求”“历史记录为空时不编造训练基线”三个场景。评估发现的 status 查询默认值与空生效日期说明已修正；最终复查补充了按未来课次日期判断健康约束生效时间的规则。
+- 本机 `stridehub-coach` 已安装；连接配置只引用本地凭据文件。实际客户端读取个人开发实例的健康背景成功，仍为 version 0 的空背景，没有真实体检数据。
+- `tests/e2e/skill-api.py` 的 **11 个真实 HTTP 场景通过**：三份鉴权 OpenAPI、健康摘要保存/追加/冲突回读，以及两节课表的批量保存、冲突回滚和删除。测试使用独立数据库与容器；个人数据库前后 SHA-256 一致，临时容器已移除，个人开发实例仍健康。
+
+复现客户端测试：`PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests/skill -p test_stridehub_api.py`。真实 HTTP 验收须先启动独立空实例，显式设置 `STRIDEHUB_TEST_URL=http://localhost:8082` 后运行 `python3 tests/e2e/skill-api.py`；脚本会在该临时库留下标记为 DEMO 的健康资料，不能对个人实例运行。Skill 文件位于 `skills/stridehub-coach/SKILL.md`。以下训练/看板浏览器验收仍对应已有功能，不代表网页新增了健康档案编辑器。
+
 ## 已验证
 
 | 范围 | 结果 |

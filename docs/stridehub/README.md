@@ -1,6 +1,6 @@
-# StrideHub 跑步训练助手
+# StrideHub 运动健康管理
 
-在 Dreeve 的运动记录基础上，管理未来课表、比赛目标、训练前天气与穿衣建议、身体状态、跑后反馈及补给演练。
+以 HTTP API + Skill 为 AI 接口，让人和 AI 共同使用运动记录、健康背景和训练课表。在 Dreeve 的运动数据基础上，管理未来课表、比赛目标、训练前天气与穿衣建议、身体状态、跑后反馈及补给演练。项目不提供 MCP 服务。
 
 ## 启用
 
@@ -64,6 +64,39 @@ curl --fail-with-body -X PUT "$STRIDEHUB_URL/api/v1/training/sessions/batch" \
 ### 建议交给 Codex 的工作方式
 
 读取 OpenAPI、个人偏好、比赛目标和已有课表，按用户要求生成或调整训练。先查询最新版本；批量更新时保留不属于本次要求的课次和字段。收到 409 后重新读取变化，向用户说明冲突，不要简单替换版本号后覆盖。写入后再次读取受影响日期核验；不要把天气建议自动变成课表修改。重复 POST 同一个 ID 会冲突，网络结果不确定时先 GET 确认。
+
+## 用 Skill 管理运动与健康
+
+仓库提供 [`stridehub-coach`](../../skills/stridehub-coach/SKILL.md)。它通过上述 HTTP API 工作，支持运动复盘、课表调整、体检摘要整理和日常安排建议，不需要 MCP。运行客户端只需 Python 3 标准库。
+
+将 `skills/stridehub-coach` 放入 Codex 的技能目录。本机已安装为指向本仓库目录的链接，连接配置位于 `~/.config/stridehub/connection.json`，只保存服务地址和本地凭据文件路径，凭据本身不进入 Skill 或 Git。其他机器可复制技能目录并创建自己的配置：
+
+```json
+{
+  "baseUrl": "https://your-stridehub.example",
+  "credentialsFile": "/private/path/credentials.json"
+}
+```
+
+凭据文件格式为 `{"apiKey":"你的实例密钥"}`，也可安全注入 `STRIDEHUB_URL` 与 `DREEVE_API_KEY`。两类配置文件均应只允许当前用户读取。客户端仅接受训练、跑步和健康 API 路径，拒绝跳转，远程连接要求 HTTPS；写入失败不会自动重试。
+
+可以对 Codex 说：
+
+> 使用 $stridehub-coach，复盘最近四周训练，结合我的健康约束和周末天气调整下周课表，保留周三休息。
+
+> 使用 $stridehub-coach，整理这份体检报告并更新健康背景，保留旧报告，再说明对日常作息和训练安排有什么影响。
+
+Skill 先读取最新数据，按已有授权执行修改；仅要求分析时不会保存课表。它按每次调用执行，未启动持续后台规划。没有真实运动或报告时会明确缺失，不能把空数据当作健康或恢复良好。
+
+### 结构化健康背景 API
+
+`GET/PUT /api/v1/health/context` 与 `GET /api/v1/health/openapi.json` 使用相同 Bearer 鉴权，所有健康响应禁止缓存。源文档为本目录 `health-openapi.json`。
+
+健康背景包含 `reports`、`constraints`、`lifestylePreferences` 和 `notes`。报告分别保存原始结果 `findings`、医生意见 `clinicianAdvice` 与 AI 解读 `aiInterpretation`，同时保留日期、单位、参考范围、来源及提取待核对状态 `needsReview`。约束保留来源、关联报告、生效/复查日期和状态。
+
+第一次读取返回 `version:0` 的空背景；PUT 必须带当前版本。省略的顶层字段保留，提供的数组整体替换，因此追加报告时应先读旧数组再合并。最多 30 份报告、合计 1000 项结果、50 条约束和 30 条生活偏好；重复 ID、未知字段及失效报告引用均拒绝，过期版本返回 409。新接口复用现有 TrainingRecord 表，无需新增迁移。
+
+API 只保存结构化摘要，不接收 PDF/图片原件，也不核验医学结论。当前健康背景由 Skill/API 管理，没有独立网页编辑器。实际解读应结合当前症状、原报告参考范围和医生意见；报告异常不自动换算成训练强度，复查日期经过不等于医嘱自动解除。服务器不会根据文本约束自动拦截所有课表修改，Skill 在排课前主动读取并考虑它们。完整报告和私人数据不要提交到本公开仓库。
 
 ## 自动提醒
 
