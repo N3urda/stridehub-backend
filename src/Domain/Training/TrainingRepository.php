@@ -33,6 +33,32 @@ final readonly class TrainingRepository
      */
     public function save(string $kind, string $id, array $payload, int $expectedVersion): array
     {
+        if ('sessions' === $kind) {
+            $payload = $this->normalizeSession($payload);
+
+            return $this->transactional(function () use ($kind, $id, $payload, $expectedVersion): array {
+                $saved = $this->saveRecord($kind, $id, $payload, $expectedVersion);
+                $this->connection->delete('TrainingActivityLink', ['sessionId' => $id]);
+                try {
+                    foreach ($payload['activityIds'] as $activityId) {
+                        $this->connection->insert('TrainingActivityLink', ['activityId' => $activityId, 'sessionId' => $id]);
+                    }
+                } catch (UniqueConstraintViolationException) {
+                    throw new TrainingError('运动已关联其他训练，请先读取已有关联。', 409);
+                }
+
+                return $saved;
+            });
+        }
+
+        return $this->saveRecord($kind, $id, $payload, $expectedVersion);
+    }
+
+    /** @param array<string, mixed> $payload
+     * @return array<string, mixed>
+     */
+    private function saveRecord(string $kind, string $id, array $payload, int $expectedVersion): array
+    {
         unset($payload['id'], $payload['version'], $payload['updatedAt']);
         $now = $this->clock->getCurrentDateTimeImmutable()->format(DATE_ATOM);
         $naturalKey = match ($kind) {
@@ -56,9 +82,14 @@ final readonly class TrainingRepository
 
     public function delete(string $kind, string $id, int $expectedVersion): void
     {
-        if (1 !== $this->connection->delete('TrainingRecord', ['kind' => $kind, 'id' => $id, 'version' => $expectedVersion])) {
-            throw new TrainingError('记录已经改变，请重新读取最新版本后再删除。', 409);
-        }
+        $this->transactional(function () use ($kind, $id, $expectedVersion): void {
+            if (1 !== $this->connection->delete('TrainingRecord', ['kind' => $kind, 'id' => $id, 'version' => $expectedVersion])) {
+                throw new TrainingError('记录已经改变，请重新读取最新版本后再删除。', 409);
+            }
+            if ('sessions' === $kind) {
+                $this->connection->delete('TrainingActivityLink', ['sessionId' => $id]);
+            }
+        });
     }
 
     public function transactional(callable $operation): mixed
@@ -66,11 +97,39 @@ final readonly class TrainingRepository
         return $this->connection->transactional(static fn (Connection $connection): mixed => $operation());
     }
 
+    /** @param list<string> $sessionIds */
+    public function releaseSessionActivityClaims(array $sessionIds): void
+    {
+        if (!$this->connection->isTransactionActive()) {
+            throw new \LogicException('Batch claims can only be released within a transaction.');
+        }
+        foreach ($sessionIds as $id) {
+            $this->connection->delete('TrainingActivityLink', ['sessionId' => $id]);
+            // Keep the old single-link unique key compatible while assignments move.
+            $this->connection->update('TrainingRecord', ['naturalKey' => null], ['kind' => 'sessions', 'id' => $id]);
+        }
+    }
+
     /** @param array<string, mixed> $row
      * @return array<string, mixed>
      */
     private function hydrate(array $row): array
     {
-        return [...json_decode($row['payload'], true, 512, JSON_THROW_ON_ERROR), 'id' => $row['id'], 'version' => (int) $row['version'], 'updatedAt' => $row['updatedAt']];
+        $payload = json_decode($row['payload'], true, 512, JSON_THROW_ON_ERROR);
+        if ('sessions' === $row['kind']) {
+            $payload = $this->normalizeSession($payload);
+        }
+
+        return [...$payload, 'id' => $row['id'], 'version' => (int) $row['version'], 'updatedAt' => $row['updatedAt']];
+    }
+
+    /** @param array<string, mixed> $payload
+     * @return array<string, mixed>
+     */
+    private function normalizeSession(array $payload): array
+    {
+        $ids = $payload['activityIds'] ?? (null === ($payload['activityId'] ?? null) ? [] : [$payload['activityId']]);
+
+        return [...$payload, 'activityIds' => $ids, 'activityId' => $ids[0] ?? null];
     }
 }

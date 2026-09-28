@@ -1894,7 +1894,7 @@
             }
           }
         ],
-        "summary": "Link an existing running activity and mark the session completed",
+        "summary": "Confirm or replace exclusive workout links; nonempty links mark completion",
         "operationId": "linkSessionActivity",
         "requestBody": {
           "required": true,
@@ -1902,17 +1902,45 @@
             "application/json": {
               "schema": {
                 "type": "object",
+                "additionalProperties": false,
                 "required": [
-                  "version",
-                  "activityId"
+                  "version"
+                ],
+                "anyOf": [
+                  {
+                    "required": [
+                      "activityIds"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "activityId"
+                    ]
+                  }
                 ],
                 "properties": {
                   "version": {
                     "type": "integer",
                     "minimum": 1
                   },
+                  "activityIds": {
+                    "type": "array",
+                    "maxItems": 20,
+                    "uniqueItems": true,
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 255
+                    },
+                    "description": "Full replacement of linked activity IDs. Each activity can belong to only one session. Empty array unlinks without changing status."
+                  },
                   "activityId": {
-                    "type": "string"
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "minLength": 1,
+                    "maxLength": 255
                   }
                 }
               }
@@ -2288,6 +2316,274 @@
           }
         }
       }
+    },
+    "/today": {
+      "get": {
+        "summary": "Read mobile Today context in the profile timezone",
+        "operationId": "getTrainingToday",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Today"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Record not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Version conflict, duplicate or referenced resource",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "Expected version required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reconciliation": {
+      "get": {
+        "summary": "Read matching suggestions; never changes completion or links",
+        "description": "Defaults to today and previous seven local days. Includes ended planned/completed non-rest sessions with absent or missing links. Candidates match the local calendar day or adjacent six-hour window; other sessions' linked activities are excluded. Individual comparison is available for future or already linked sessions.",
+        "operationId": "getTrainingReconciliation",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Reconciliation"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Record not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Version conflict, duplicate or referenced resource",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "Expected version required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sessions/{id}/feedback": {
+      "put": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+            }
+          }
+        ],
+        "summary": "Partially merge quick feedback without changing completion",
+        "description": "Only provided feedback fields change; provided fuel object is merged into prior fuel fields. Explicit null clears nullable fields. Requires current session version. Does not create timed fuel logs.",
+        "operationId": "saveSessionFeedback",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "version",
+                  "feedback"
+                ],
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "feedback": {
+                    "allOf": [
+                      {
+                        "$ref": "#/components/schemas/Feedback"
+                      },
+                      {
+                        "minProperties": 1
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Record not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Version conflict, duplicate or referenced resource",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "Expected version required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2573,34 +2869,16 @@
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "description": "Legacy alias for first linked activity. Explicit writes replace the entire link set with zero or one activity; if both fields are supplied they must agree on the first ID."
           },
           "feedback": {
-            "oneOf": [
+            "anyOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/Feedback"
               },
               {
-                "type": "object",
-                "properties": {
-                  "rpe": {
-                    "type": "integer",
-                    "minimum": 1,
-                    "maximum": 10
-                  },
-                  "thermalFeeling": {
-                    "type": "string",
-                    "enum": [
-                      "cold",
-                      "comfortable",
-                      "hot"
-                    ]
-                  },
-                  "notes": {
-                    "type": "string",
-                    "maxLength": 4000
-                  }
-                }
+                "type": "null"
               }
             ]
           },
@@ -2617,6 +2895,17 @@
             "type": "string",
             "format": "date-time",
             "readOnly": true
+          },
+          "activityIds": {
+            "type": "array",
+            "maxItems": 20,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            },
+            "description": "Full replacement of linked activity IDs. Each activity can belong to only one session. Empty array unlinks without changing status."
           }
         }
       },
@@ -2673,9 +2962,7 @@
       "CheckIn": {
         "type": "object",
         "required": [
-          "date",
-          "fatigue",
-          "soreness"
+          "date"
         ],
         "properties": {
           "date": {
@@ -2691,18 +2978,30 @@
             "maximum": 24
           },
           "fatigue": {
-            "type": "integer",
+            "type": [
+              "integer",
+              "null"
+            ],
             "minimum": 1,
-            "maximum": 5
+            "maximum": 5,
+            "default": null
           },
           "soreness": {
-            "type": "integer",
+            "type": [
+              "integer",
+              "null"
+            ],
             "minimum": 1,
-            "maximum": 5
+            "maximum": 5,
+            "default": null
           },
           "pain": {
-            "type": "boolean",
-            "default": false
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "default": null,
+            "description": "Unknown when omitted on creation. Existing explicit values are retained by partial updates."
           },
           "notes": {
             "type": "string",
@@ -2950,34 +3249,16 @@
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "description": "Legacy alias for first linked activity. Explicit writes replace the entire link set with zero or one activity; if both fields are supplied they must agree on the first ID."
           },
           "feedback": {
-            "oneOf": [
+            "anyOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/Feedback"
               },
               {
-                "type": "object",
-                "properties": {
-                  "rpe": {
-                    "type": "integer",
-                    "minimum": 1,
-                    "maximum": 10
-                  },
-                  "thermalFeeling": {
-                    "type": "string",
-                    "enum": [
-                      "cold",
-                      "comfortable",
-                      "hot"
-                    ]
-                  },
-                  "notes": {
-                    "type": "string",
-                    "maxLength": 4000
-                  }
-                }
+                "type": "null"
               }
             ]
           },
@@ -2994,6 +3275,17 @@
             "type": "string",
             "format": "date-time",
             "readOnly": true
+          },
+          "activityIds": {
+            "type": "array",
+            "maxItems": 20,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            },
+            "description": "Full replacement of linked activity IDs. Each activity can belong to only one session. Empty array unlinks without changing status."
           }
         }
       },
@@ -3064,18 +3356,30 @@
             "maximum": 24
           },
           "fatigue": {
-            "type": "integer",
+            "type": [
+              "integer",
+              "null"
+            ],
             "minimum": 1,
-            "maximum": 5
+            "maximum": 5,
+            "default": null
           },
           "soreness": {
-            "type": "integer",
+            "type": [
+              "integer",
+              "null"
+            ],
             "minimum": 1,
-            "maximum": 5
+            "maximum": 5,
+            "default": null
           },
           "pain": {
-            "type": "boolean",
-            "default": false
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "default": null,
+            "description": "Unknown when omitted on creation. Existing explicit values are retained by partial updates."
           },
           "notes": {
             "type": "string",
@@ -3185,6 +3489,17 @@
               "integer",
               "null"
             ]
+          },
+          "movingSeconds": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "elapsedSeconds": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
           }
         },
         "required": [
@@ -3370,7 +3685,8 @@
               "keep",
               "consider_easier",
               "indoor_or_reschedule",
-              "unknown"
+              "unknown",
+              "review_constraints"
             ]
           },
           "alternatives": {
@@ -3403,6 +3719,10 @@
                 "reasons"
               ]
             }
+          },
+          "conditionsTraining": {
+            "type": "string",
+            "description": "Original weather/check-in advice retained when the overall advice requires constraint review."
           }
         },
         "required": [
@@ -3467,6 +3787,9 @@
           "generatedAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "health": {
+            "$ref": "#/components/schemas/ApplicableHealth"
           }
         },
         "required": [
@@ -3474,7 +3797,8 @@
           "forecast",
           "advice",
           "checkIn",
-          "generatedAt"
+          "generatedAt",
+          "health"
         ]
       },
       "Comparison": {
@@ -3486,7 +3810,7 @@
           "actual": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/Activity"
+                "$ref": "#/components/schemas/ActualWorkout"
               },
               {
                 "type": "null"
@@ -3521,7 +3845,7 @@
           "candidates": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/Activity"
+              "$ref": "#/components/schemas/ActivityCandidate"
             }
           },
           "suggestion": {
@@ -3532,6 +3856,12 @@
             "items": {
               "type": "string"
             }
+          },
+          "actualActivities": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Activity"
+            }
           }
         },
         "required": [
@@ -3540,8 +3870,316 @@
           "delta",
           "candidates",
           "suggestion",
-          "dataQuality"
+          "dataQuality",
+          "actualActivities"
         ]
+      },
+      "FeedbackFuel": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "carbsGrams": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 1000
+          },
+          "fluidMl": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 10000
+          },
+          "giComfort": {
+            "type": "string",
+            "enum": [
+              "unknown",
+              "good",
+              "mild",
+              "poor"
+            ],
+            "default": "unknown"
+          },
+          "notes": {
+            "type": "string",
+            "maxLength": 4000
+          }
+        },
+        "description": "Session-level actual fueling summary, separate from timed fuel logs. Unknown quantities are null, never zero by default."
+      },
+      "Feedback": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "rpe": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "maximum": 10
+          },
+          "thermalFeeling": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "cold",
+              "comfortable",
+              "hot",
+              null
+            ]
+          },
+          "notes": {
+            "type": "string",
+            "maxLength": 4000
+          },
+          "pain": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "null means not reported; false means explicitly no pain."
+          },
+          "fuel": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FeedbackFuel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "ActivityCandidate": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Activity"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "matchReasons": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "startOffsetMinutes": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "matchReasons",
+              "startOffsetMinutes"
+            ]
+          }
+        ]
+      },
+      "ActualWorkout": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "startAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "distanceKm": {
+            "type": "number"
+          },
+          "durationMinutes": {
+            "type": "number"
+          },
+          "averageHeartRate": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "movingSeconds": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "elapsedSeconds": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "activityIds": {
+            "type": "array",
+            "maxItems": 20,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            },
+            "description": "Full replacement of linked activity IDs. Each activity can belong to only one session. Empty array unlinks without changing status."
+          },
+          "aggregated": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "startAt",
+          "distanceKm",
+          "durationMinutes",
+          "averageHeartRate"
+        ],
+        "description": "Sum of imported movement durations and distances, not the time gap between files. Missing linked records invalidate delta. Interval compliance is not inferred from the aggregate."
+      },
+      "Reconciliation": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Comparison"
+            }
+          }
+        },
+        "required": [
+          "items"
+        ]
+      },
+      "ApplicableHealth": {
+        "type": "object",
+        "required": [
+          "version",
+          "constraints"
+        ],
+        "properties": {
+          "version": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "constraints": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "sourceType": {
+                  "type": "string",
+                  "enum": [
+                    "clinician",
+                    "user"
+                  ]
+                },
+                "sourceReportId": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "validFrom": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "date"
+                },
+                "reviewOn": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "date"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "active"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Declared active constraints applicable on the session/profile-local date. Null validFrom has no specified start; reviewOn never expires a constraint."
+      },
+      "Today": {
+        "type": "object",
+        "required": [
+          "date",
+          "timezone",
+          "generatedAt",
+          "sessions",
+          "checkIn",
+          "health",
+          "pendingFeedback",
+          "reconciliation",
+          "dataQuality"
+        ],
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date"
+          },
+          "timezone": {
+            "type": "string"
+          },
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "sessions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Session"
+            }
+          },
+          "checkIn": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CheckIn"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "health": {
+            "$ref": "#/components/schemas/ApplicableHealth"
+          },
+          "pendingFeedback": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Session"
+            }
+          },
+          "reconciliation": {
+            "$ref": "#/components/schemas/Reconciliation"
+          },
+          "dataQuality": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "description": "Read-only runner-local today. No synthetic rest day or next-day workout; feedback queue covers today and previous six days. Fetch a chosen session briefing separately so weather failure does not block daily operations."
       }
     }
   }

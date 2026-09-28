@@ -75,6 +75,19 @@ class RunningAdviceTest extends TestCase
         self::assertArrayNotHasKey('readinessScore', $advice);
     }
 
+    public function testPartialCheckInDisclosesUnknownFatigueSorenessAndPain(): void
+    {
+        $advice = $this->engine()->advise($this->session(), [], $this->forecast([[]]), ['sleepHours' => 7, 'fatigue' => null, 'soreness' => null, 'pain' => null]);
+        $quality = implode(' ', $advice['dataQuality']);
+        self::assertStringContainsString('疲劳', $quality);
+        self::assertStringContainsString('酸痛', $quality);
+        self::assertStringContainsString('疼痛', $quality);
+        self::assertStringContainsString('未填写完整', $advice['summary']);
+        self::assertSame([], $advice['riskFactors']);
+        $complete = $this->engine()->advise($this->session(), [], $this->forecast([[]]), ['sleepHours' => 7, 'fatigue' => 1, 'soreness' => 1, 'pain' => false]);
+        self::assertStringNotContainsString('缺少疼痛', implode(' ', $complete['dataQuality']));
+    }
+
     public function testUnavailableWeatherExplainsMissingInputsWithoutInventingForecast(): void
     {
         $advice = $this->engine()->advise($this->session(), [], ['status' => 'unavailable', 'hours' => [], 'message' => '暂时无法获取预报。']);

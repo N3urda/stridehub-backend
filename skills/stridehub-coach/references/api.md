@@ -33,12 +33,16 @@ JSON 请求文件使用安全文件工具写入，包含真正的换行；不要
 | `GET /api/v1/running/overview?from=YYYY-MM-DD&to=YYYY-MM-DD` | 指定日期范围的完整汇总 |
 | `GET /api/v1/running/activities/{id}` | 传感器分析、分段、圈和数据覆盖 |
 | `GET /api/v1/training/profile` | 地点、时区、固定跑步日、偏好 |
+| `GET /api/v1/training/today` | 跑者时区的今日安排、状态、约束与待办 |
+| `GET /api/v1/training/reconciliation?from=...&to=...` | 待对账课次及候选，不自动关联 |
 | `GET /api/v1/training/races` | 比赛日期和目标 |
 | `GET /api/v1/training/sessions?from=...&to=...` | 所有状态的课表；仅需某状态时追加合法 `status` |
 | `GET /api/v1/training/check-ins?from=...&to=...` | 主观疲劳、酸痛、疼痛和睡眠时长 |
 | `GET /api/v1/training/fuel-logs?from=...&to=...` | 补给演练 |
 | `GET /api/v1/training/briefing?sessionId=...` | 已保存课次的预报与穿衣建议 |
 | `GET /api/v1/training/sessions/{id}/comparison` | 计划/实际差异与候选运动 |
+| `POST /api/v1/training/sessions/{id}/link` | 用 version 与完整 activityIds 列表确认/替换关联 |
+| `PUT /api/v1/training/sessions/{id}/feedback` | 用 version 部分合并反馈及实际补给汇总 |
 | `PUT /api/v1/training/sessions/batch` | 原子批量创建/部分更新，1–100 节 |
 | `GET/PUT /api/v1/health/context` | 结构化报告摘要、来源约束、日常偏好 |
 
@@ -47,7 +51,8 @@ JSON 请求文件使用安全文件工具写入，包含真正的换行；不要
 ## 写入与并发
 
 - 更新和删除必须带当前整数 `version`；新记录由客户端指定稳定 ID，批量创建使用 `version:0`。首次健康背景返回 `id:default, version:0, updatedAt:null`。
-- PUT 是顶层部分更新。未提供的字段保留；**提供的数组和嵌套对象整体替换**。因此追加一份报告时需读取原 `reports` 并合并；更新一项 `feedback.notes` 也要保留原有 `rpe` 和 `thermalFeeling`。不要把未知反馈补成默认值。
+- 常规资源 PUT 是顶层部分更新。未提供的字段保留；**提供的数组和嵌套对象整体替换**。因此追加一份报告时需读取原 `reports` 并合并；用常规课次 PUT 更新 `feedback.notes` 也要保留原有反馈。专用 `PUT /sessions/{id}/feedback` 例外：按提供的反馈字段及 fuel 子字段合并。不要把未知反馈补成默认值。
+- `activityIds` 是完整关联集合，最多 20 条；旧 `activityId` 只表示第一条，显式写旧字段会替换整个集合。关联冲突不得靠删除别人课次来绕过。空 activityIds 解除关联但不会自动改成 planned；确认关联非空记录会标记 completed。
 - 一周调整放在一次原子 batch 中；超过 100 条拆分后不再保证跨请求原子性，先缩小任务范围或说明边界。批量失败时先读回确认，不逐条盲目补写。
 - 收到 409：GET 最新记录，对比本次目标字段及其依赖。只有不冲突的变更，才在保留新内容后按已有授权重新构建最小请求；最多自动合并重试一次。目标日期、强度、健康约束等存在实际冲突或再次发生冲突时，停止相关写入并说明差异。
 - 写请求超时、断连、服务端 5xx 或无法解析响应都不能证明未写入。先 GET 稳定 ID 和受影响日期确认结果；不要自动重复 POST，或创建另一个 ID 规避冲突。客户端自身不重试任何写请求。

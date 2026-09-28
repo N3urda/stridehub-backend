@@ -7,8 +7,10 @@ namespace App\Controller\Api\V1\Training;
 use App\Domain\Training\TrainingActivities;
 use App\Domain\Training\TrainingBriefing;
 use App\Domain\Training\TrainingError;
+use App\Domain\Training\TrainingFeedback;
 use App\Domain\Training\TrainingInput;
 use App\Domain\Training\TrainingService;
+use App\Domain\Training\TrainingToday;
 use App\Infrastructure\Http\Api\ApiErrorResponse;
 use App\Infrastructure\ValueObject\String\KernelProjectDir;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -22,7 +24,7 @@ use Symfony\Component\Security\Csrf\CsrfTokenManagerInterface;
 #[AsController]
 final readonly class TrainingApiRequestHandler
 {
-    public function __construct(private TrainingService $training, private TrainingActivities $activities, private TrainingBriefing $briefing, private CsrfTokenManagerInterface $csrf, private KernelProjectDir $projectDir)
+    public function __construct(private TrainingService $training, private TrainingActivities $activities, private TrainingBriefing $briefing, private CsrfTokenManagerInterface $csrf, private KernelProjectDir $projectDir, private TrainingFeedback $feedback, private TrainingToday $today)
     {
     }
 
@@ -37,7 +39,7 @@ final readonly class TrainingApiRequestHandler
             $response = $this->dispatch($request, $path);
         } catch (TrainingError $error) {
             $response = new ApiErrorResponse($error->status, match ($error->status) {
-                404 => 'not_found', 409 => 'conflict', 428 => 'version_required', 403 => 'forbidden', 405 => 'method_not_allowed', 413 => 'payload_too_large', 415 => 'unsupported_media_type', default => 'validation_error'
+                404 => 'not_found', 409 => 'conflict', 428 => 'version_required', 403 => 'forbidden', 405 => 'method_not_allowed', 413 => 'payload_too_large', 415 => 'unsupported_media_type', default => 'validation_error',
             }, $error->getMessage());
         }
         $response->headers->set('Cache-Control', 'no-store');
@@ -56,6 +58,15 @@ final readonly class TrainingApiRequestHandler
         }
         if ('GET' === $method && 'activities' === $path) {
             return new JsonResponse(['items' => $this->activities->list()]);
+        }
+        if ('GET' === $method && 'today' === $path) {
+            return new JsonResponse($this->today->get());
+        }
+        if ('GET' === $method && 'reconciliation' === $path) {
+            return new JsonResponse($this->training->reconciliation($request->query->get('from'), $request->query->get('to')));
+        }
+        if (preg_match('#^sessions/([a-zA-Z0-9_-]+)/feedback$#D', $path, $match) && 'PUT' === $method) {
+            return new JsonResponse($this->feedback->save($match[1], $this->body($request)));
         }
         if ('profile' === $path) {
             return match ($method) {
@@ -77,11 +88,11 @@ final readonly class TrainingApiRequestHandler
         }
         if (preg_match('#^sessions/([a-zA-Z0-9_-]+)/link$#D', $path, $match) && 'POST' === $method) {
             $body = $this->body($request);
-            if (!is_string($body['activityId'] ?? null) || '' === $body['activityId']) {
-                throw new TrainingError('必须提供 activityId。');
+            if (array_diff(array_keys($body), ['version', 'activityId', 'activityIds']) || (!array_key_exists('activityId', $body) && !array_key_exists('activityIds', $body))) {
+                throw new TrainingError('必须提供 version 和 activityIds（或兼容的 activityId）。');
             }
 
-            return new JsonResponse($this->training->update('sessions', $match[1], ['version' => TrainingInput::version($body['version'] ?? null), 'activityId' => $body['activityId']]));
+            return new JsonResponse($this->training->update('sessions', $match[1], [...$body, 'version' => TrainingInput::version($body['version'] ?? null)]));
         }
         if (!preg_match('#^(sessions|races|check-ins|fuel-logs)(?:/([a-zA-Z0-9_-]+))?$#D', $path, $match)) {
             throw new TrainingError('接口不存在。', 404);

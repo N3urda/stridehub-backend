@@ -38,6 +38,10 @@
             {% endif %}
         </div>
         {% if not (showDrawerToggle ?? true) %}
+            <a href="{{ relativeUrl(path('admin_training_today')) }}"
+               class="inline-flex items-center rounded-md px-3 py-1.5 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100">
+                今日训练
+            </a>
             <a href="{{ relativeUrl(path('admin_training')) }}"
                class="inline-flex items-center rounded-md px-3 py-1.5 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100">
                 跑步工作台

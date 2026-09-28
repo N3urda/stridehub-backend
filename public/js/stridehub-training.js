@@ -116,10 +116,10 @@
             if (!/^[+-](?:0\d|1[0-4]):[0-5]\d$/.test(offset) || (/^[+-]14:/.test(offset) && !offset.endsWith(':00'))) throw new Error('UTC 时差格式应为 +08:00，范围为 −14:00 至 +14:00。');
             const startAt = value(form, 'startLocal') + (value(form, 'startLocal').length === 16 ? ':00' : '') + offset;
             if (Number.isNaN(Date.parse(startAt))) throw new Error('训练日期与时间无效。');
-            return {title: value(form, 'title').trim(), startAt, durationMinutes: number(form, 'durationMinutes'), distanceKm: optionalNumber(form, 'distanceKm'), type: value(form, 'type'), status: value(form, 'status'), raceId: value(form, 'raceId') || null, location: locationFrom(form), steps: readRows('#step-rows', ['minutes', 'distanceKm']), fuelPlan: readRows('#fuel-plan-rows', ['minute', 'carbsGrams', 'fluidMl']), notes: value(form, 'notes'), feedback: form.elements.hasFeedback.checked ? {...(value(form, 'rpe') === '' ? {} : {rpe: number(form, 'rpe')}), ...(value(form, 'thermalFeeling') === '' ? {} : {thermalFeeling: value(form, 'thermalFeeling')}), ...(value(form, 'feedbackNotes') === '' ? {} : {notes: value(form, 'feedbackNotes')})} : null};
+            return {title: value(form, 'title').trim(), startAt, durationMinutes: number(form, 'durationMinutes'), distanceKm: optionalNumber(form, 'distanceKm'), type: value(form, 'type'), status: value(form, 'status'), raceId: value(form, 'raceId') || null, location: locationFrom(form), steps: readRows('#step-rows', ['minutes', 'distanceKm']), fuelPlan: readRows('#fuel-plan-rows', ['minute', 'carbsGrams', 'fluidMl']), notes: value(form, 'notes'), feedback: form.elements.hasFeedback.checked ? {...Object.fromEntries(Object.entries(form._record?.feedback || {}).filter(([key]) => !['rpe', 'thermalFeeling', 'notes'].includes(key))), ...(value(form, 'rpe') === '' ? {} : {rpe: number(form, 'rpe')}), ...(value(form, 'thermalFeeling') === '' ? {} : {thermalFeeling: value(form, 'thermalFeeling')}), ...(value(form, 'feedbackNotes') === '' ? {} : {notes: value(form, 'feedbackNotes')})} : null};
         }
         if (kind === 'race') return {name: value(form, 'name').trim(), date: value(form, 'date'), distanceKm: number(form, 'distanceKm'), targetTimeMinutes: optionalNumber(form, 'targetTimeMinutes'), notes: value(form, 'notes')};
-        if (kind === 'checkin') return {date: value(form, 'date'), sleepHours: optionalNumber(form, 'sleepHours'), fatigue: number(form, 'fatigue'), soreness: number(form, 'soreness'), pain: form.elements.pain.checked, notes: value(form, 'notes')};
+        if (kind === 'checkin') return {date: value(form, 'date'), sleepHours: optionalNumber(form, 'sleepHours'), fatigue: optionalNumber(form, 'fatigue'), soreness: optionalNumber(form, 'soreness'), pain: value(form, 'pain') === '' ? null : value(form, 'pain') === 'true', notes: value(form, 'notes')};
         return {date: value(form, 'date'), sessionId: value(form, 'sessionId') || null, minute: number(form, 'minute'), item: value(form, 'item').trim(), carbsGrams: number(form, 'carbsGrams'), fluidMl: number(form, 'fluidMl'), giComfort: value(form, 'giComfort'), notes: value(form, 'notes')};
     }
     async function showConflict(kind, error) {
@@ -209,11 +209,11 @@
     }
     function renderCheckins() {
         const container = $('#checkin-list'); container.replaceChildren(); if (state.failed.has('checkins')) { container.append(el('p', 'empty-state', '身体状态读取失败，请刷新数据重试。')); renderToday(); return; } if (!state.checkins.length) container.append(el('p', 'empty-state', '还没有身体状态记录。今天睡得怎样？保存第一份记录，让建议更贴近你的恢复状态。'));
-        [...state.checkins].sort((a, b) => b.date.localeCompare(a.date)).forEach(row => container.append(recordNode('checkin', row, row.date + (row.pain ? ' · 有疼痛' : ''), `睡眠 ${row.sleepHours ?? '未记录'} 小时 · 疲劳 ${row.fatigue}/5 · 酸痛 ${row.soreness}/5`, row.date))); renderToday();
+        [...state.checkins].sort((a, b) => b.date.localeCompare(a.date)).forEach(row => container.append(recordNode('checkin', row, row.date + (row.pain ? ' · 有疼痛' : ''), `睡眠 ${row.sleepHours ?? '未记录'} 小时 · 疲劳 ${row.fatigue == null ? '未记录' : row.fatigue + '/5'} · 酸痛 ${row.soreness == null ? '未记录' : row.soreness + '/5'}`, row.date))); renderToday();
     }
     function renderToday() {
         const container = $('#today-checkin'); container.replaceChildren(); if (state.failed.has('checkins')) { container.append(el('p', 'empty-state', '暂时无法读取今日状态，请刷新数据重试。')); return; } const row = state.checkins.find(item => item.date === today());
-        if (row) container.append(append(el('div', 'today-saved'), el('strong', '', '今日状态已保存'), el('p', '', `睡眠 ${row.sleepHours ?? '—'} 小时 · 疲劳 ${row.fatigue}/5 · 酸痛 ${row.soreness}/5${row.pain ? ' · 有疼痛' : ''}`)));
+        if (row) container.append(append(el('div', 'today-saved'), el('strong', '', '今日状态已保存'), el('p', '', `睡眠 ${row.sleepHours ?? '—'} 小时 · 疲劳 ${row.fatigue == null ? '未记录' : row.fatigue + '/5'} · 酸痛 ${row.soreness == null ? '未记录' : row.soreness + '/5'}${row.pain ? ' · 有疼痛' : ''}`)));
         else container.append(el('p', 'empty-state', '今天还未保存身体状态。简报不会把未填写的信息当成状态良好。'));
         if (forms.checkin._dirty) container.append(el('p', 'pending-note', '身体状态表单有未保存修改，尚未用于简报。'));
     }
@@ -289,32 +289,16 @@
             const table = el('table', 'compare-table'); const head = el('tr'); ['', '计划', '实际'].forEach(text => head.append(el('th', '', text))); table.append(append(el('thead'), head)); const body = el('tbody');
             [['时长', 'durationMinutes', '分钟'], ['距离', 'distanceKm', '公里']].forEach(([label, key, unit]) => { const row = el('tr'); append(row, el('th', '', label), el('td', '', metricText(planned[key], unit)), el('td', '', metricText(actual?.[key], unit))); body.append(row); }); table.append(body); container.append(table);
             if (actual) {
-                container.append(el('p', 'muted', '已关联：' + (actual.name || actual.title || actual.id)));
+                const actualActivities = comparison.actualActivities || [actual];
+                container.append(el('p', 'muted', '已关联 ' + actualActivities.length + ' 条真实跑步：'));
+                actualActivities.forEach(row => container.append(el('p', 'row-note', `${row.name || row.title || row.id} · ${fmt(row.startAt)} · ${metricText(row.distanceKm, '公里')} · ${metricText(row.durationMinutes, '分钟')}`)));
                 const delta = comparison.delta;
                 if (delta) container.append(el('p', 'row-note', `实际 − 计划：时长 ${metricText(delta.durationMinutes, '分钟')} · 距离 ${metricText(delta.distanceKm, '公里')}`));
                 if (actual.averageHeartRate) container.append(el('p', 'row-note', `平均心率 ${actual.averageHeartRate} bpm`));
             } else container.append(el('p', 'empty-state', '尚未关联真实跑步活动。关联后可查看实际时长、距离与计划的差异。'));
             if (comparison.suggestion) { if (Array.isArray(comparison.suggestion)) appendList(container, '训练建议', comparison.suggestion); else container.append(el('p', 'info-block', human(comparison.suggestion))); }
-            const candidates = Array.isArray(comparison.candidates) ? comparison.candidates : state.activities;
-            if (candidates.length) {
-                const linkForm = el('form', 'comparison-link'); const label = el('label', '', actual ? '选择另一条真实活动' : '选择真实跑步活动'); const select = el('select'); select.required = true; select.append(new Option('请选择活动', ''));
-                candidates.forEach(row => select.add(new Option(`${row.name || row.title || row.id} · ${fmt(row.startAt)} · ${row.distanceKm ?? '—'} km`, row.id))); if (actual) select.value = actual.id;
-                label.append(select); const linkButton = el('button', 'button', actual ? '更新关联' : '关联并标为已完成'); linkButton.type = 'submit'; const status = el('p', 'form-status'); status.setAttribute('role', 'status');
-                append(linkForm, label, linkButton, status); container.append(linkForm);
-                linkForm.addEventListener('submit', async event => {
-                    event.preventDefault(); if (!linkForm.reportValidity()) return; linkButton.disabled = true;
-                    try {
-                        await api('/sessions/' + encodeURIComponent(id) + '/link', 'POST', {version: planned.version, activityId: select.value});
-                        status.textContent = '已关联。';
-                        if (forms.session._record?.id === id) {
-                            if (forms.session._dirty) { formStatus('session', '活动已关联。表单草稿仍保留，但服务器版本已更新；保存时如遇冲突，请查看服务器最新版本。', true); }
-                            else fillForm('session', await api('/sessions/' + encodeURIComponent(id)));
-                        }
-                        await reloadResource('session'); await showComparison(id); refreshBriefing(id);
-                    } catch (error) { status.className = 'form-status error'; status.textContent = (error.status === 409 ? '记录已更新，关联未执行。请重新打开此训练的对比后重试。' : error.message); }
-                    finally { linkButton.disabled = false; }
-                });
-            } else container.append(el('p', 'muted', '目前没有可关联的真实跑步活动。请先从管理后台导入。'));
+            const todayLink = el('a', 'button', '打开今日训练，核对多条跑步记录'); todayLink.href = app.dataset.todayUrl + '?sessionId=' + encodeURIComponent(id); container.append(todayLink);
+            appendList(container, '数据范围', comparison.dataQuality);
             container.append(button('记录跑后体感', () => editRecord('session', id)));
         } catch (error) { if (request === state.comparisonRequest) container.replaceChildren(el('p', 'notice error', error.message)); }
     }

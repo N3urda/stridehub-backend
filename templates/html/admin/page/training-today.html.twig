@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#173f38">
+    <title>今日训练 · StrideHub</title>
+    <link rel="icon" href="{{ relativeUrl('assets/images/logo.svg')|e('html_attr') }}">
+    <link rel="stylesheet" href="{{ relativeUrl(asset('css/stridehub-training.css'))|e('html_attr') }}">
+    <link rel="stylesheet" href="{{ relativeUrl(asset('css/stridehub-today.css'))|e('html_attr') }}">
+    <script defer src="{{ relativeUrl(asset('js/stridehub-today.js'))|e('html_attr') }}"></script>
+</head>
+<body class="today-page">
+<a class="skip-link" href="#today-main">跳到今日训练</a>
+<div id="today-app" data-api-base="{{ relativeUrl('/admin/training/api')|e('html_attr') }}" data-csrf="{{ csrf_token('training')|e('html_attr') }}" data-running-url="{{ relativeUrl('/admin/running')|e('html_attr') }}">
+    <header class="today-header">
+        <a class="sh-brand" href="{{ relativeUrl('/admin/training/today')|e('html_attr') }}"><span class="sh-mark" aria-hidden="true">S<span>↗</span></span><span>StrideHub<small>把今天，跑得明白</small></span></a>
+        <a class="today-nav-link" href="{{ relativeUrl('/admin/training')|e('html_attr') }}">完整课表 <span aria-hidden="true">↗</span></a>
+    </header>
+    <main id="today-main" class="today-shell">
+        <div class="today-heading"><div><p class="sh-eyebrow">ONE DAY AT A TIME</p><h1>今天，按自己的节奏。</h1><p id="today-date" class="muted">正在读取跑步地点的今天…</p></div><button type="button" id="today-refresh" class="button" aria-label="刷新今日数据，保留未保存草稿">刷新</button></div>
+        <div id="today-status" class="notice" role="status" aria-live="polite" hidden></div>
+        <noscript><p class="notice error">请开启 JavaScript 以读取和保存今日训练。</p></noscript>
+        <section class="today-session-section" aria-labelledby="today-session-heading"><div class="section-title"><h2 id="today-session-heading">今日安排</h2><a class="text-link" href="{{ relativeUrl('/admin/training')|e('html_attr') }}">调整课表 ↗</a></div><div id="today-sessions" class="today-session-list"><p class="muted">正在读取训练…</p></div></section>
+        <div class="today-layout">
+            <div class="today-column">
+                <section class="card briefing-card today-briefing" aria-labelledby="today-briefing-heading"><p class="sh-eyebrow">BEFORE YOU GO</p><h2 id="today-briefing-heading">出发前，看一眼。</h2><div id="today-briefing"><p class="muted">选择今日课次后查看天气与穿衣建议。</p></div></section>
+                <section class="card" aria-labelledby="today-checkin-heading"><div class="section-title"><div><p class="sh-eyebrow">CHECK IN</p><h2 id="today-checkin-heading">身体，今天怎么样？</h2></div><span id="today-checkin-state" class="save-state">尚未填写</span></div><p class="muted today-intro">只记下你知道的。留空表示未知。</p>
+                    <form id="today-checkin-form" class="form-grid">
+                        <label>昨晚睡眠（小时）<input name="sleepHours" type="number" min="0" max="24" step="0.1" inputmode="decimal" placeholder="未记录"></label>
+                        <label>疲劳程度<select name="fatigue"><option value="">未记录</option><option value="1">1 · 精力充沛</option><option value="2">2 · 轻微疲劳</option><option value="3">3 · 中等疲劳</option><option value="4">4 · 很疲惫</option><option value="5">5 · 极度疲惫</option></select></label>
+                        <label>肌肉酸痛<select name="soreness"><option value="">未记录</option><option value="1">1 · 无酸痛</option><option value="2">2 · 轻微酸痛</option><option value="3">3 · 中等酸痛</option><option value="4">4 · 明显酸痛</option><option value="5">5 · 严重酸痛</option></select></label>
+                        <label>疼痛或不适<select name="pain"><option value="">未记录</option><option value="false">没有</option><option value="true">有，需要留意</option></select></label>
+                        <label class="full">补充一句（可选）<textarea name="notes" rows="2" maxlength="4000" placeholder="例如：右侧小腿有些紧"></textarea></label>
+                        <div class="form-actions full"><button type="submit" class="button primary">保存今日状态</button></div>
+                        <div id="today-checkin-status" class="form-status full" role="status" aria-live="polite"></div>
+                    </form>
+                </section>
+                <section class="card today-health" aria-labelledby="today-health-heading"><p class="sh-eyebrow">KEEP IN MIND</p><h2 id="today-health-heading">今天需要留意</h2><div id="today-health"><p class="muted">正在读取已记录的健康约束…</p></div></section>
+            </div>
+            <div class="today-column">
+                <section class="card" id="today-followup-card" aria-labelledby="today-followup-heading"><p class="sh-eyebrow">AFTER YOUR RUN</p><h2 id="today-followup-heading">把这次跑步记完整。</h2><label class="today-session-picker" for="today-feedback-session">选择要反馈或对账的课次<select id="today-feedback-session" aria-describedby="today-selected-meta"><option value="">暂无可选课次</option></select></label><p id="today-selected-meta" class="muted"></p>
+                    <form id="today-feedback-form" class="form-grid" hidden>
+                        <div class="section-title full"><h3>跑后感受</h3><span id="today-feedback-state" class="save-state"></span></div>
+                        <label>主观强度 RPE（1–10）<input name="rpe" type="number" min="1" max="10" step="1" inputmode="numeric" placeholder="未记录"></label>
+                        <label>冷热体感<select name="thermalFeeling"><option value="">未记录</option><option value="comfortable">舒适</option><option value="cold">偏冷</option><option value="hot">偏热</option></select></label>
+                        <label class="full">跑后疼痛或不适<select name="pain"><option value="">未记录</option><option value="false">没有</option><option value="true">有，需要留意</option></select></label>
+                        <label class="full">感受与观察<textarea name="notes" rows="2" maxlength="4000" placeholder="今天哪里顺利，哪里需要调整？"></textarea></label>
+                        <details class="full today-fuel"><summary>补给小记（可选）</summary><p class="field-help">记录整节课的补给；与按时间记录的补给日志分开保存。</p><div class="form-grid nested"><label>碳水（克）<input name="fuel.carbsGrams" type="number" min="0" max="1000" step="0.1" inputmode="decimal" placeholder="未知"></label><label>饮水（毫升）<input name="fuel.fluidMl" type="number" min="0" max="10000" step="1" inputmode="decimal" placeholder="未知"></label><label class="full">肠胃感受<select name="fuel.giComfort"><option value="unknown">未记录</option><option value="good">舒适</option><option value="mild">轻微不适</option><option value="poor">明显不适</option></select></label><label class="full">补给备注<textarea name="fuel.notes" rows="2" maxlength="4000"></textarea></label></div></details>
+                        <p class="field-help full">保存感受不会自动将课次标为完成。</p><div class="form-actions full"><button type="submit" class="button primary">保存跑后反馈</button></div><div id="today-feedback-status" class="form-status full" role="status" aria-live="polite"></div>
+                    </form>
+                    <div class="divider"></div><div id="today-reconciliation"><p class="muted">选中课次后，可核对它与真实跑步记录的对应关系。</p></div>
+                </section>
+                <details class="card today-recent" id="today-recent"><summary>最近的待办 <span id="today-pending-count" class="pill">0</span></summary><div id="today-pending-list"></div></details>
+            </div>
+        </div>
+        <details class="today-quality"><summary>数据范围与缺失说明</summary><div id="today-data-quality" class="muted">数据尚未读取。</div></details>
+        <footer class="sh-footer"><span>StrideHub · 一次出发，一点积累。</span><a href="{{ relativeUrl('/admin/running')|e('html_attr') }}">跑步分析</a><a href="{{ relativeUrl('/admin')|e('html_attr') }}">管理后台</a></footer>
+    </main>
+</div>
+</body>
+</html>

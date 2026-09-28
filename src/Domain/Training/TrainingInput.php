@@ -11,9 +11,9 @@ final class TrainingInput
     {
         return match ($kind) {
             'profile' => ['timezone' => 'Asia/Shanghai', 'location' => null, 'thermalPreference' => 'neutral', 'usualStartTime' => '06:30', 'usualDurationMinutes' => 60, 'runningDays' => [], 'notificationsEnabled' => false, 'eveningReminderTime' => '20:00', 'preRunReminderMinutes' => 60],
-            'sessions' => ['distanceKm' => null, 'status' => 'planned', 'raceId' => null, 'location' => null, 'steps' => [], 'fuelPlan' => [], 'notes' => '', 'activityId' => null, 'feedback' => null],
+            'sessions' => ['distanceKm' => null, 'status' => 'planned', 'raceId' => null, 'location' => null, 'steps' => [], 'fuelPlan' => [], 'notes' => '', 'activityId' => null, 'activityIds' => [], 'feedback' => null],
             'races' => ['targetTimeMinutes' => null, 'notes' => ''],
-            'check-ins' => ['sleepHours' => null, 'pain' => false, 'notes' => ''],
+            'check-ins' => ['sleepHours' => null, 'fatigue' => null, 'soreness' => null, 'pain' => null, 'notes' => ''],
             'fuel-logs' => ['sessionId' => null, 'carbsGrams' => 0, 'fluidMl' => 0, 'giComfort' => 'good', 'notes' => ''],
             default => throw new TrainingError('未知训练资源。', 404),
         };
@@ -146,16 +146,21 @@ final class TrainingInput
                 }
             }
             if (null !== $data['feedback']) {
-                if (!is_array($data['feedback']) || (array_is_list($data['feedback']) && [] !== $data['feedback']) || array_diff(array_keys($data['feedback']), ['rpe', 'thermalFeeling', 'notes'])) {
+                if (!is_array($data['feedback']) || (array_is_list($data['feedback']) && [] !== $data['feedback']) || array_diff(array_keys($data['feedback']), ['rpe', 'thermalFeeling', 'notes', 'pain', 'fuel'])) {
                     throw new TrainingError('feedback 格式无效。');
                 }
                 foreach ($data['feedback'] as $key => $value) {
                     match ($key) {
-                        'rpe' => self::number($value, 'rpe', 1, 10, true),
-                        'thermalFeeling' => self::choice($value, ['cold', 'comfortable', 'hot'], 'thermalFeeling'),
+                        'rpe' => null === $value ? null : self::number($value, 'rpe', 1, 10, true),
+                        'thermalFeeling' => null === $value ? null : self::choice($value, ['cold', 'comfortable', 'hot'], 'thermalFeeling'),
                         'notes' => self::text($value, 'feedback.notes', 4000, true),
+                        'pain' => self::optionalBoolean($value, 'feedback.pain'),
+                        'fuel' => null,
                         default => throw new TrainingError('feedback 包含未知字段。'),
                     };
+                }
+                if (null !== ($data['feedback']['fuel'] ?? null)) {
+                    $data['feedback']['fuel'] = self::feedbackFuel($data['feedback']['fuel']);
                 }
             }
             if (null !== $data['raceId']) {
@@ -163,6 +168,13 @@ final class TrainingInput
             }
             if (null !== $data['activityId']) {
                 self::text($data['activityId'], 'activityId', 255);
+            }
+            self::items($data['activityIds'], 'activityIds', 20);
+            foreach ($data['activityIds'] as $activityId) {
+                self::text($activityId, 'activityIds', 255);
+            }
+            if (count(array_unique($data['activityIds'])) !== count($data['activityIds'])) {
+                throw new TrainingError('activityIds 不能包含重复记录。');
             }
         }
         if ('races' === $kind) {
@@ -179,11 +191,11 @@ final class TrainingInput
                 self::number($data['sleepHours'], 'sleepHours', 0, 24);
             }
             foreach (['fatigue', 'soreness'] as $key) {
-                self::number($data[$key] ?? null, $key, 1, 5, true);
+                if (null !== $data[$key]) {
+                    self::number($data[$key], $key, 1, 5, true);
+                }
             }
-            if (!is_bool($data['pain'])) {
-                throw new TrainingError('pain 必须为布尔值。');
-            }
+            self::optionalBoolean($data['pain'], 'pain');
         }
         if ('fuel-logs' === $kind) {
             self::date($data['date'] ?? null);
@@ -198,6 +210,31 @@ final class TrainingInput
         }
 
         return $data;
+    }
+
+    private static function optionalBoolean(mixed $value, string $field): void
+    {
+        if (null !== $value && !is_bool($value)) {
+            throw new TrainingError($field.' 必须为布尔值或 null（未记录）。');
+        }
+    }
+
+    /** @return array<string, mixed> */
+    private static function feedbackFuel(mixed $value): array
+    {
+        if (!is_array($value) || (array_is_list($value) && [] !== $value) || array_diff(array_keys($value), ['carbsGrams', 'fluidMl', 'giComfort', 'notes'])) {
+            throw new TrainingError('feedback.fuel 格式无效。');
+        }
+        $value = array_replace(['carbsGrams' => null, 'fluidMl' => null, 'giComfort' => 'unknown', 'notes' => ''], $value);
+        foreach (['carbsGrams' => 1000, 'fluidMl' => 10000] as $field => $max) {
+            if (null !== $value[$field]) {
+                self::number($value[$field], 'feedback.fuel.'.$field, 0, $max);
+            }
+        }
+        self::choice($value['giComfort'], ['unknown', 'good', 'mild', 'poor'], 'feedback.fuel.giComfort');
+        self::text($value['notes'], 'feedback.fuel.notes', 4000, true);
+
+        return $value;
     }
 
     private static function text(mixed $value, string $field, int $max, bool $empty = false): void

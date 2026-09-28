@@ -36,6 +36,7 @@ final class TrainingReminderServiceTest extends TestCase
     {
         $connection = DriverManager::getConnection(['driver' => 'pdo_sqlite', 'memory' => true]);
         $connection->executeStatement('CREATE TABLE TrainingRecord (kind TEXT NOT NULL, id TEXT NOT NULL, payload TEXT NOT NULL, version INTEGER NOT NULL, updatedAt TEXT NOT NULL, naturalKey TEXT DEFAULT NULL, PRIMARY KEY(kind,id), UNIQUE(kind,naturalKey))');
+        $connection->executeStatement('CREATE TABLE TrainingActivityLink (activityId TEXT PRIMARY KEY NOT NULL, sessionId TEXT NOT NULL)');
         $this->clock = new ReminderTestClock('2026-10-04T05:35:00+08:00');
         $this->repository = new TrainingRepository($connection, $this->clock);
         $training = new TrainingService($this->repository, new TrainingActivities($connection), $this->clock);

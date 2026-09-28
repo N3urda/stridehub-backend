@@ -213,12 +213,20 @@ final class RunningAdvice
         if (null === $checkIn) {
             return $result;
         }
+        $incomplete = false;
+        foreach (['fatigue' => '疲劳', 'soreness' => '酸痛', 'pain' => '疼痛'] as $field => $label) {
+            if (null === ($checkIn[$field] ?? null)) {
+                $incomplete = true;
+                $result['dataQuality'][] = '跑前记录缺少'.$label.'状态，不能视作正常或无不适。';
+            }
+        }
         $ease = false;
         if (isset($checkIn['sleepHours']) && is_numeric($checkIn['sleepHours']) && $checkIn['sleepHours'] < 6) {
             $ease = true;
             $result['riskFactors'][] = 'poor_sleep';
             $result['reasons'][] = '跑前记录显示睡眠不足 6 小时，建议优先恢复，酌情减轻训练。';
         } elseif (!isset($checkIn['sleepHours'])) {
+            $incomplete = true;
             $result['dataQuality'][] = '跑前记录缺少睡眠时长。';
         }
         if (($checkIn['fatigue'] ?? 0) >= 4 || ($checkIn['soreness'] ?? 0) >= 4) {
@@ -235,6 +243,9 @@ final class RunningAdvice
         if ($ease && 'indoor_or_reschedule' !== $result['training']) {
             $result['training'] = 'consider_easier';
             $result['summary'] = ($checkIn['pain'] ?? false) ? '已记录疼痛，建议先暂停跑步，重新评估本次训练。' : '跑前状态提示需要恢复，建议降低强度或缩短训练。';
+        }
+        if ($incomplete && 'keep' === $result['training']) {
+            $result['summary'] = '预报未显示明显天气障碍；跑前状态尚未填写完整，请结合实际感受再决定。';
         }
 
         return $result;
