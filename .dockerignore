@@ -11,6 +11,7 @@ ollama
 var
 storage
 node_modules
+android
 public/assets/images/readme
 public/css/tailwind.output.css
 public/css/tailwind.css

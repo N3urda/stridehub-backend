@@ -2,6 +2,19 @@
 
 验证日期：2026-09-28。基础版本：Dreeve `11a100cfa4007219d8c87eb04a019c6b1e81c0dc`。运行环境为 PHP 8.5.10、SQLite、锁定的 Composer 依赖与本机 Chromium。
 
+## Android APK 增量验收（2026-09-29）
+
+本次只新增 Android 客户端与交付配置，未修改后端鉴权、业务逻辑或数据库结构。
+
+- JDK 17、Gradle 8.13、AGP 8.13.2、SDK 36 构建通过，最低 SDK 26。`testDebugUnitTest` 的 **2 个 JUnit 入口、109 条断言通过**；`lintDebug` 为 0 errors / 3 warnings（固定工具版本提示、图标资源配置建议）。正式和调试 APK 均可构建，正式包使用独立私钥签名，`apksigner verify` 通过。
+- **7 个原生 instrumentation 测试通过**：旧 WebView 的网络/HTTP/渲染退出/文件选择回调不会影响新页面；当前网络错误仍可重试；连续文件选择不会替换先前的下载地址或上传回调。两项文件选择并发问题先在模拟器复现失败，再修复通过。
+- `tests/e2e/android-login.cjs` **5 组通过**：2 组真实 HTTP（登录成功进入 Today、错误密码拒绝）；3 组合成页面契约（10 种错误/不可信表单、特殊字符转义、安装子路径）。合成契约不代替实际后端验证。
+- `tests/e2e/android-apk.py` 使用最终签名 APK 在 Android 15 / API 35 / arm64 Pixel 7 模拟器完成 **9 组真实场景**：原生 URL/HTTP 校验、错误与正确密码、四个导航入口、系统文件选择后上传并核对 GPX 字节、今日睡眠写入并以独立 HTTP 查询确认、进程终止后会话恢复、断网重试，以及切换/退出后再次要求密码。原生系统选择器和实际后端请求均无 mock；旧上传页面的 accessibility 漏报使用该模拟器已观察坐标作为测试 fallback。全程只使用隔离数据库、DEMO 资料和专属 watch 目录，个人数据库 SHA-256 未变。
+- 正式 APK SHA-256：`a56a8528693a5700dd5bae1c57333f469c9ed86ce45a080414b7db11f4c06f0f`。
+- 签名正式包：`io.stridehub.app`，版本 `0.1.0` / versionCode `1`，只申请 INTERNET 权限，关闭 Android 备份与迁移，未内置后端地址、密码或 API key。构建产物和签名材料均不进入 Git。
+
+构建与运行方式见 [`android/README.md`](../../android/README.md)。验收记录仅覆盖所列平台和场景，不表示已在用户真机或远程生产服务验收；用户 Zepp 资料未被接入。
+
 ## 手机今日安排与多记录对账增量验收
 
 - **367 个定向 PHP 测试、1237 个断言通过**。覆盖本地日期边界、未知状态、适用健康约束、快速反馈字段合并、旧单条关联兼容、多条关联互斥、批量转移/冲突回滚、缺失或删除记录、重叠提示以及 Bearer/CSRF。

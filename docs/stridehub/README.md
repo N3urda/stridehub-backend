@@ -2,6 +2,8 @@
 
 以 HTTP API + Skill 为 AI 接口，让人和 AI 共同使用运动记录、健康背景和训练课表。在 Dreeve 的运动数据基础上，管理未来课表、比赛目标、训练前天气与穿衣建议、身体状态、跑后反馈及补给演练。项目不提供 MCP 服务。
 
+Android 客户端源码位于 [`android/`](../../android/README.md)。安装 APK 后填写同一后端的 URL、管理员用户名和密码，即可在手机上使用今日安排、课表、运动分析与文件导入；连接页和导航为原生界面，数据管理复用现有移动网页。
+
 ## 启用
 
 1. 安装依赖，执行 `bin/console doctrine:migrations:migrate --no-interaction`，重启应用与 daemon。
