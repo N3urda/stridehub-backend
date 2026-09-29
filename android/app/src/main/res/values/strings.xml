@@ -1,0 +1,3 @@
+<resources>
+    <string name="allow_http">允许 HTTP（仅可信局域网）</string>
+</resources>

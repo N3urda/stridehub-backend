@@ -1,6 +1,7 @@
 {% extends "html/activity/activity--sport-type--generic.html.twig" %}
 
 {% block mainStatsOnTop %}
+    <p class="mb-3"><a href="{{ relativeUrl('admin/running') }}?activityId={{ activity.getId()|url_encode }}" class="text-primary font-semibold">跑步深度复盘：分段、心率与长期趋势 ↗</a></p>
     {% autoescape false %}
         <section>
             <div class="grid grid-cols-2 md:grid-cols-4 gap-3">

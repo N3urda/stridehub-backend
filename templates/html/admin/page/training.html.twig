@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#173f38">
+    <title>跑步工作台 · StrideHub</title>
+    <link rel="icon" href="{{ relativeUrl('assets/images/logo.svg')|e('html_attr') }}">
+    <link rel="stylesheet" href="{{ relativeUrl(asset('css/stridehub-training.css'))|e('html_attr') }}">
+    <script defer src="{{ relativeUrl(asset('js/stridehub-training.js'))|e('html_attr') }}"></script>
+</head>
+<body>
+<a class="skip-link" href="#training-main">跳到主要内容</a>
+<div id="training-app" data-today-url="{{ relativeUrl('/admin/training/today')|e('html_attr') }}" data-api-base="{{ relativeUrl('/admin/training/api')|e('html_attr') }}" data-csrf="{{ csrf_token('training')|e('html_attr') }}">
+    <header class="sh-header">
+        <a class="sh-brand" href="{{ relativeUrl('/admin/training')|e('html_attr') }}"><span class="sh-mark" aria-hidden="true">S<span>↗</span></span><span>StrideHub<small>你的跑步工作台</small></span></a>
+        <nav aria-label="应用导航"><a href="{{ relativeUrl('/admin/running')|e('html_attr') }}">跑步分析 ↗</a><a href="{{ relativeUrl('/admin/activities')|e('html_attr') }}">活动记录 ↗</a><a href="{{ relativeUrl('/admin')|e('html_attr') }}">管理后台</a></nav>
+    </header>
+    <main id="training-main" class="sh-main">
+        <div class="sh-heading"><div><p class="sh-eyebrow">PLAN · RUN · REFLECT</p><h1>为下一次出发，做好准备。</h1><p id="runner-context" class="muted">正在读取你的跑步设置…</p></div><div class="form-actions"><a class="button" href="{{ relativeUrl('/admin/training/today')|e('html_attr') }}">今日训练</a><button type="button" class="button" id="refresh-data">刷新数据</button><button class="button primary" data-tab-target="schedule" id="quick-add-session">＋ 安排一次训练</button></div></div>
+        <div id="global-status" class="notice" role="status" aria-live="polite" hidden></div>
+        <noscript><p class="notice error">请开启 JavaScript 以加载和保存训练资料。</p></noscript>
+        <nav class="sh-tabs" aria-label="工作台视图">
+            <button type="button" data-tab-target="overview" aria-current="page">出发简报</button>
+            <button type="button" data-tab-target="schedule">训练日历</button>
+            <button type="button" data-tab-target="wellbeing">身体状态</button>
+            <button type="button" data-tab-target="fuel">补给练习</button>
+            <button type="button" data-tab-target="races">比赛目标</button>
+            <button type="button" data-tab-target="profile">跑步设置</button>
+        </nav>
+
+        <section id="panel-overview" class="tab-panel" aria-label="出发简报">
+            <div class="overview-grid">
+                <article class="card briefing-card"><div class="section-title"><p class="sh-eyebrow">NEXT RUN / 下一次训练</p><button type="button" class="button subtle" id="refresh-briefing">刷新简报</button></div><div id="briefing"><p class="muted">正在准备出发简报…</p></div></article>
+                <aside class="card"><p class="sh-eyebrow">TODAY / 今日准备</p><h2>跑前，听听身体的反馈</h2><div id="today-checkin"><p class="muted">正在读取今日状态…</p></div><button type="button" class="button" data-tab-target="wellbeing">记录身体状态</button><div class="divider"></div><h3>一步步建立自己的节奏</h3><ol class="onboarding"><li>设置跑步地点与时区</li><li>安排训练，查看全程天气</li><li>跑后关联活动，记录体感和补给</li></ol><a href="#" data-tab-target="profile" class="text-link">完善跑步设置 →</a></aside>
+            </div>
+            <article class="card"><div class="section-title"><div><p class="sh-eyebrow">ACTUAL RUNS / 真实活动</p><h2>让计划和实际表现连接起来</h2></div><a class="text-link" href="{{ relativeUrl('/admin/upload')|e('html_attr') }}">导入活动 ↗</a></div><div id="activity-summary" class="muted">正在读取已导入的跑步活动…</div></article>
+        </section>
+
+        <section id="panel-schedule" class="tab-panel" aria-label="训练日历" hidden>
+            <div class="workspace-grid">
+                <div class="stack"><article class="card"><div class="section-title"><div><p class="sh-eyebrow">SCHEDULE</p><h2>你的训练安排</h2></div><button type="button" class="button" id="new-session">＋ 新训练</button></div><form id="session-filter" class="filter-row"><label>从<input type="date" name="from"></label><label>至<input type="date" name="to"></label><label>状态<select name="status"><option value="">全部</option><option value="planned">计划中</option><option value="completed">已完成</option><option value="skipped">已跳过</option><option value="cancelled">已取消</option></select></label><button class="button" type="submit">筛选</button></form><div id="session-list" class="record-list">正在读取训练…</div></article>
+                <article class="card" id="comparison-card"><p class="sh-eyebrow">PLAN × ACTUAL</p><h2>计划与实际</h2><div id="comparison"><p class="empty-state">选择一条训练的「对比 / 简报」，查看计划、活动候选和训练建议。</p></div></article></div>
+                <article class="card editor-card"><div class="section-title"><h2 id="session-form-title">安排训练</h2><span class="save-state" id="session-save-state">尚未保存</span></div>
+                    <form id="session-form" class="form-grid">
+                        <label class="full">训练名称<input name="title" required maxlength="200" placeholder="例如：周日轻松长跑"></label>
+                        <label>开始日期与时间<input name="startLocal" type="datetime-local" required></label><label>UTC 时差<input name="offset" required pattern="[+-][0-9]{2}:[0-9]{2}" placeholder="+08:00" aria-describedby="session-time-help"></label>
+                        <p id="session-time-help" class="field-help full">使用跑步地点的本地时间和时差保存；不会采用浏览器所在时区。</p>
+                        <label>预计分钟<input name="durationMinutes" type="number" min="1" max="1440" required value="60"></label><label>计划公里（可选）<input name="distanceKm" type="number" min="0" max="1000" step="0.01"></label>
+                        <label>训练类型<select name="type"><option value="easy">轻松跑</option><option value="long">长距离</option><option value="tempo">节奏跑</option><option value="interval">间歇跑</option><option value="recovery">恢复跑</option><option value="race">比赛</option><option value="rest">休息</option></select></label><label>训练状态<select name="status"><option value="planned">计划中</option><option value="completed">已完成</option><option value="skipped">已跳过</option><option value="cancelled">已取消</option></select></label>
+                        <label class="full">关联比赛<select name="raceId"><option value="">不关联比赛</option></select></label>
+                        <details class="full"><summary>本次训练地点（留空使用跑步设置）</summary><div class="form-grid nested"><label class="full">地点名称<input name="locationLabel" maxlength="120"></label><label>纬度<input name="latitude" type="number" min="-90" max="90" step="any"></label><label>经度<input name="longitude" type="number" min="-180" max="180" step="any"></label></div></details>
+                        <fieldset class="full"><legend>分段训练</legend><p class="field-help">按顺序安排热身、主训练、恢复和放松。分钟为每段持续时间。</p><div id="step-rows" class="structured-rows"></div><button class="button small" type="button" id="add-step">＋ 添加一段</button></fieldset>
+                        <fieldset class="full"><legend>跑中补给计划</legend><p class="field-help">记录出发后第几分钟吃什么、喝多少。</p><div id="fuel-plan-rows" class="structured-rows"></div><button class="button small" type="button" id="add-fuel-plan">＋ 添加补给</button></fieldset>
+                        <label class="full">训练备注<textarea name="notes" rows="3" maxlength="4000" placeholder="路线、配速目标或需要注意的事"></textarea></label>
+                        <fieldset class="full"><legend>跑后反馈</legend><label class="check-line"><input type="checkbox" name="hasFeedback">记录本次实际体感</label><div class="form-grid nested"><label>主观强度 RPE（1–10，可选）<input name="rpe" type="number" min="1" max="10"></label><label>冷热体感<select name="thermalFeeling"><option value="">未记录</option><option value="comfortable">舒适</option><option value="cold">偏冷</option><option value="hot">偏热</option></select></label><label class="full">体感备注<textarea name="feedbackNotes" rows="2" maxlength="4000"></textarea></label></div></fieldset>
+                        <div class="form-actions full"><button type="submit" class="button primary">保存训练</button><button type="button" class="button" data-reset="session">重置表单</button></div><p class="form-status full" role="status" aria-live="polite"></p>
+                    </form>
+                </article>
+            </div>
+        </section>
+
+        <section id="panel-wellbeing" class="tab-panel" aria-label="身体状态" hidden>
+            <div class="workspace-grid"><article class="card"><p class="sh-eyebrow">CHECK IN</p><h2>每一天的身体信号</h2><p class="muted">疲劳和酸痛会参与训练建议。保存后，简报才会使用这份状态。</p><div id="checkin-list" class="record-list">正在读取记录…</div></article><article class="card editor-card"><div class="section-title"><h2 id="checkin-form-title">记录今日状态</h2><span class="save-state" id="checkin-save-state">尚未保存</span></div><form id="checkin-form" class="form-grid"><label>日期<input type="date" name="date" required></label><label>昨晚睡眠（小时）<input name="sleepHours" type="number" min="0" max="24" step="0.1"></label><label>疲劳程度<select name="fatigue"><option value="">未记录</option><option value="1">1 · 精力充沛</option><option value="2">2 · 轻微疲劳</option><option value="3">3 · 中等疲劳</option><option value="4">4 · 很疲惫</option><option value="5">5 · 极度疲惫</option></select></label><label>肌肉酸痛<select name="soreness"><option value="">未记录</option><option value="1">1 · 无酸痛</option><option value="2">2 · 轻微酸痛</option><option value="3">3 · 中等酸痛</option><option value="4">4 · 明显酸痛</option><option value="5">5 · 严重酸痛</option></select></label><label class="full">疼痛或不适<select name="pain"><option value="">未记录</option><option value="false">没有</option><option value="true">有，需要谨慎安排</option></select></label><label class="full">状态备注<textarea name="notes" rows="4" maxlength="4000"></textarea></label><div class="form-actions full"><button type="submit" class="button primary">保存身体状态</button><button type="button" class="button" data-reset="checkin">新记录</button></div><p class="form-status full" role="status" aria-live="polite"></p></form></article></div>
+        </section>
+
+        <section id="panel-fuel" class="tab-panel" aria-label="补给练习" hidden>
+            <div class="workspace-grid"><article class="card"><p class="sh-eyebrow">FUEL PRACTICE</p><h2>找到适合自己的补给</h2><p class="muted">记录实际摄入和肠胃感受，用训练检验比赛补给。</p><div id="fuel-list" class="record-list">正在读取补给记录…</div></article><article class="card editor-card"><div class="section-title"><h2 id="fuel-form-title">记录一次补给</h2><span class="save-state" id="fuel-save-state">尚未保存</span></div><form id="fuel-form" class="form-grid"><label>日期<input name="date" type="date" required></label><label>出发后第几分钟<input name="minute" type="number" min="0" max="1440" value="0" required></label><label class="full">关联训练<select name="sessionId"><option value="">不关联训练</option></select></label><label class="full">食物 / 饮品<input name="item" required maxlength="200" placeholder="例如：一袋能量胶"></label><label>碳水化合物（克）<input name="carbsGrams" type="number" min="0" max="1000" step="0.1" value="0" required></label><label>液体（毫升）<input name="fluidMl" type="number" min="0" max="10000" step="1" value="0" required></label><label class="full">肠胃感受<select name="giComfort"><option value="good">舒适</option><option value="mild">轻微不适</option><option value="poor">明显不适</option></select></label><label class="full">备注<textarea name="notes" rows="3" maxlength="4000"></textarea></label><div class="form-actions full"><button type="submit" class="button primary">保存补给记录</button><button type="button" class="button" data-reset="fuel">新记录</button></div><p class="form-status full" role="status" aria-live="polite"></p></form></article></div>
+        </section>
+
+        <section id="panel-races" class="tab-panel" aria-label="比赛目标" hidden>
+            <div class="workspace-grid"><article class="card"><p class="sh-eyebrow">YOUR NEXT FINISH LINE</p><h2>给训练一个期待</h2><div id="race-list" class="record-list">正在读取比赛目标…</div></article><article class="card editor-card"><div class="section-title"><h2 id="race-form-title">添加比赛目标</h2><span class="save-state" id="race-save-state">尚未保存</span></div><form id="race-form" class="form-grid"><label class="full">比赛名称<input name="name" required maxlength="200" placeholder="例如：秋季半程马拉松"></label><label>比赛日期<input name="date" type="date" required></label><label>距离（公里）<input name="distanceKm" type="number" min="0.1" max="1000" step="0.0001" required value="21.0975"></label><label class="full">目标完赛时间（分钟，可选）<input name="targetTimeMinutes" type="number" min="1" max="10000" step="0.1" placeholder="例如：120"></label><label class="full">比赛备注<textarea name="notes" rows="4" maxlength="4000"></textarea></label><div class="form-actions full"><button type="submit" class="button primary">保存比赛目标</button><button type="button" class="button" data-reset="race">新目标</button></div><p class="form-status full" role="status" aria-live="polite"></p></form></article></div>
+        </section>
+
+        <section id="panel-profile" class="tab-panel" aria-label="跑步设置" hidden>
+            <div class="workspace-grid"><article class="card"><p class="sh-eyebrow">RUN YOUR WAY</p><h2>每次建议，都从你出发</h2><p class="muted">地点用于查询逐小时天气；时区决定训练日期和提醒时间。未设置地点时，天气会显示不可用。</p><div class="info-block"><h3>提醒如何送达</h3><p>开启后，由服务器守护进程检查晚间、跑前和跑后提醒。需要同时配置通知渠道并运行守护进程。</p><div class="inline-links"><a href="{{ relativeUrl('/admin/settings/integrations')|e('html_attr') }}">配置通知渠道 ↗</a><a href="{{ relativeUrl('/admin/settings/daemon')|e('html_attr') }}">检查守护进程 ↗</a></div></div><div class="info-block"><h3>与 Codex 协作</h3><p>外部训练 API 使用服务端设置的 Bearer 凭据。浏览器通过当前登录会话操作。</p><a href="{{ relativeUrl('/api/v1/training/openapi.json')|e('html_attr') }}">OpenAPI 文档（需 Bearer 认证） ↗</a></div><a href="{{ relativeUrl('/admin/training/guide')|e('html_attr') }}" class="text-link">跑步助手使用指南 ↗</a></article>
+            <article class="card editor-card"><div class="section-title"><h2>跑步偏好</h2><span class="save-state" id="profile-save-state">正在读取</span></div><form id="profile-form" class="form-grid"><label class="full">时区<input name="timezone" required value="Asia/Shanghai" placeholder="Asia/Shanghai" list="timezone-options"></label><datalist id="timezone-options"><option value="Asia/Shanghai"><option value="Asia/Tokyo"><option value="Europe/London"><option value="America/New_York"><option value="America/Los_Angeles"><option value="Australia/Sydney"><option value="UTC"></datalist><label class="full">常用地点名称<input name="locationLabel" maxlength="120" placeholder="例如：杭州 · 钱塘江"></label><label>纬度<input name="latitude" type="number" min="-90" max="90" step="any"></label><label>经度<input name="longitude" type="number" min="-180" max="180" step="any"></label><p class="field-help full">填写经纬度后才能查询天气。两项都留空可清除地点。</p><label>冷热偏好<select name="thermalPreference"><option value="cold">我比较怕冷</option><option value="neutral">正常</option><option value="warm">我比较怕热</option></select></label><label>常用开跑时间<input name="usualStartTime" type="time" value="06:30" required></label><label>常用时长（分钟）<input name="usualDurationMinutes" type="number" min="1" max="1440" value="60" required></label><fieldset class="full"><legend>习惯跑步日</legend><div class="weekday-picker">{% for day in ['一', '二', '三', '四', '五', '六', '日'] %}<label><input type="checkbox" name="runningDays" value="{{ loop.index }}"><span>周{{ day }}</span></label>{% endfor %}</div><p class="field-help">没有具体训练时，简报会参考这些习惯，并明确标记为习惯建议。</p></fieldset><label class="check-line full"><input type="checkbox" name="notificationsEnabled">开启训练提醒</label><label>前一晚提醒时间<input name="eveningReminderTime" type="time" value="20:00" required></label><label>跑前提前分钟<input name="preRunReminderMinutes" type="number" min="5" max="240" value="60" required></label><div class="form-actions full"><button class="button primary" type="submit">保存跑步设置</button></div><p class="form-status full" role="status" aria-live="polite"></p></form></article></div>
+        </section>
+        <footer class="sh-footer"><span>StrideHub · 让每次出发都有准备</span><a href="{{ relativeUrl('/admin/training/guide')|e('html_attr') }}">使用指南</a><span>建议供训练参考，请结合身体感受调整。</span></footer>
+    </main>
+</div>
+</body>
+</html>

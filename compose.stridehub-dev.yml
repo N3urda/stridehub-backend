@@ -1,0 +1,35 @@
+# Source-mounted development runtime; the upstream production build remains unchanged.
+name: stridehub-dev
+services:
+  app:
+    image: ghcr.io/dreeveapp/dreeve@sha256:4e7aa58aff95380e005fdcc061b7c3e6f3b7e707f43157f8fbdaa97f2cc7883a
+    entrypoint: []
+    init: true
+    working_dir: /var/www
+    volumes:
+      - .:/var/www
+    env_file: .env.local
+    environment:
+      APP_ENV: dev
+      APP_DEBUG: '0'
+    ports:
+      - '127.0.0.1:8081:8080'
+    healthcheck:
+      test: ['CMD', 'curl', '--fail', '--silent', 'http://localhost:8080/admin/login']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    command: ['php', '-d', 'opcache.enable=0', '-S', '0.0.0.0:8080', '-t', 'public', 'docker/stridehub-dev/router.php']
+  daemon:
+    image: ghcr.io/dreeveapp/dreeve@sha256:4e7aa58aff95380e005fdcc061b7c3e6f3b7e707f43157f8fbdaa97f2cc7883a
+    entrypoint: []
+    init: true
+    profiles: [daemon]
+    working_dir: /var/www
+    volumes:
+      - .:/var/www
+    env_file: .env.local
+    environment:
+      APP_ENV: dev
+      APP_DEBUG: '0'
+    command: ['php', 'bin/console', 'app:daemon:run']
