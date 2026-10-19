@@ -2388,7 +2388,7 @@
     "/reconciliation": {
       "get": {
         "summary": "Read matching suggestions; never changes completion or links",
-        "description": "Defaults to today and previous seven local days. Includes ended planned/completed non-rest sessions with absent or missing links. Candidates match the local calendar day or adjacent six-hour window; other sessions' linked activities are excluded. Individual comparison is available for future or already linked sessions.",
+        "description": "Defaults to today and previous seven local days. Includes ended planned/completed non-rest sessions with absent, missing or overlapping links. Candidates match the local calendar day or adjacent six-hour window; other sessions' linked activities are excluded. Individual comparison is available for future or already linked sessions.",
         "operationId": "getTrainingReconciliation",
         "parameters": [
           {
@@ -2574,6 +2574,87 @@
           },
           "428": {
             "description": "Expected version required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/follow-ups": {
+      "get": {
+        "summary": "Read paged unresolved training work, including older-history navigation",
+        "operationId": "getTrainingFollowUps",
+        "description": "Defaults to the latest 30 profile-local calendar dates. Inclusive date range is limited to 366 dates; pageSize is 1–50. Sessions are sorted by start time ascending. Page numbers beyond the last page are clamped; an empty result has page=1 and totalPages=1. olderPendingCount and earliestPendingDate describe unresolved sessions before from, independently of the current page. Candidate searches are deferred to individual comparison. No completion or other state is changed.",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100000,
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bounded follow-up page; read-only",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FollowUps"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed",
             "content": {
               "application/json": {
                 "schema": {
@@ -4135,7 +4216,8 @@
           "pendingFeedback",
           "reconciliation",
           "dataQuality",
-          "observations"
+          "observations",
+          "followUps"
         ],
         "properties": {
           "date": {
@@ -4185,9 +4267,12 @@
           },
           "observations": {
             "$ref": "#/components/schemas/HealthObservations"
+          },
+          "followUps": {
+            "$ref": "#/components/schemas/FollowUps"
           }
         },
-        "description": "Read-only runner-local today. No synthetic rest day or next-day workout; feedback queue covers today and previous six days. Fetch a chosen session briefing separately so weather failure does not block daily operations."
+        "description": "Read-only runner-local today. No synthetic rest day or next-day workout; feedback queue covers today and previous six days. Fetch a chosen session briefing separately so weather failure does not block daily operations. followUps provides the first page of the latest 30 days plus pointers to older unresolved work; legacy pendingFeedback and reconciliation remain available."
       },
       "HealthObservations": {
         "type": "object",
@@ -4558,6 +4643,90 @@
           "skipped"
         ],
         "description": "GET status 和 POST sync 使用相同顶层结构；四项计数属于最近一次同步尝试。失败和空数据不删除已有睡眠，进行中超过五分钟会显示可重试的中断错误。"
+      },
+      "FollowUps": {
+        "type": "object",
+        "required": [
+          "from",
+          "to",
+          "page",
+          "pageSize",
+          "totalItems",
+          "totalPages",
+          "items",
+          "olderPendingCount",
+          "earliestPendingDate"
+        ],
+        "properties": {
+          "from": {
+            "type": "string",
+            "format": "date"
+          },
+          "to": {
+            "type": "string",
+            "format": "date"
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "pageSize": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          },
+          "totalItems": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "totalPages": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "items": {
+            "type": "array",
+            "maxItems": 50,
+            "items": {
+              "type": "object",
+              "required": [
+                "session",
+                "reasons"
+              ],
+              "properties": {
+                "session": {
+                  "$ref": "#/components/schemas/Session"
+                },
+                "reasons": {
+                  "type": "array",
+                  "minItems": 1,
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "unrecorded",
+                      "unlinked",
+                      "needs_review",
+                      "feedback"
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "olderPendingCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "earliestPendingDate": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date",
+            "description": "Earliest unresolved session date before from, or null when there is none."
+          }
+        },
+        "description": "One item per non-rest, non-skipped/cancelled session, potentially with multiple reasons. unrecorded: planned end has passed and no activity is linked; this does not mean a missed workout. unlinked: explicitly completed without an activity. needs_review: a linked record is missing/deleted/not a run, or linked recording intervals overlap. feedback: completed with no meaningful feedback. Empty objects, nulls, blank text and unknown fuel comfort do not close feedback; explicit false pain or zero fuel quantities do. Future sessions and planned sessions still in progress are excluded. Sessions older than the displayed window remain counted until resolved."
       }
     }
   }

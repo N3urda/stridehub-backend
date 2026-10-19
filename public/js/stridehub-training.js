@@ -4,7 +4,8 @@
     if (!app) return;
     const $ = (selector, scope = document) => scope.querySelector(selector);
     const $$ = (selector, scope = document) => Array.from(scope.querySelectorAll(selector));
-    const state = {failed: new Set(), profile: null, sessions: [], races: [], checkins: [], fuels: [], activities: [], comparisonId: null, comparisonRequest: 0, briefingRequest: 0};
+    const state = {failed: new Set(), profile: null, sessions: [], races: [], checkins: [], fuels: [], activities: [], comparisonId: null, comparisonRequest: 0, briefingRequest: 0, pendingDeletes: new Map(), deleting: new Set()};
+    const entry = new URLSearchParams(location.search);
     const forms = {session: $('#session-form'), race: $('#race-form'), checkin: $('#checkin-form'), fuel: $('#fuel-form'), profile: $('#profile-form')};
     const resources = {session: 'sessions', race: 'races', checkin: 'check-ins', fuel: 'fuel-logs', profile: 'profile'};
     const types = {easy: '轻松跑', long: '长距离', tempo: '节奏跑', interval: '间歇跑', recovery: '恢复跑', race: '比赛', rest: '休息'};
@@ -37,28 +38,41 @@
         return offsetAt(date);
     }
     function notify(message, error = false) { const node = $('#global-status'); node.textContent = message; node.className = `notice${error ? ' error' : ''}`; node.hidden = !message; }
+    async function renewPageToken() {
+        let response;
+        try { response = await fetch(location.pathname, {credentials: 'same-origin', cache: 'no-store'}); }
+        catch { throw new Error('尚未提交：无法检查登录状态。草稿仍保留，请恢复连接后重试。'); }
+        const html = new DOMParser().parseFromString(await response.text(), 'text/html');
+        const token = html.querySelector('#training-app')?.dataset.csrf;
+        if (!response.ok || !token) throw new Error('尚未提交：登录已过期。请在另一标签页重新登录，再回到这里保存；当前草稿仍保留。');
+        app.dataset.csrf = token;
+    }
     async function api(path, method = 'GET', body) {
+        if (method !== 'GET') await renewPageToken();
         const headers = {Accept: 'application/json'};
         if (method !== 'GET') headers['X-CSRF-Token'] = app.dataset.csrf;
         if (body !== undefined) headers['Content-Type'] = 'application/json';
         let response;
         try { response = await fetch(app.dataset.apiBase + path, {method, headers, credentials: 'same-origin', body: body === undefined ? undefined : JSON.stringify(body)}); }
-        catch { throw new Error('网络连接失败。你的输入仍保留，请检查连接后重试。'); }
+        catch { const error = new Error(method === 'GET' ? '网络连接失败，草稿仍保留。请稍后重试读取。' : '连接中断，保存结果尚未确定。请先读取服务器记录核对。'); error.uncertain = method !== 'GET'; throw error; }
         let data;
         try { data = response.status === 204 ? null : await response.json(); }
-        catch { throw new Error('服务器未返回 JSON。登录可能已过期；请在另一标签页重新登录后重试，当前草稿会保留。'); }
-        if (!response.ok) { const error = new Error(data?.message || `请求失败（${response.status}）`); error.status = response.status; throw error; }
+        catch { const error = new Error('未收到有效响应。请在另一标签页确认登录状态；当前草稿保留。'); error.uncertain = method !== 'GET'; throw error; }
+        if (!response.ok) { const error = new Error(response.status === 401 || response.status === 403 ? '登录或页面验证已失效。请在另一标签页重新登录，草稿仍保留。' : data?.message || `请求失败（${response.status}）`); error.status = response.status; error.uncertain = method !== 'GET' && response.status >= 500; throw error; }
         return data;
     }
     function selectTab(name, focus = false) {
+        if (!$('#panel-' + name)) name = 'overview';
         $$('.tab-panel').forEach(panel => { panel.hidden = panel.id !== 'panel-' + name; });
         $$('.sh-tabs [data-tab-target]').forEach(tab => { if (tab.dataset.tabTarget === name) tab.setAttribute('aria-current', 'page'); else tab.removeAttribute('aria-current'); });
         if (focus) $('#panel-' + name)?.scrollIntoView({block: 'start', behavior: 'instant'});
+        const url = new URL(location.href); url.searchParams.set('tab', name); history.replaceState(null, '', url);
     }
     $$('[data-tab-target]').forEach(node => node.addEventListener('click', event => { event.preventDefault(); selectTab(node.dataset.tabTarget); }));
     function formStatus(kind, message, error = false) { const node = $('.form-status', forms[kind]); node.replaceChildren(); node.className = `form-status full ${error ? 'error' : 'success'}`; if (message) node.append(document.createTextNode(message)); }
     function markDirty(kind) { forms[kind]._revision = (forms[kind]._revision || 0) + 1; forms[kind]._dirty = true; const status = $('#' + kind + '-save-state'); status.textContent = '有未保存的修改'; status.classList.add('dirty'); if (kind === 'checkin') renderToday(); }
-    function markSaved(kind, record) { const form = forms[kind]; form._record = record; form._dirty = false; const node = $('#' + kind + '-save-state'); node.textContent = record?.version ? `已保存 · 版本 ${record.version}` : '尚未保存'; node.classList.remove('dirty'); }
+    function updateFormControls(kind) { const form = forms[kind]; $$('input, select, textarea, button', form).forEach(control => { control.disabled = !!form._busy || !!form._loading; }); $('[type=submit]', form).disabled = !!form._busy || !!form._loading || !!form._blocked; }
+    function markSaved(kind, record) { const form = forms[kind]; form._record = record; form._dirty = false; form._blocked = false; form._pending = null; form._createId = record?.id || null; const node = $('#' + kind + '-save-state'); node.textContent = record?.version ? `已保存 · 版本 ${record.version}` : '尚未保存'; node.classList.remove('dirty'); }
     function allowReplace(kind) { return !forms[kind]._dirty || window.confirm('表单中有未保存的修改。要放弃这份草稿并继续吗？'); }
     function put(form, name, input) { const field = form.elements.namedItem(name); if (field && 'value' in field) field.value = input ?? ''; }
     function locationFrom(form) { const latitude = optionalNumber(form, 'latitude'); const longitude = optionalNumber(form, 'longitude'); if ((latitude === null) !== (longitude === null)) throw new Error('地点需要同时填写纬度和经度，或将两项都留空。'); if (latitude !== null && !value(form, 'locationLabel').trim()) throw new Error('填写经纬度时，请同时填写地点名称。'); return latitude === null ? null : {label: value(form, 'locationLabel').trim(), latitude, longitude}; }
@@ -100,9 +114,16 @@
             }
         }
         markSaved(kind, record);
+        // A new form also needs a baseline if a same-date record already exists.
+        form._baseline = payloadFor(kind);
+        updateFormControls(kind);
         if (kind !== 'profile') $('#' + kind + '-form-title').textContent = record ? ({session: '编辑训练', checkin: '编辑身体状态', race: '编辑比赛目标', fuel: '编辑补给记录'}[kind]) : freshTitles[kind];
         if (kind === 'checkin') renderToday();
-        if (kind === 'session') updateTimeHelp();
+        if (kind === 'session') {
+            updateTimeHelp(); const url = new URL(location.href);
+            if (record?.id) url.searchParams.set('sessionId', record.id); else url.searchParams.delete('sessionId');
+            history.replaceState(null, '', url);
+        }
     }
     function updateTimeHelp() { $('#session-time-help').textContent = `跑步设置时区：${timezone()}。此训练将按所填 UTC 时差保存；跨时区或夏令时请确认时差。`; }
     function payloadFor(kind) {
@@ -122,44 +143,133 @@
         if (kind === 'checkin') return {date: value(form, 'date'), sleepHours: optionalNumber(form, 'sleepHours'), fatigue: optionalNumber(form, 'fatigue'), soreness: optionalNumber(form, 'soreness'), pain: value(form, 'pain') === '' ? null : value(form, 'pain') === 'true', notes: value(form, 'notes')};
         return {date: value(form, 'date'), sessionId: value(form, 'sessionId') || null, minute: number(form, 'minute'), item: value(form, 'item').trim(), carbsGrams: number(form, 'carbsGrams'), fluidMl: number(form, 'fluidMl'), giComfort: value(form, 'giComfort'), notes: value(form, 'notes')};
     }
+    const object = input => input !== null && typeof input === 'object' && !Array.isArray(input);
+    function equal(left, right) {
+        if (left === right) return true;
+        if (Array.isArray(left) && Array.isArray(right)) return left.length === right.length && left.every((item, index) => equal(item, right[index]));
+        return object(left) && object(right) && Object.keys(left).length === Object.keys(right).length && Object.keys(left).every(key => Object.hasOwn(right, key) && equal(left[key], right[key]));
+    }
+    function mergeChanges(base, draft, latest) {
+        if (equal(base, draft)) return latest;
+        if (!object(base) || !object(draft)) return draft;
+        const result = {...(object(latest) ? latest : {})};
+        for (const key of new Set([...Object.keys(base), ...Object.keys(draft)])) {
+            if (equal(base[key], draft[key])) continue;
+            if (!Object.hasOwn(draft, key)) delete result[key];
+            else result[key] = mergeChanges(base[key], draft[key], result[key]);
+        }
+        return result;
+    }
+    function writeBody(kind) {
+        const form = forms[kind]; const draft = payloadFor(kind);
+        if (!form._record || !form._baseline) return draft;
+        return Object.fromEntries(Object.entries(draft).filter(([key, input]) => !equal(form._baseline[key], input)).map(([key, input]) => [key, mergeChanges(form._baseline[key], input, form._record[key])]));
+    }
+    function matches(record, payload) {
+        return Object.entries(payload).filter(([key]) => !['id', 'version'].includes(key)).every(([key, input]) => key === 'startAt' ? Date.parse(record[key]) === Date.parse(input) : equal(record[key], input));
+    }
+    function recordPath(kind, id) { return '/' + resources[kind] + (kind === 'profile' ? '' : '/' + encodeURIComponent(id)); }
+    function createId() { return 'web-' + [...crypto.getRandomValues(new Uint8Array(16))].map(byte => byte.toString(16).padStart(2, '0')).join(''); }
+    async function latestFor(kind) {
+        const form = forms[kind]; const id = form._pending?.id || form._record?.id || form._createId;
+        if (kind === 'checkin' && !form._record) {
+            const date = form._pending?.payload.date || value(form, 'date');
+            const data = await api('/check-ins?from=' + encodeURIComponent(date) + '&to=' + encodeURIComponent(date));
+            return list(data).find(record => record.date === date) || null;
+        }
+        try { return await api(recordPath(kind, id)); } catch (error) { if (error.status === 404) return null; throw error; }
+    }
+    function readableRecord(record) {
+        const labels = {title: '训练名称', name: '比赛名称', date: '日期', startAt: '开始时间', durationMinutes: '预计分钟', distanceKm: '公里', type: '训练类型', status: '训练状态', notes: '备注', raceId: '关联比赛', sessionId: '关联训练', location: '地点', label: '名称', latitude: '纬度', longitude: '经度', steps: '分段训练', kind: '分段', minutes: '分钟', target: '目标', fuelPlan: '补给计划', minute: '出发后分钟', item: '食物 / 饮品', carbsGrams: '碳水（克）', fluidMl: '液体（毫升）', giComfort: '肠胃感受', feedback: '跑后反馈', rpe: '主观强度', thermalFeeling: '冷热体感', pain: '疼痛或不适', sleepHours: '睡眠小时', fatigue: '疲劳', soreness: '酸痛', timezone: '时区', runningDays: '跑步日', thermalPreference: '冷热偏好', usualStartTime: '常用开跑时间', usualDurationMinutes: '常用时长', notificationsEnabled: '训练提醒', eveningReminderTime: '晚间提醒时间', preRunReminderMinutes: '跑前提前分钟', activityIds: '已关联运动', updatedAt: '更新时间'};
+        const texts = {comfortable: '舒适', cold: '偏冷', hot: '偏热', neutral: '正常', warm: '怕热', good: '舒适', mild: '轻微不适', poor: '明显不适', unknown: '未知', ...types, ...statuses};
+        const lines = [];
+        function walk(input, prefix = '') {
+            for (const [key, entry] of Object.entries(input)) {
+                if (['id', 'version', 'activityId'].includes(key)) continue;
+                const label = prefix + (labels[key] || key);
+                if (object(entry)) walk(entry, label + ' · ');
+                else if (Array.isArray(entry)) {
+                    if (!entry.length) lines.push(label + '：未记录');
+                    else entry.forEach((item, index) => object(item) ? walk(item, label + ' ' + (index + 1) + ' · ') : lines.push(label + '：' + item));
+                } else lines.push(label + '：' + (entry == null || entry === '' ? '未记录' : typeof entry === 'boolean' ? entry ? '是' : '否' : texts[entry] || entry));
+            }
+        }
+        walk(record); const output = el('div', 'server-values'); lines.forEach(line => output.append(el('p', 'row-note', line))); return output;
+    }
+    async function completeSave(kind, record) {
+        const form = forms[kind];
+        if (form._pending && form._revision !== form._pending.revision) {
+            form._record = record; form._baseline = form._pending.draft; form._pending = null; form._blocked = false; formStatus(kind, '上次保存已核验。你之后修改的草稿仍未保存。');
+        } else { fillForm(kind, record); formStatus(kind, '已保存并核验。'); }
+        if (kind === 'profile') { state.profile = record; updateContext(); renderAll(); }
+        try { await reloadResource(kind); } catch (error) { formStatus(kind, '保存已核验，但列表刷新失败。' + error.message, true); }
+        refreshBriefing(kind === 'session' ? record.id : undefined);
+        if (kind === 'session' && state.comparisonId === record.id) showComparison(record.id);
+    }
+    function recoveryAction(kind) {
+        $('.form-status', forms[kind]).append(button('查看服务器最新版本（保留草稿）', () => reviewRecord(kind)));
+        updateFormControls(kind);
+    }
+    async function reviewRecord(kind) {
+        const form = forms[kind]; if (form._busy) return;
+        form._busy = true; updateFormControls(kind);
+        try {
+            const latest = await latestFor(kind);
+            if (latest && form._pending && matches(latest, form._pending.payload)) { await completeSave(kind, latest); return; }
+            const deleted = !latest && !!form._record;
+            formStatus(kind, latest ? '最新保存内容如下。你的草稿仍保留；核对后才可继续保存。' : deleted ? '已核验：原记录已删除。草稿仍保留；确认另存后会使用新编号，不会恢复已删除的原记录。' : '已核验：服务器没有这条记录。草稿仍保留；确认后可保存为新记录。', true);
+            const status = $('.form-status', form);
+            if (latest) {
+                const details = el('div', 'server-record');
+                append(details, el('strong', '', '服务器版本 ' + latest.version), readableRecord(latest));
+                details.append(button('用此版本替换表单', () => { if (allowReplace(kind)) { fillForm(kind, latest); formStatus(kind, '已载入服务器最新内容。'); } }));
+                status.append(details);
+            }
+            status.append(button(deleted ? '确认另存为新记录' : '已核对，保留草稿继续编辑', () => {
+                form._record = latest; form._blocked = false; form._pending = null;
+                if (deleted) form._createId = null;
+                if (kind === 'profile' && latest) state.profile = latest;
+                formStatus(kind, latest ? '已采用最新版本。下一次保存仅合并你改动的字段；服务器其余内容保留。' : '草稿已保留，可保存为新记录。'); updateFormControls(kind);
+            }));
+        } catch (error) { formStatus(kind, '读取核验失败。草稿仍保留，请先恢复连接再核对。' + error.message, true); recoveryAction(kind); }
+        finally { form._busy = false; updateFormControls(kind); }
+    }
     async function showConflict(kind, error) {
-        formStatus(kind, error.status === 409 ? '保存冲突：服务器记录已发生变化，或该日期 / ID 已有记录。你的草稿仍保留。' : error.message, true);
-        const record = forms[kind]._record || (kind === 'profile' ? {id: 'default'} : null);
-        if (error.status !== 409 || !record) return;
-        const status = $('.form-status', forms[kind]);
-        status.append(button('查看服务器最新版本（保留草稿）', async event => {
-            const trigger = event.currentTarget; trigger.disabled = true;
-            try {
-                const latest = await api('/' + resources[kind] + (kind === 'profile' ? '' : '/' + encodeURIComponent(record.id)));
-                const details = el('details'); append(details, el('summary', '', '服务器版本 ' + latest.version), el('pre', 'row-note', JSON.stringify(latest, null, 2)));
-                details.style.maxWidth = '100%'; details.style.overflow = 'auto';
-                details.append(button('用此版本替换表单', () => { if (allowReplace(kind)) fillForm(kind, latest); })); status.append(details);
-            } catch (failure) { status.append(el('span', '', failure.message)); }
-            finally { trigger.disabled = false; }
-        }));
+        const form = forms[kind];
+        formStatus(kind, error.status === 409 ? '保存冲突：服务器记录已发生变化，或该日期 / ID 已有记录。你的草稿仍保留。' : error.status === 404 ? '保存未完成：原记录已不存在。草稿保留，请读取核验后决定是否另存。' : (form._pending?.acknowledged ? '服务器已接收保存，核验尚未完成。请先读取最新内容，勿重复提交。' : '') + error.message, true);
+        if ([404, 409].includes(error.status) || error.uncertain || form._pending?.acknowledged) { form._blocked = true; recoveryAction(kind); }
     }
     async function submit(kind, event) {
-        event.preventDefault(); const form = forms[kind]; if (form._busy || !form.reportValidity()) return;
-        if (kind === 'profile' && (!state.profile || !form._record)) { formStatus(kind, '设置版本尚未确定。请刷新数据，或先查看服务器版本后合并草稿。', true); if (state.profile) await showConflict(kind, {status: 409}); return; }
-        let body; try { body = payloadFor(kind); } catch (error) { formStatus(kind, error.message, true); return; }
-        const record = form._record; if (record) body.version = record.version;
+        event.preventDefault(); const form = forms[kind]; if (form._busy || form._loading || form._blocked || !form.reportValidity()) return;
+        if (kind === 'profile' && (!state.profile || !form._record)) { await showConflict(kind, {status: 409}); return; }
+        let body; try { body = writeBody(kind); } catch (error) { formStatus(kind, error.message, true); return; }
+        const record = form._record;
+        const id = record?.id || (kind === 'profile' ? 'default' : (form._createId ||= createId()));
+        if (record) body.version = record.version; else if (kind !== 'profile') body.id = id;
         const method = kind === 'profile' || record ? 'PUT' : 'POST';
-        const path = '/' + resources[kind] + (record && kind !== 'profile' ? '/' + encodeURIComponent(record.id) : '');
-        form._busy = true; const controls = $$('input, select, textarea, button', form); controls.forEach(control => { control.disabled = true; }); formStatus(kind, '正在保存…');
+        const path = record || kind === 'profile' ? recordPath(kind, id) : '/' + resources[kind];
+        form._pending = {id, payload: body, draft: payloadFor(kind), revision: form._revision, acknowledged: false};
+        form._busy = true; updateFormControls(kind); formStatus(kind, '正在保存并核验…');
         try {
-            const saved = await api(path, method, body); fillForm(kind, saved); formStatus(kind, '已保存。');
-            if (kind === 'profile') { state.profile = saved; updateContext(); renderAll(); }
-            try { await reloadResource(kind); } catch (error) { formStatus(kind, '保存成功，但列表刷新失败。' + error.message, true); }
-            refreshBriefing();
-            if (kind === 'session' && state.comparisonId === saved.id) showComparison(saved.id);
-        } catch (error) { await showConflict(kind, error); }
-        finally { form._busy = false; controls.forEach(control => { control.disabled = false; }); }
+            await api(path, method, body); form._pending.acknowledged = true;
+            const latest = await latestFor(kind);
+            if (!latest || !matches(latest, body)) { const error = new Error('服务器已接收保存，但最新内容发生变化。请读取最新版本核对；没有自动重试。'); error.status = 409; throw error; }
+            await completeSave(kind, latest);
+        } catch (error) {
+            if (error.uncertain) {
+                try {
+                    const latest = await latestFor(kind);
+                    if (latest && matches(latest, body)) { await completeSave(kind, latest); return; }
+                } catch { /* Keep the write blocked until the user can read it back. */ }
+            }
+            await showConflict(kind, error);
+        } finally { form._busy = false; updateFormControls(kind); }
     }
     Object.entries(forms).forEach(([kind, form]) => {
         form._dirty = false; form.addEventListener('submit', event => submit(kind, event)); form.addEventListener('input', () => markDirty(kind)); form.addEventListener('change', () => markDirty(kind));
     });
     ['rpe', 'thermalFeeling', 'feedbackNotes'].forEach(name => { forms.session.elements.namedItem(name).addEventListener('input', () => { forms.session.elements.hasFeedback.checked = true; }); });
-    window.addEventListener('beforeunload', event => { if (Object.values(forms).some(form => form._dirty)) { event.preventDefault(); event.returnValue = ''; } });
+    window.addEventListener('beforeunload', event => { if (Object.values(forms).some(form => form._dirty || form._busy || form._blocked) || state.pendingDeletes.size || state.deleting.size) { event.preventDefault(); event.returnValue = ''; } });
     $$('[data-reset]').forEach(node => node.addEventListener('click', () => { const kind = node.dataset.reset; if (!forms[kind]._busy && allowReplace(kind)) fillForm(kind); }));
     $('#add-step').addEventListener('click', () => addStep()); $('#add-fuel-plan').addEventListener('click', () => addFuelPlan());
     $('#new-session').addEventListener('click', () => { if (!forms.session._busy && allowReplace('session')) { fillForm('session'); forms.session.elements.title.focus(); } });
@@ -172,19 +282,43 @@
         try { const record = await api('/' + resources[kind] + '/' + encodeURIComponent(id)); if (form._editRequest !== request || form._busy || ((form._revision || 0) !== revision && !allowReplace(kind))) return; fillForm(kind, record); selectTab(tabs[kind]); forms[kind].scrollIntoView({block: 'start', behavior: 'instant'}); $('input', forms[kind])?.focus({preventScroll: true}); }
         catch (error) { notify('读取记录失败：' + error.message, true); }
     }
+    async function verifyDeletion(kind, record, revision) {
+        try { await api(recordPath(kind, record.id)); }
+        catch (error) {
+            if (error.status !== 404) throw error;
+            state.pendingDeletes.delete(kind + ':' + record.id);
+            if (forms[kind]._record?.id === record.id) {
+                if ((forms[kind]._revision || 0) === revision) fillForm(kind);
+                else { forms[kind]._record = null; forms[kind]._createId = null; markDirty(kind); formStatus(kind, '原记录已删除；删除期间输入的内容已保留，可另存为新记录。'); }
+            }
+            if (kind === 'session' && state.comparisonId === record.id) { state.comparisonId = null; $('#comparison').replaceChildren(el('p', 'empty-state', '这条训练已删除。请选择其他训练进行对比。')); }
+            try { await reloadResource(kind); notify('记录已删除。'); } catch (failure) { notify('删除已核验，但列表刷新失败。' + failure.message, true); }
+            refreshBriefing(); return;
+        }
+        state.pendingDeletes.delete(kind + ':' + record.id);
+        await reloadResource(kind); notify('已核验：记录仍存在。请核对刷新后的内容；需要删除时再次选择删除。', true);
+    }
     async function deleteRecord(kind, record, trigger) {
         if (forms[kind]._busy) return;
+        const key = kind + ':' + record.id; const pending = state.pendingDeletes.get(key);
+        if (state.deleting.has(key)) return;
         const description = record.title || record.name || record.item || record.date;
         const draft = forms[kind]._record?.id === record.id && forms[kind]._dirty ? '\n此记录还有未保存的编辑，删除后将一并丢弃。' : '';
-        if (!window.confirm(`确定删除「${description}」吗？${draft}`)) return;
-        trigger.disabled = true; const revision = forms[kind]._revision || 0;
+        if (!pending && !window.confirm(`确定删除「${description}」吗？${draft}`)) return;
+        state.deleting.add(key); trigger.disabled = true; const revision = pending?.revision ?? forms[kind]._revision ?? 0;
         try {
-            await api('/' + resources[kind] + '/' + encodeURIComponent(record.id) + '?version=' + record.version, 'DELETE');
-            if (forms[kind]._record?.id === record.id) { if ((forms[kind]._revision || 0) === revision) fillForm(kind); else { forms[kind]._record = null; markDirty(kind); formStatus(kind, '原记录已删除；删除期间输入的内容已保留，可另存为新记录。'); } }
-            if (kind === 'session' && state.comparisonId === record.id) { state.comparisonId = null; $('#comparison').replaceChildren(el('p', 'empty-state', '这条训练已删除。请选择其他训练进行对比。')); }
-            await reloadResource(kind); notify('记录已删除。'); refreshBriefing();
-        } catch (error) { notify((error.status === 409 ? '删除未执行：记录已更新，请刷新列表后再决定。' : '删除失败：') + error.message, true); }
-        finally { trigger.disabled = false; }
+            if (!pending) {
+                try { await api(recordPath(kind, record.id) + '?version=' + record.version, 'DELETE'); }
+                catch (error) { if (!error.uncertain) throw error; }
+                state.pendingDeletes.set(key, {revision});
+            }
+            await verifyDeletion(kind, record, revision);
+        } catch (error) {
+            if (state.pendingDeletes.has(key)) {
+                notify('删除结果尚未核验。请先读取最新记录，不要重复删除。' + error.message, true);
+                $('#global-status').append(button('核对删除结果', () => deleteRecord(kind, record, trigger)));
+            } else notify((error.status === 409 ? '删除未执行：记录已更新，请刷新列表后再决定。' : '删除未执行：') + error.message, true);
+        } finally { state.deleting.delete(key); trigger.disabled = false; }
     }
     function recordNode(kind, record, title, meta, date) {
         const node = el('article', 'record');
@@ -256,6 +390,16 @@
             append(container, el('span', 'pill', habitual ? '依据跑步习惯 · 尚未保存为训练' : (statuses[session.status] || '训练简报')), el('h2', '', session.title || '习惯跑步建议'), el('p', 'briefing-date', `${fmt(session.startAt)} · ${timezone()} · ${session.durationMinutes} 分钟${session.distanceKm ? ' · ' + session.distanceKm + ' 公里' : ''}`));
             const forecast = briefing.forecast || {}; const advice = briefing.advice || {}; const quality = el('div');
             if (advice.summary) container.append(el('p', 'briefing-summary', advice.summary));
+            if (briefing.health?.constraints?.length) {
+                const constraints = el('section', 'briefing-constraints'); constraints.setAttribute('aria-label', '本次训练适用的健康约束');
+                constraints.append(el('h3', '', '先核对本次训练的约束'));
+                for (const constraint of briefing.health.constraints) {
+                    const item = el('div', 'briefing-constraint');
+                    append(item, el('p', '', constraint.description), el('p', 'field-help', `${constraint.sourceType === 'clinician' ? '记录的医生建议' : '用户记录'}${constraint.sourceReportId ? ' · 来源报告 ' + constraint.sourceReportId : ''} · ${constraint.validFrom ? '生效 ' + constraint.validFrom : '生效日期未注明'}${constraint.reviewOn ? ' · 复核 ' + constraint.reviewOn : ''}`));
+                    constraints.append(item);
+                }
+                container.append(constraints);
+            }
             const hours = Array.isArray(forecast.sessionHours) ? forecast.sessionHours : (forecast.hours || []);
             if (forecast.status !== 'available') container.append(el('p', 'notice', forecast.message || '当前天气不可用。请参考现场天气，稍后刷新简报。'));
             if (hours.length) {
@@ -313,8 +457,10 @@
         trigger.disabled = false;
     });
     async function bootstrap() {
+        selectTab(entry.get('tab') || (entry.get('sessionId') ? 'schedule' : 'overview'));
         const profileControls = $$('input, select, textarea, button', forms.profile); profileControls.forEach(control => { control.disabled = true; });
         Object.keys(forms).filter(kind => kind !== 'profile').forEach(kind => fillForm(kind));
+        if (entry.get('sessionId')) { forms.session._loading = true; updateFormControls('session'); formStatus('session', '正在读取指定课次，完成后可编辑。'); }
         const requests = [['profile', '/profile'], ['sessions', '/sessions'], ['races', '/races'], ['checkins', '/check-ins'], ['fuels', '/fuel-logs'], ['activities', '/activities']];
         const results = await Promise.allSettled(requests.map(async ([key, path]) => { const result = await api(path); state[key] = key === 'profile' ? result : list(result); }));
         const failures = results.flatMap((result, index) => { if (result.status !== 'rejected') return []; state.failed.add(requests[index][0]); return [requests[index][1] + '：' + result.reason.message]; });
@@ -325,7 +471,12 @@
         for (const kind of ['checkin', 'fuel', 'race']) { if (!forms[kind]._dirty) fillForm(kind); }
         const todayRecord = state.checkins.find(row => row.date === today()); if (todayRecord && !forms.checkin._dirty) fillForm('checkin', todayRecord);
         if (failures.length) notify('部分数据未能读取；空列表不代表没有记录。\n' + failures.join('\n'), true);
-        await refreshBriefing();
+        if (entry.get('sessionId')) {
+            await editRecord('session', entry.get('sessionId'));
+            forms.session._loading = false; updateFormControls('session');
+            if (entry.has('tab')) selectTab(entry.get('tab'));
+            await refreshBriefing(entry.get('sessionId'));
+        } else await refreshBriefing();
     }
     bootstrap().catch(error => notify('初始化失败：' + error.message, true));
 })();

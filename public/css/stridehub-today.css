@@ -72,6 +72,21 @@
 .today-reconcile-actions {display:flex;flex-wrap:wrap;gap:8px;margin-top:16px;}
 .today-reconcile-actions .button {flex:1;}
 .today-server-values {max-height:220px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;font-size:11px;padding:12px;background:#f3f4ee;border-radius:8px;}
+.today-course h2 {margin:8px 0 16px;}
+.today-course h3 {margin:18px 0 8px;font-size:15px;}
+.today-course ol,.today-course ul {padding-left:22px;margin:10px 0;}
+.today-course li {padding:8px 0;line-height:1.65;font-size:14px;overflow-wrap:anywhere;}
+.today-course li span {display:block;color:var(--muted);}
+.today-course-notes {white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px;line-height:1.7;}
+.today-course .notice {margin:12px 0;}
+.today-course .form-actions {margin-top:18px;}
+.today-recent .today-intro {margin-top:14px;}
+.today-range-shortcuts {margin-bottom:14px;}
+#today-pending-range input {min-width:0;width:100%;}
+#today-pending-status {font-size:12px;margin:14px 0;overflow-wrap:anywhere;}
+#today-pending-older .button {white-space:normal;text-align:left;margin-top:14px;}
+#today-pending-pages {margin-top:14px;align-items:center;justify-content:space-between;}
+.today-empty-actions {display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;}
 .today-page .notice,.today-page .row-note,.today-page .form-status,.today-page .data-quality {overflow-wrap:anywhere;}
 @media(max-width:760px) {
     .today-header {min-height:76px;padding:16px 18px;}

@@ -15,6 +15,7 @@ final class TrainingDailyApiTest extends AdminWebTestCase
 {
     private string $token;
 
+    #[\Override]
     protected function prepareEnvironment(): void
     {
         parent::prepareEnvironment();
@@ -22,6 +23,7 @@ final class TrainingDailyApiTest extends AdminWebTestCase
         $_SERVER['DREEVE_API_KEY'] = $_ENV['DREEVE_API_KEY'] = $this->token;
     }
 
+    #[\Override]
     protected function shouldSeedActivity(): bool
     {
         return false;
@@ -122,13 +124,39 @@ final class TrainingDailyApiTest extends AdminWebTestCase
 
     public function testTodayAndReconciliationRequireBearerAndUseNoStore(): void
     {
-        foreach (['/today', '/reconciliation'] as $path) {
+        foreach (['/today', '/reconciliation', '/follow-ups'] as $path) {
             $this->client->request('GET', '/api/v1/training'.$path);
             self::assertResponseStatusCodeSame(401);
             $data = $this->call('GET', $path);
             self::assertResponseIsSuccessful();
             self::assertStringContainsString('no-store', $this->client->getResponse()->headers->get('Cache-Control'));
             self::assertIsArray($data);
+        }
+    }
+
+    public function testFollowUpHistoryReturnsBoundedPagesAndDiscoverableOlderWork(): void
+    {
+        foreach (['old' => '2022-10-01', 'recent-a' => '2023-10-01', 'recent-b' => '2023-10-02'] as $id => $date) {
+            $this->call('POST', '/sessions', ['id' => $id, 'title' => $id, 'type' => 'easy', 'startAt' => $date.'T06:00:00+08:00', 'durationMinutes' => 30]);
+            self::assertResponseStatusCodeSame(201);
+        }
+        $first = $this->call('GET', '/follow-ups?from=2023-10-01&to=2023-10-17&pageSize=1');
+        self::assertResponseIsSuccessful();
+        self::assertSame(2, $first['totalItems']);
+        self::assertSame(1, $first['olderPendingCount']);
+        self::assertSame('2022-10-01', $first['earliestPendingDate']);
+        self::assertSame('recent-a', $first['items'][0]['session']['id']);
+        self::assertSame(['unrecorded'], $first['items'][0]['reasons']);
+        $last = $this->call('GET', '/follow-ups?from=2023-10-01&to=2023-10-17&pageSize=1&page=99');
+        self::assertSame(2, $last['page']);
+        self::assertSame('recent-b', $last['items'][0]['session']['id']);
+        $today = $this->call('GET', '/today');
+        self::assertSame(1, $today['followUps']['olderPendingCount']);
+        self::assertSame(2, $today['followUps']['totalItems']);
+        self::assertSame('planned', $this->call('GET', '/sessions/recent-a')['status']);
+        foreach (['page=0', 'page=-1', 'page=1.5', 'pageSize=51', 'pageSize=0', 'from=2022-10-01&to=2023-10-17', 'from=2023-10-18&to=2023-10-17'] as $query) {
+            $this->call('GET', '/follow-ups?'.$query);
+            self::assertResponseStatusCodeSame(422);
         }
     }
 

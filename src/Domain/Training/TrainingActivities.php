@@ -54,6 +54,26 @@ final readonly class TrainingActivities
         return false === $row ? null : $this->hydrate($row);
     }
 
+    /** Read linked records in batches without running candidate searches for historical sessions.
+     * @param list<string> $ids
+     *
+     * @return array<string, array<string, mixed>>
+     */
+    public function findMany(array $ids): array
+    {
+        $activities = [];
+        foreach (array_chunk(array_values(array_unique($ids)), 250) as $chunk) {
+            $placeholders = implode(',', array_fill(0, count($chunk), '?'));
+            $rows = $this->connection->fetchAllAssociative("SELECT activityId, name, startDateTime, distance, movingTimeInSeconds, elapsedTimeInSeconds, averageHeartRate FROM Activity WHERE activityId IN ($placeholders) AND sportType IN ('Run','TrailRun','VirtualRun') AND (markedForDeletion IS NULL OR markedForDeletion = 0)", $chunk);
+            foreach ($rows as $row) {
+                $activity = $this->hydrate($row);
+                $activities[$activity['id']] = $activity;
+            }
+        }
+
+        return $activities;
+    }
+
     /** @param array<string, mixed> $row
      * @return array<string, mixed>
      */

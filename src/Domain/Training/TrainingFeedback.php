@@ -11,6 +11,30 @@ final readonly class TrainingFeedback
     {
     }
 
+    /** Empty forms and explicitly unknown values do not finish a feedback task.
+     * @param array<string, mixed>|null $feedback
+     */
+    public static function hasContent(?array $feedback): bool
+    {
+        if (null === $feedback) {
+            return false;
+        }
+        foreach (['rpe', 'thermalFeeling', 'pain'] as $field) {
+            if (null !== ($feedback[$field] ?? null)) {
+                return true;
+            }
+        }
+        if ('' !== trim($feedback['notes'] ?? '')) {
+            return true;
+        }
+        $fuel = $feedback['fuel'] ?? [];
+
+        return null !== ($fuel['carbsGrams'] ?? null)
+            || null !== ($fuel['fluidMl'] ?? null)
+            || !in_array($fuel['giComfort'] ?? 'unknown', ['unknown', null], true)
+            || '' !== trim($fuel['notes'] ?? '');
+    }
+
     /** @param array<string, mixed> $input
      * @return array<string, mixed>
      */

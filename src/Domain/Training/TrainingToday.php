@@ -25,7 +25,7 @@ final readonly class TrainingToday
         $sessions = $this->training->list('sessions', $date, $date);
         $checkIn = array_find($this->repository->list('check-ins'), static fn (array $record): bool => $record['date'] === $date);
         $health = new ApplicableHealthConstraints($this->health)->forDate($date);
-        $pendingFeedback = array_values(array_filter($this->training->list('sessions', $local->modify('-6 days')->format('Y-m-d'), $date, 'completed'), static fn (array $session): bool => null === ($session['feedback'] ?? null) && strtotime($session['startAt']) <= $now->getTimestamp()));
+        $pendingFeedback = array_values(array_filter($this->training->list('sessions', $local->modify('-6 days')->format('Y-m-d'), $date, 'completed'), static fn (array $session): bool => 'rest' !== $session['type'] && !TrainingFeedback::hasContent($session['feedback'] ?? null) && strtotime($session['startAt']) <= $now->getTimestamp()));
         $quality = ['运动完成情况需要已导入的数据和明确关联；缺少记录不代表未运动或恢复良好。'];
         if ([] === $sessions) {
             $quality[] = '今天尚无已保存的课表，未自动生成训练或将其视为休息日。';
@@ -43,6 +43,6 @@ final readonly class TrainingToday
             $quality[] = '尚未保存健康背景，不能将空档案视作已获运动许可。';
         }
 
-        return ['date' => $date, 'timezone' => $profile['timezone'], 'generatedAt' => $now->format(DATE_ATOM), 'sessions' => $sessions, 'checkIn' => $checkIn, 'health' => $health, 'observations' => $this->observations?->forDate($date) ?? ['bloodPressure' => null, 'sleep' => null, 'sleepSync' => null], 'pendingFeedback' => array_reverse($pendingFeedback), 'reconciliation' => $this->training->reconciliation(), 'dataQuality' => $quality];
+        return ['date' => $date, 'timezone' => $profile['timezone'], 'generatedAt' => $now->format(DATE_ATOM), 'sessions' => $sessions, 'checkIn' => $checkIn, 'health' => $health, 'observations' => $this->observations?->forDate($date) ?? ['bloodPressure' => null, 'sleep' => null, 'sleepSync' => null], 'pendingFeedback' => array_reverse($pendingFeedback), 'reconciliation' => $this->training->reconciliation(), 'followUps' => $this->training->followUps(), 'dataQuality' => $quality];
     }
 }

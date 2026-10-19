@@ -244,13 +244,86 @@ final readonly class TrainingService
             if ('planned' === $session['status'] && strtotime($session['startAt']) + $session['durationMinutes'] * 60 > $now->getTimestamp()) {
                 continue;
             }
-            if ([] !== $session['activityIds'] && array_all($session['activityIds'], fn (string $id): bool => null !== $this->activities->find($id))) {
+            $linked = $this->activities->findMany($session['activityIds']);
+            if ([] !== $session['activityIds'] && count($linked) === count($session['activityIds']) && !$this->hasOverlap(array_values($linked))) {
                 continue;
             }
             $items[] = $this->comparison($session['id']);
         }
 
         return ['items' => $items];
+    }
+
+    /** Bounded history pages retain a pointer to older work without searching every session's candidates.
+     * @return array<string, mixed>
+     */
+    public function followUps(?string $from = null, ?string $to = null, int $page = 1, int $pageSize = 20): array
+    {
+        if ($page < 1 || $page > 100000 || $pageSize < 1 || $pageSize > 50) {
+            throw new TrainingError('page 必须在 1–100000 之间，pageSize 必须在 1–50 之间。');
+        }
+        $zone = new \DateTimeZone($this->profile()['timezone']);
+        $now = $this->clock->getCurrentDateTimeImmutable();
+        $to ??= $now->setTimezone($zone)->format('Y-m-d');
+        TrainingInput::date($to);
+        $from ??= new \DateTimeImmutable($to, $zone)->modify('-29 days')->format('Y-m-d');
+        TrainingInput::date($from);
+        if ($from > $to) {
+            throw new TrainingError('from 不能晚于 to。');
+        }
+        if (new \DateTimeImmutable($from)->diff(new \DateTimeImmutable($to))->days > 365) {
+            throw new TrainingError('每次最多查询 366 个日期，请缩小日期范围。');
+        }
+
+        // Inspect saved plan metadata once. Matching candidates are fetched only when a user opens comparison.
+        $sessions = array_values(array_filter($this->list('sessions', to: $to), static function (array $session) use ($now): bool {
+            if ('rest' === $session['type'] || !in_array($session['status'], ['planned', 'completed'], true)) {
+                return false;
+            }
+            $start = strtotime($session['startAt']);
+
+            return 'completed' === $session['status'] ? $start <= $now->getTimestamp() : $start + $session['durationMinutes'] * 60 <= $now->getTimestamp();
+        }));
+        /** @var list<string> $ids */
+        $ids = array_merge([], ...array_column($sessions, 'activityIds'));
+        $activities = $this->activities->findMany($ids);
+        $items = [];
+        $olderPendingCount = 0;
+        $earliestPendingDate = null;
+        foreach ($sessions as $session) {
+            $reasons = [];
+            if ([] === $session['activityIds']) {
+                $reasons[] = 'planned' === $session['status'] ? 'unrecorded' : 'unlinked';
+            } else {
+                $linked = [];
+                foreach ($session['activityIds'] as $id) {
+                    if (isset($activities[$id])) {
+                        $linked[] = $activities[$id];
+                    }
+                }
+                if (count($linked) !== count($session['activityIds']) || $this->hasOverlap($linked)) {
+                    $reasons[] = 'needs_review';
+                }
+            }
+            if ('completed' === $session['status'] && !TrainingFeedback::hasContent($session['feedback'] ?? null)) {
+                $reasons[] = 'feedback';
+            }
+            if ([] === $reasons) {
+                continue;
+            }
+            $date = new \DateTimeImmutable($session['startAt'])->setTimezone($zone)->format('Y-m-d');
+            if ($date < $from) {
+                ++$olderPendingCount;
+                $earliestPendingDate ??= $date;
+            } else {
+                $items[] = ['session' => $session, 'reasons' => $reasons];
+            }
+        }
+        $totalItems = count($items);
+        $totalPages = max(1, (int) ceil($totalItems / $pageSize));
+        $page = min($page, $totalPages);
+
+        return ['from' => $from, 'to' => $to, 'page' => $page, 'pageSize' => $pageSize, 'totalItems' => $totalItems, 'totalPages' => $totalPages, 'items' => array_slice($items, ($page - 1) * $pageSize, $pageSize), 'olderPendingCount' => $olderPendingCount, 'earliestPendingDate' => $earliestPendingDate];
     }
 
     /** @param array<string, mixed> $patch

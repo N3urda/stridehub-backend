@@ -65,6 +65,9 @@ final readonly class TrainingApiRequestHandler
         if ('GET' === $method && 'reconciliation' === $path) {
             return new JsonResponse($this->training->reconciliation($request->query->get('from'), $request->query->get('to')));
         }
+        if ('GET' === $method && 'follow-ups' === $path) {
+            return new JsonResponse($this->training->followUps($request->query->get('from'), $request->query->get('to'), $this->pageParameter($request, 'page', 1, 100000), $this->pageParameter($request, 'pageSize', 20, 50)));
+        }
         if (preg_match('#^sessions/([a-zA-Z0-9_-]+)/feedback$#D', $path, $match) && 'PUT' === $method) {
             return new JsonResponse($this->feedback->save($match[1], $this->body($request)));
         }
@@ -143,5 +146,18 @@ final readonly class TrainingApiRequestHandler
         } catch (\JsonException) {
             throw new TrainingError('请求必须是有效 JSON 对象。');
         }
+    }
+
+    private function pageParameter(Request $request, string $name, int $default, int $maximum): int
+    {
+        $value = $request->query->get($name);
+        if (null === $value) {
+            return $default;
+        }
+        if (!ctype_digit($value) || (float) $value < 1 || (float) $value > $maximum) {
+            throw new TrainingError($name.' 必须为 1–'.$maximum.' 之间的整数。');
+        }
+
+        return (int) $value;
     }
 }

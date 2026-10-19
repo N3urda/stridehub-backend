@@ -942,3 +942,10 @@ summary {
         }
     }
 }
+
+.server-record {margin-top:14px;min-width:0;}
+.server-values {max-height:300px;overflow:auto;padding:10px 12px;margin:8px 0;background:var(--paper,#f6f5ec);border:1px solid var(--line);border-radius:10px;overflow-wrap:anywhere;}
+.form-status .button {margin:8px 8px 0 0;}
+.briefing-constraints {margin:20px 0;padding:16px;border:1px solid #b8c7a2;border-radius:12px;background:#ffffff0d;}
+.briefing-constraint {border-top:1px solid #ffffff33;padding-top:10px;margin-top:10px;overflow-wrap:anywhere;white-space:pre-line;}
+.briefing-constraint .field-help {color:#d8e4d3;margin-top:6px;}

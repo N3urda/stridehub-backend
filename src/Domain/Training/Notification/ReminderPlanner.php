@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Domain\Training\Notification;
 
+use App\Domain\Training\TrainingFeedback;
+
 /** Select bounded local-time windows; explicit scheduled sessions override habitual running days. */
 final readonly class ReminderPlanner
 {
@@ -37,7 +39,7 @@ final readonly class ReminderPlanner
                 $events[] = ['type' => $type, 'sessionId' => $session['id'], 'occurrence' => $occurrence, 'scheduledAt' => $scheduled->format(DATE_ATOM), 'expiresAt' => $expires->format(DATE_ATOM)];
             };
             if ('completed' === $session['status']) {
-                if (null === ($session['feedback'] ?? null)) {
+                if (!TrainingFeedback::hasContent($session['feedback'] ?? null)) {
                     $end = $start->setTimestamp($start->getTimestamp() + $session['durationMinutes'] * 60);
                     $add('feedback', $end, $end->setTimestamp($end->getTimestamp() + 86400));
                 }

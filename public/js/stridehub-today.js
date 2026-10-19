@@ -12,7 +12,7 @@
     const statuses = {planned: '计划中', completed: '已完成', skipped: '已跳过', cancelled: '已取消'};
     const forms = {checkin: $('#today-checkin-form'), feedback: $('#today-feedback-form')};
     const requestedSession = new URLSearchParams(location.search).get('sessionId');
-    const state = {data: null, selected: requestedSession, records: new Map(), checkins: new Map(), feedback: new Map(), links: new Map(), comparisons: new Map(), refreshId: 0, briefingId: 0, comparisonId: 0};
+    const state = {data: null, selected: requestedSession, records: new Map(), checkins: new Map(), feedback: new Map(), links: new Map(), comparisons: new Map(), refreshId: 0, briefingId: 0, comparisonId: 0, followups: null, pendingRequest: 0, pendingCustom: false, historicalSelections: new Set()};
     const timezone = () => state.data?.timezone || 'Asia/Shanghai';
     const format = (value, timeOnly = false) => { if (!value) return '未记录'; const date = new Date(value); if (Number.isNaN(date.valueOf())) return String(value); return new Intl.DateTimeFormat('zh-CN', {timeZone: timezone(), ...(timeOnly ? {} : {month: '2-digit', day: '2-digit'}), hour: '2-digit', minute: '2-digit', hourCycle: 'h23'}).format(date); };
     const localDate = value => { const parts = new Intl.DateTimeFormat('en-CA', {timeZone: timezone(), year: 'numeric', month: '2-digit', day: '2-digit'}).formatToParts(new Date(value)); const fields = Object.fromEntries(parts.map(part => [part.type, part.value])); return `${fields.year}-${fields.month}-${fields.day}`; };
@@ -29,7 +29,13 @@
     function notice(text, error = false) { const target = $('#today-status'); target.textContent = text; target.className = 'notice' + (error ? ' error' : ''); target.hidden = !text; }
     async function api(path, method = 'GET', body) {
         const headers = {Accept: 'application/json'};
-        if (method !== 'GET') headers['X-CSRF-Token'] = app.dataset.csrf;
+        if (method !== 'GET') {
+            const page = await fetch(location.pathname, {credentials: 'same-origin', cache: 'no-store'});
+            const document = new DOMParser().parseFromString(await page.text(), 'text/html');
+            const token = document.querySelector('#today-app')?.dataset.csrf;
+            if (!page.ok || !token) throw new Error('登录已过期，请在另一标签页重新登录后再保存。草稿仍保留。');
+            app.dataset.csrf = token; headers['X-CSRF-Token'] = token;
+        }
         if (body !== undefined) headers['Content-Type'] = 'application/json';
         let response;
         try { response = await fetch(app.dataset.apiBase + path, {method, headers, credentials: 'same-origin', body: body === undefined ? undefined : JSON.stringify(body)}); }
@@ -173,7 +179,12 @@
     function renderSessions() {
         const container = $('#today-sessions'); container.replaceChildren();
         const sessions = state.data.sessions || [];
-        if (!sessions.length) container.append(node('p', 'empty-state', '今天没有已安排的课次。可以先记下身体状态，或打开完整课表安排训练。'));
+        if (!sessions.length) {
+            const empty = node('div', 'empty-state'); empty.append(node('p', '', '今天没有已安排的课次。可以先记下身体状态，或打开完整课表安排训练。'));
+            const actions = node('div', 'today-empty-actions');
+            for (const [label, href] of [['安排一节训练', trainingUrl('schedule')], ['设置跑步地点与习惯', trainingUrl('profile')], ['导入已有跑步', app.dataset.uploadUrl]]) { if (href) { const link = node('a', 'button small', label); link.href = href; actions.append(link); } }
+            container.append(add(empty, actions));
+        }
         sessions.forEach(record => {
             const item = button('', '', () => selectSession(record.id), 'today-session'); item.dataset.sessionId = record.id; item.setAttribute('aria-pressed', String(record.id === state.selected));
             add(item, node('span', 'today-session-time', format(record.startAt, true)), add(node('span', 'today-session-copy'), node('span', 'today-session-title', record.title), node('span', 'today-session-meta', `${types[record.type] || record.type} · ${amount(record.durationMinutes, '分钟')}${record.distanceKm == null ? '' : ' · ' + amount(record.distanceKm, '公里')}`)), node('span', 'pill ' + record.status, statuses[record.status] || record.status)); container.append(item);
@@ -183,6 +194,28 @@
         if (!state.records.size) select.add(new Option('暂无可选课次', ''));
         select.value = state.selected || '';
         const selected = currentRecord(); $('#today-selected-meta').textContent = selected ? `${statuses[selected.status] || selected.status} · ${amount(selected.durationMinutes, '分钟')} · ${amount(selected.distanceKm, '公里')}` : '有课次后再记录对应的跑后感受。';
+        renderCourse();
+    }
+    function trainingUrl(tab, id = null) {
+        const url = new URL(app.dataset.trainingUrl || app.dataset.apiBase.replace(/\/api$/, ''), location.href);
+        if (tab) url.searchParams.set('tab', tab); if (id) url.searchParams.set('sessionId', id); return url.href;
+    }
+    function renderCourse() {
+        const target = $('#today-course'); if (!target) return; target.replaceChildren(); const record = currentRecord();
+        if (!record) { target.append(node('p', 'muted', '先安排或选择一节训练，这里会显示训练步骤、目标和补给。')); return; }
+        target.append(node('h3', '', record.title), node('p', 'muted', `${format(record.startAt)} · ${timezone()} · ${types[record.type] || record.type} · ${amount(record.durationMinutes, '分钟')}`));
+        const steps = record.steps || [];
+        if (steps.length) {
+            const list = node('ol', 'today-steps');
+            for (const step of steps) list.append(add(node('li'), node('strong', '', `${step.kind} · ${amount(step.minutes, '分钟')}${step.distanceKm == null ? '' : ' · ' + amount(step.distanceKm, '公里')}`), step.target ? node('span', '', step.target) : null));
+            target.append(list);
+            const total = steps.reduce((sum, step) => sum + Number(step.minutes || 0), 0);
+            if (Math.abs(total - record.durationMinutes) > 0.1) target.append(node('p', 'notice', `分段合计 ${amount(total, '分钟')}，计划总时长 ${amount(record.durationMinutes, '分钟')}。请核对是否包含恢复或休息时间；原计划保持不变。`));
+        } else target.append(node('p', 'muted', record.type === 'rest' ? '这是一节休息安排，无需关联跑步或补充跑后反馈。' : '尚未编排分段，可按计划总时长执行或补充分段目标。'));
+        if (record.fuelPlan?.length) { const list = node('ul', 'today-fuel-plan'); for (const fuel of record.fuelPlan) list.append(node('li', '', `出发后 ${fuel.minute} 分钟 · ${fuel.item}${fuel.carbsGrams == null ? '' : ' · 碳水 ' + amount(fuel.carbsGrams, '克')}${fuel.fluidMl == null ? '' : ' · 液体 ' + amount(fuel.fluidMl, '毫升')}`)); target.append(node('h3', '', '计划补给'), list); }
+        if (record.notes) target.append(node('h3', '', '训练备注'), node('p', 'today-course-notes', record.notes));
+        const edit = node('a', 'button small', '编辑这节课'); edit.href = trainingUrl('schedule', record.id);
+        target.append(add(node('div', 'form-actions'), edit));
     }
     function renderHealth() {
         const observations = $('#today-observations');
@@ -202,6 +235,7 @@
         constraints.forEach(constraint => { const box = node('div', 'today-constraint'); add(box, node('p', '', constraint.description), node('p', 'muted', `${constraint.sourceType === 'clinician' ? '记录的医生建议' : '用户记录'}${constraint.sourceReportId ? ' · 来源 ' + constraint.sourceReportId : ''} · ${constraint.validFrom || '生效日期未注明'}${constraint.reviewOn ? ' · 复核日期 ' + constraint.reviewOn : ''}`)); target.append(box); });
     }
     function renderPending() {
+        if (state.followups) { renderFollowUps(); return; }
         const combined = new Map();
         for (const record of state.data.pendingFeedback || []) combined.set(record.id, {record, labels: ['待补充跑后反馈']});
         for (const item of state.data.reconciliation?.items || []) { const record = item.planned; if (!record) continue; const existing = combined.get(record.id) || {record, labels: []}; existing.labels.push('待核对真实跑步'); combined.set(record.id, existing); }
@@ -209,6 +243,49 @@
         if (!combined.size) target.append(node('p', 'muted', '最近没有待处理的反馈或对账；这不代表导入记录完整。'));
         for (const {record, labels} of combined.values()) { const action = button('查看', '', () => { selectSession(record.id); $('#today-followup-card').scrollIntoView({block: 'start', behavior: 'instant'}); }); action.dataset.sessionId = record.id; target.append(add(node('div', 'today-pending-row'), add(node('div'), node('strong', '', record.title), node('p', 'muted', format(record.startAt) + ' · ' + labels.join(' / '))), action)); }
     }
+    const pendingRange = $('#today-pending-range');
+    function shiftedDay(date, days) { const value = new Date(date + 'T12:00:00Z'); value.setUTCDate(value.getUTCDate() + days); return value.toISOString().slice(0, 10); }
+    function renderFollowUps() {
+        const data = state.followups; const target = $('#today-pending-list'); target.replaceChildren();
+        const labels = {unrecorded: '计划已结束，执行情况未记录', unlinked: '待关联真实跑步', needs_review: '已关联记录需核验', feedback: '待补充跑后反馈'};
+        $('#today-pending-count').textContent = data.totalItems;
+        $('#today-pending-status').textContent = `当前显示 ${data.from} — ${data.to} · ${timezone()} · ${data.totalItems} 节待办`;
+        if (!data.items.length) target.append(node('p', 'muted', '这段时间没有待处理课次。更早的待办可继续翻查，未导入运动仍无法核验。'));
+        for (const item of data.items) {
+            const record = item.session; state.records.set(record.id, latestRecord(record));
+            const action = button('查看', '', () => { state.historicalSelections.add(record.id); selectSession(record.id); $('#today-followup-card').scrollIntoView({block: 'start', behavior: 'instant'}); }); action.dataset.sessionId = record.id;
+            target.append(add(node('div', 'today-pending-row'), add(node('div'), node('strong', '', record.title), node('p', 'muted', format(record.startAt) + ' · ' + item.reasons.map(reason => labels[reason] || reason).join(' / '))), action));
+        }
+        const pages = $('#today-pending-pages'); pages.replaceChildren();
+        if (data.totalPages > 1) {
+            const previous = button('上一页', 'pending-previous', () => loadPending(data.from, data.to, data.page - 1)); previous.disabled = data.page <= 1;
+            const next = button('下一页', 'pending-next', () => loadPending(data.from, data.to, data.page + 1)); next.disabled = data.page >= data.totalPages;
+            pages.append(previous, node('span', 'muted', `${data.page} / ${data.totalPages}`), next);
+        }
+        const older = $('#today-pending-older'); older.replaceChildren();
+        if (data.olderPendingCount && data.earliestPendingDate) older.append(button(`更早还有 ${data.olderPendingCount} 节待办，查看最早未处理记录`, 'pending-older', () => {
+            const from = data.earliestPendingDate; const to = [shiftedDay(from, 365), shiftedDay(data.from, -1)].sort()[0];
+            pendingRange.elements.from.value = from; pendingRange.elements.to.value = to; loadPending(from, to);
+        }));
+        if (data.to < state.data.date) {
+            const later = button('向后查看一年', 'pending-later', () => { const from = shiftedDay(data.to, 1), to = [shiftedDay(data.to, 366), state.data.date].sort()[0]; pendingRange.elements.from.value = from; pendingRange.elements.to.value = to; loadPending(from, to); });
+            const recent = button('回到最近 30 天', 'pending-recent', () => { const to = state.data.date, from = shiftedDay(to, -29); pendingRange.elements.from.value = from; pendingRange.elements.to.value = to; loadPending(from, to); });
+            older.append(add(node('div', 'form-actions'), later, recent));
+        }
+    }
+    async function loadPending(from, to, page = 1) {
+        const sequence = ++state.pendingRequest; state.pendingCustom = true;
+        if (!from || !to || from > to || (Date.parse(to) - Date.parse(from)) / 86400000 > 365) { $('#today-pending-status').textContent = '请选择先后正确且不超过 366 天的日期范围，当前列表仍保留。'; return; }
+        $('#today-pending-status').textContent = '正在读取待办，当前列表与草稿仍保留…';
+        try {
+            const data = await api('/follow-ups?' + new URLSearchParams({from, to, page, pageSize: 20}));
+            if (sequence !== state.pendingRequest) return; state.followups = data; renderPending(); renderSessions();
+        } catch (error) { if (sequence === state.pendingRequest) $('#today-pending-status').textContent = `待办读取失败。${state.followups ? '保留 ' + state.followups.from + ' — ' + state.followups.to + ' 的结果。' : ''}${error.message}`; }
+    }
+    pendingRange?.addEventListener('submit', event => { event.preventDefault(); loadPending(pendingRange.elements.from.value, pendingRange.elements.to.value); });
+    document.querySelectorAll('[data-pending-days]').forEach(trigger => trigger.addEventListener('click', () => {
+        if (!state.data) return; const to = state.data.date, from = shiftedDay(to, 1 - Number(trigger.dataset.pendingDays)); pendingRange.elements.from.value = from; pendingRange.elements.to.value = to; loadPending(from, to);
+    }));
     function renderQuality() { const target = $('#today-data-quality'); target.replaceChildren(); messages(state.data.dataQuality).forEach(text => target.append(node('p', '', text))); target.append(node('p', '', `日期按 ${timezone()} 计算。未导入或未填写的信息保持未知。更新于 ${format(state.data.generatedAt)}。`)); }
     async function loadBriefing() {
         const sequence = ++state.briefingId; const target = $('#today-briefing'); const record = currentRecord();
@@ -277,7 +354,7 @@
             if (sequence !== state.comparisonId || state.selected !== id || !rememberComparison(comparison)) return;
             const value = linkDraft(comparison);
             if (explicit) { value.baseVersion = comparison.planned.version; value.blocked = false; value.confirming = false; value.error = false; value.message = '已读取最新对账，保留你的选择。请核对当前已关联记录后再确认。'; }
-            if (sequence === state.comparisonId && state.selected === id) { renderComparison(); fillForm('feedback'); }
+            if (sequence === state.comparisonId && state.selected === id) { renderComparison(); fillForm('feedback'); renderCourse(); }
         } catch (error) { if (sequence === state.comparisonId && state.selected === id) { const target = $('#today-reconciliation'); target.replaceChildren(node('p', 'form-status error', '对账读取失败，选择草稿仍保留。' + error.message), button('重新读取对账', 'refresh-comparison', () => loadComparison(id, true))); } }
     }
     async function saveLinks(id) {
@@ -306,12 +383,13 @@
     $('#today-feedback-session').addEventListener('change', event => selectSession(event.target.value));
     async function refresh(showNotice = true) {
         const sequence = ++state.refreshId; const trigger = $('#today-refresh'); trigger.disabled = true;
+        const pendingSequence = state.pendingRequest; const pendingAtStart = state.pendingCustom && state.followups ? {...state.followups} : null;
         try {
             const data = await api('/today'); if (sequence !== state.refreshId) return;
             const records = new Map(); let selectionNotice = '';
-            for (const record of [...(data.sessions || []), ...(data.pendingFeedback || []), ...(data.reconciliation?.items || []).map(item => item.planned)]) if (record) records.set(record.id, record);
+            for (const record of [...(data.sessions || []), ...(data.pendingFeedback || []), ...(data.reconciliation?.items || []).map(item => item.planned), ...(data.followUps?.items || []).map(item => item.session)]) if (record) records.set(record.id, record);
             if (state.selected && !records.has(state.selected)) {
-                if (state.selected === requestedSession) {
+                if (state.selected === requestedSession || state.historicalSelections.has(state.selected) || state.followups?.items.some(item => item.session.id === state.selected)) {
                     try { const record = await api('/sessions/' + encodeURIComponent(state.selected)); records.set(record.id, record); }
                     catch (error) { selectionNotice = '指定课次暂不可用，未保存草稿仍保留在当前页面。' + error.message; }
                 } else selectionNotice = '之前选择的课次已不在今日或近期列表中，可能已改期或删除。未保存草稿仍保留在当前页面。';
@@ -320,6 +398,7 @@
             for (const [id, record] of records) records.set(id, latestRecord(record));
             state.records = records;
             state.data = {...data, sessions: (data.sessions || []).map(record => records.get(record.id)), pendingFeedback: (data.pendingFeedback || []).map(record => records.get(record.id))};
+            if (!state.pendingCustom && data.followUps) { state.followups = data.followUps; if (pendingRange) { pendingRange.elements.from.value = data.followUps.from; pendingRange.elements.to.value = data.followUps.to; } }
             for (const id of state.comparisons.keys()) if (!records.has(id)) state.comparisons.delete(id);
             if (!records.has(state.selected)) { state.selected = null; ++state.comparisonId; ++state.briefingId; }
             if (!state.selected) state.selected = data.sessions?.[0]?.id || data.pendingFeedback?.[0]?.id || data.reconciliation?.items?.[0]?.planned?.id || null;
@@ -327,6 +406,7 @@
             if (selectionNotice) notice(selectionNotice, true);
             else if (showNotice) notice('今日数据已刷新。未保存的内容仍保留在当前页面。');
             await Promise.allSettled([loadBriefing(), loadComparison(state.selected)]);
+            if (pendingAtStart && pendingSequence === state.pendingRequest && sequence === state.refreshId) await loadPending(pendingAtStart.from, pendingAtStart.to, pendingAtStart.page);
         } catch (error) { notice('今日数据读取失败；保留原有内容与草稿。' + error.message, true); }
         finally { if (sequence === state.refreshId) trigger.disabled = false; }
     }

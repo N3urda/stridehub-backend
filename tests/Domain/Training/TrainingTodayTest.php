@@ -53,6 +53,7 @@ final class TrainingTodayTest extends TestCase
         self::assertSame('2026-09-29', $result['checkIn']['date']);
         self::assertNull($result['checkIn']['pain']);
         self::assertSame($this->training->reconciliation(), $result['reconciliation']);
+        self::assertSame($this->training->followUps(), $result['followUps']);
         self::assertSame($before, $this->connection->fetchAllAssociative('SELECT * FROM TrainingRecord ORDER BY kind,id'));
     }
 
@@ -64,10 +65,13 @@ final class TrainingTodayTest extends TestCase
         $this->session('today', '2026-09-29T00:00:00+08:00', ['status' => 'completed']);
         $this->session('future', '2026-09-29T10:00:00+08:00', ['status' => 'completed']);
         $this->session('with-feedback', '2026-09-28T20:00:00+08:00', ['status' => 'completed', 'feedback' => ['notes' => '仅文字反馈']]);
+        $this->session('empty-feedback', '2026-09-28T20:00:00+08:00', ['status' => 'completed', 'feedback' => []]);
+        $this->session('no-pain', '2026-09-28T20:00:00+08:00', ['status' => 'completed', 'feedback' => ['pain' => false]]);
+        $this->session('rest', '2026-09-28T20:00:00+08:00', ['status' => 'completed', 'type' => 'rest']);
         $this->session('planned', '2026-09-28T20:00:00+08:00');
         $ids = array_column($this->today()->get()['pendingFeedback'], 'id');
         sort($ids);
-        self::assertSame(['boundary', 'today', 'yesterday'], $ids);
+        self::assertSame(['boundary', 'empty-feedback', 'today', 'yesterday'], $ids);
     }
 
     public function testDatedActiveHealthConstraintsApplyWithoutExpiringOnReviewDate(): void

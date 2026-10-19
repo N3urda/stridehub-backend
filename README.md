@@ -1,3 +1,9 @@
+# StrideHub
+
+面向个人跑者的训练与健康工作台，基于 Dreeve。支持今日安排、训练课表与跑后对账、运动分析、血压记录、Zepp 睡眠同步，以及连接同一后端的 Android 客户端。
+
+从 `/admin/training/today` 开始日常使用；部署与功能说明见 [StrideHub 使用指南](docs/stridehub/README.md)，本轮产品改进与后续建议见 [产品评审](docs/stridehub/PRODUCT_REVIEW.md)，验证范围见 [验收记录](docs/stridehub/VALIDATION.md)。下文保留 Dreeve 上游介绍与社区入口。
+
 <p align="center">
   <img src="public/assets/images/logo.svg" width="250" alt="Logo" >
 </p>

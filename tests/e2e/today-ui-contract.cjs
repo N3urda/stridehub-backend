@@ -159,7 +159,9 @@ const today = () => ({date: '2026-09-28', timezone: 'Asia/Shanghai', generatedAt
         const staleResponse = page.waitForResponse(response => response.url().endsWith('/comparison') && response.request().method() === 'GET');
         releaseComparison(); await staleResponse;
         await page.locator('#today-feedback-form [name=notes]').fill('较新的版本不能被迟到响应覆盖');
+        const feedbackSaved = page.waitForResponse(response => response.url().endsWith('/feedback') && response.request().method() === 'PUT');
         await page.locator('#today-feedback-form button[type=submit]').click();
+        await feedbackSaved;
         assert.equal(writes.filter(row => row.endpoint.endsWith('/feedback')).at(-1).body.version, 11, 'Late old comparison must not roll back the saved record version');
         await page.waitForFunction(() => document.querySelector('#today-feedback-status').textContent.includes('已保存'));
         await page.locator('#today-feedback-form [name=notes]').fill('课次离开列表后仍应保留的草稿');

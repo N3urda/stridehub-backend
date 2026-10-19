@@ -46,7 +46,9 @@ final class ReminderPlannerTest extends TestCase
         self::assertSame([], $this->due([$session], '2026-10-04T07:00:00+08:00'));
         self::assertSame(['feedback'], array_column($this->due([$session], '2026-10-04T07:35:00+08:00'), 'type'));
         self::assertSame([], $this->due([$session], '2026-10-05T07:30:00+08:00'));
-        self::assertSame([], $this->due([[...$session, 'feedback' => ['effort' => 4]]], '2026-10-04T07:35:00+08:00'));
+        self::assertSame([], $this->due([[...$session, 'feedback' => ['rpe' => 4]]], '2026-10-04T07:35:00+08:00'));
+        self::assertSame([], $this->due([[...$session, 'feedback' => ['pain' => false]]], '2026-10-04T07:35:00+08:00'));
+        self::assertSame(['feedback'], array_column($this->due([[...$session, 'feedback' => ['rpe' => null, 'notes' => '']]], '2026-10-04T07:35:00+08:00'), 'type'));
     }
 
     public function testDifferentStartTimesHaveDifferentOccurrenceKeysAndLocalTomorrowRespectsDst(): void
