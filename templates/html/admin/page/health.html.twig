@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#173f38">
+    <title>健康记录 · StrideHub</title>
+    <link rel="icon" href="{{ relativeUrl('assets/images/logo.svg')|e('html_attr') }}">
+    <link rel="stylesheet" href="{{ relativeUrl(asset('css/stridehub-training.css'))|e('html_attr') }}">
+    <link rel="stylesheet" href="{{ relativeUrl(asset('css/stridehub-health.css'))|e('html_attr') }}">
+    <script defer src="{{ relativeUrl(asset('js/stridehub-health.js'))|e('html_attr') }}"></script>
+</head>
+<body>
+<a class="skip-link" href="#health-main">跳到健康记录</a>
+<div id="health-app" data-api-base="{{ relativeUrl('/admin/health/api')|e('html_attr') }}" data-profile-url="{{ relativeUrl('/admin/training/api/profile')|e('html_attr') }}" data-csrf="{{ csrf_token('health')|e('html_attr') }}">
+    <header class="health-header"><a class="sh-brand" href="{{ relativeUrl('/admin/training/today')|e('html_attr') }}">StrideHub</a><a href="{{ relativeUrl('/admin/training/today')|e('html_attr') }}">返回今日安排</a></header>
+    <main id="health-main" class="health-shell">
+        <div class="health-heading"><div><h1>身体的变化，慢慢看清。</h1><p class="muted">记录每次测量，也看见每晚休息。</p></div><button type="button" id="health-refresh" class="button">刷新记录</button></div>
+        <nav class="health-jump" aria-label="健康记录导航"><a href="#pressure-section">血压记录</a><a href="#sleep-section">Zepp 睡眠</a><a href="{{ relativeUrl('/admin/settings/general')|e('html_attr') }}">体重历史</a></nav>
+        <div id="health-status" class="notice" role="status" aria-live="polite" hidden></div>
+        <noscript><p class="notice error">请开启 JavaScript 以读取和保存健康记录。</p></noscript>
+        <form id="health-range" class="health-range"><label>从<input type="date" name="from" required></label><label>到<input type="date" name="to" required></label><button class="button" type="submit">查看这段时间</button><p id="health-timezone" class="muted"></p></form>
+        <section id="pressure-section" class="health-panel" aria-labelledby="pressure-title">
+            <div class="health-section-heading"><div><h2 id="pressure-title">血压</h2><p class="muted">保留每次测量的时间、手臂和体位，便于一起回顾。</p></div><button type="button" id="pressure-new" class="button primary">＋ 记一次血压</button></div>
+            <div id="pressure-status" role="status" class="form-status" aria-live="polite"></div>
+            <div id="pressure-summary" class="health-metrics"></div>
+            <div id="pressure-chart" class="health-chart" aria-label="血压趋势"></div>
+            <details id="pressure-editor" class="health-editor"><summary>录入或修改血压 <span id="pressure-save-state" class="save-state"></span></summary>
+                <form id="pressure-form" class="form-grid">
+                    <label class="full">测量时间<input type="datetime-local" name="measuredAt" step="1" required><span id="pressure-timezone" class="field-help"></span></label>
+                    <label>收缩压（高压 / mmHg）<input type="number" name="systolic" min="1" max="400" step="1" inputmode="numeric" required placeholder="如 120"></label>
+                    <label>舒张压（低压 / mmHg）<input type="number" name="diastolic" min="1" max="400" step="1" inputmode="numeric" required placeholder="如 80"></label>
+                    <label>脉搏（次/分，可选）<input type="number" name="pulse" min="1" max="400" step="1" inputmode="numeric" placeholder="未记录"></label>
+                    <label>测量手臂<select name="arm"><option value="unknown">未记录</option><option value="left">左臂</option><option value="right">右臂</option></select></label>
+                    <label>测量体位<select name="posture"><option value="unknown">未记录</option><option value="seated">坐姿</option><option value="standing">站姿</option><option value="lying">卧姿</option></select></label>
+                    <label class="full">备注（可选）<textarea name="notes" rows="2" maxlength="2000" placeholder="例如：晨起、运动后，或测量时的感受"></textarea></label>
+                    <div class="form-actions full"><button type="submit" class="button primary">保存血压</button><button type="button" id="pressure-cancel" class="button">取消编辑</button></div>
+                    <div id="pressure-form-status" class="form-status full" role="status" aria-live="polite"></div>
+                    <button type="button" id="pressure-review" class="button full" hidden>读取最新记录，保留我的草稿</button>
+                </form>
+            </details>
+            <details class="health-history" open><summary>逐次测量记录</summary><div id="pressure-records"><p class="muted">正在读取…</p></div></details>
+            <p class="health-footnote">图表展示原始测量值，不根据单次读数判定疾病，也不会自动改变课表。</p>
+        </section>
+        <section id="sleep-section" class="health-panel sleep-panel" aria-labelledby="sleep-title">
+            <div class="health-section-heading"><div><h2 id="sleep-title">Zepp 睡眠</h2><p class="muted">同步手表已上传到 Zepp 的睡眠记录。</p></div><button type="button" id="sleep-sync" class="button">立即同步</button></div>
+            <div id="sleep-status" role="status" class="form-status" aria-live="polite">正在读取同步状态…</div>
+            <div id="sleep-summary" class="health-metrics"></div>
+            <div id="sleep-chart" class="health-chart" aria-label="睡眠时长趋势"></div>
+            <details class="health-history" open><summary>每晚睡眠记录</summary><div id="sleep-records"><p class="muted">正在读取…</p></div></details>
+            <details class="health-help"><summary>没有看到睡眠数据？</summary><p>先在手机 Zepp App 中完成手表同步，再点击“立即同步”。未记录的睡眠阶段会显示“未知”，不会填成 0。</p><p id="sleep-setup">正在检查连接状态。</p><p>睡眠记录与手填的每日身体状态分别保存。同步不会覆盖你的睡眠体感、疲劳或疼痛反馈。</p></details>
+            <p class="health-footnote">睡眠阶段来自设备估计，缺失记录不代表没有睡眠。</p>
+        </section>
+        <footer class="sh-footer"><span>StrideHub · 健康数据仅在登录后可见</span><a href="{{ relativeUrl('/admin/training/today')|e('html_attr') }}">今日安排</a><a href="{{ relativeUrl('/admin/training')|e('html_attr') }}">训练课表</a></footer>
+    </main>
+</div>
+</body>
+</html>

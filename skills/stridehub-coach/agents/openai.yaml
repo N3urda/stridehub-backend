@@ -1,0 +1,4 @@
+interface:
+  display_name: "StrideHub 运动健康助手"
+  short_description: "通过 StrideHub API 复盘跑步、整理体检背景并动态规划训练课表"
+  default_prompt: "使用 $stridehub-coach，结合我的运动记录、健康背景和目标，复盘最近训练并调整下一周课表。"

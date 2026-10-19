@@ -1,0 +1,56 @@
+plugins {
+    id 'com.android.application'
+}
+
+def signingValues = ['STRIDEHUB_KEYSTORE', 'STRIDEHUB_STORE_PASSWORD', 'STRIDEHUB_KEY_ALIAS', 'STRIDEHUB_KEY_PASSWORD']
+def hasReleaseKey = signingValues.every { System.getenv(it) }
+
+android {
+    namespace 'io.stridehub.app'
+    useLibrary 'android.test.runner', false
+    useLibrary 'android.test.base', false
+    compileSdk 36
+    buildToolsVersion '35.0.0'
+
+    defaultConfig {
+        applicationId 'io.stridehub.app'
+        minSdk 26
+        targetSdk 36
+        versionCode 1
+        versionName '0.1.0'
+        testInstrumentationRunner 'android.test.InstrumentationTestRunner'
+    }
+
+    signingConfigs {
+        if (hasReleaseKey) {
+            release {
+                storeFile file(System.getenv('STRIDEHUB_KEYSTORE'))
+                storePassword System.getenv('STRIDEHUB_STORE_PASSWORD')
+                keyAlias System.getenv('STRIDEHUB_KEY_ALIAS')
+                keyPassword System.getenv('STRIDEHUB_KEY_PASSWORD')
+            }
+        }
+    }
+
+    buildTypes {
+        debug {
+            applicationIdSuffix '.debug'
+            versionNameSuffix '-debug'
+        }
+        release {
+            minifyEnabled false
+            if (hasReleaseKey) signingConfig signingConfigs.release
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    lint {
+        abortOnError true
+    }
+}
+
+dependencies {
+    testImplementation 'junit:junit:4.13.2'
+}

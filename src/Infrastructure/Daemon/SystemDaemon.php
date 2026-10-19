@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Infrastructure\Daemon;
 
 use App\Console\Cache\PruneRenderCacheConsoleCommand;
+use App\Console\Health\SyncSleepConsoleCommand;
 use App\Console\Import\RunAutomationRulesBackfillConsoleCommand;
 use App\Console\Import\RunFileImportConsoleCommand;
 use App\Console\Strava\ProcessStravaWebhooksConsoleCommand;
@@ -93,6 +94,26 @@ final class SystemDaemon implements Daemon
         }
 
         $extraConfiguredCronActionsOutput = [];
+
+        // The explicit server-side Zepp connection opts into hourly refreshes. Without
+        // a credential file this command exits without contacting Zepp or storing state.
+        $extraConfiguredCronActionsOutput[] = '<info> - syncZeppSleep (when connected): 15 * * * *</info>';
+        $actions[] = new Action(
+            key: 'syncZeppSleep',
+            mutexTtl: 300,
+            expression: '15 * * * *',
+            performer: function (): PromiseInterface {
+                $process = new CronProcess(
+                    cronActionId: 'syncZeppSleep',
+                    clock: $this->clock,
+                    output: $this->getConsoleOutput(),
+                    command: sprintf('bin/console %s --if-configured', SyncSleepConsoleCommand::NAME),
+                );
+                $process->start();
+
+                return resolve(true);
+            }
+        );
 
         if ($this->importMode->isFiles()) {
             $extraConfiguredCronActionsOutput[] = sprintf('<info> - runFileImport: %s</info>', self::CRON_EVERY_5_MINUTES);

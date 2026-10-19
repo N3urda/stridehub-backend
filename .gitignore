@@ -42,4 +42,14 @@ phpstan.neon
 ###> docs ###
 /docs/dist
 /docs/.astro
+
+###> Android client ###
+/android/.gradle/
+/android/local.properties
+/android/build/
+/android/app/build/
+*.jks
+*.keystore
+__pycache__/
+###< Android client ###
 ###< docs ###

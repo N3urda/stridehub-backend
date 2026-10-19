@@ -1,0 +1,704 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "StrideHub Running Analytics API",
+    "version": "1.0.0",
+    "description": "Read-only imported-running analytics. Dates use application TZ. Sparse stream statistics are time-weighted; >30-second gaps and pauses excluded. Missing values remain null. Detailed methodology in README."
+  },
+  "servers": [
+    {
+      "url": "/api/v1/running"
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "paths": {
+    "/overview": {
+      "get": {
+        "operationId": "getRunningOverview",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "YYYY-MM-DD or all. Defaults to today minus 89 days."
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Inclusive local date, defaults to today."
+          },
+          {
+            "name": "sportType",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "all",
+                "Run",
+                "TrailRun",
+                "VirtualRun"
+              ],
+              "default": "all"
+            },
+            "description": "Only running sports; deleted activities excluded."
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            },
+            "description": "50 records per page. Summary and charts always include all filtered runs."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Real imported running data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Overview"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Bearer token missing or invalid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Running record or endpoint not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid filter",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/activities/{id}": {
+      "get": {
+        "operationId": "getRunAnalysis",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Exact activity id returned by overview, including activity- prefix."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Real imported running data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Detail"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Bearer token missing or invalid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Running record or endpoint not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid filter",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/openapi.json": {
+      "get": {
+        "operationId": "getRunningOpenApi",
+        "responses": {
+          "200": {
+            "description": "This OpenAPI document"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    },
+    "schemas": {
+      "Activity": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "startAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "sportType": {
+            "type": "string",
+            "enum": [
+              "Run",
+              "TrailRun",
+              "VirtualRun"
+            ]
+          },
+          "distanceKm": {
+            "type": "number"
+          },
+          "movingSeconds": {
+            "type": "integer"
+          },
+          "elevationM": {
+            "type": "number"
+          },
+          "paceSecondsPerKm": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "averageHeartRate": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "cadenceSpm": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "device": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "startAt",
+          "sportType",
+          "distanceKm",
+          "movingSeconds"
+        ]
+      },
+      "Totals": {
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string"
+          },
+          "count": {
+            "type": "integer"
+          },
+          "distanceKm": {
+            "type": "number"
+          },
+          "movingSeconds": {
+            "type": "integer"
+          },
+          "elevationM": {
+            "type": "number"
+          },
+          "longestRunKm": {
+            "type": "number"
+          },
+          "heartRateCount": {
+            "type": "integer"
+          },
+          "averageHeartRate": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "paceSecondsPerKm": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "activeDays": {
+            "type": "integer"
+          }
+        }
+      },
+      "Overview": {
+        "type": "object",
+        "properties": {
+          "filters": {
+            "type": "object",
+            "properties": {
+              "from": {
+                "type": "string",
+                "format": "date"
+              },
+              "to": {
+                "type": "string",
+                "format": "date"
+              },
+              "sportType": {
+                "type": "string"
+              },
+              "timezone": {
+                "type": "string"
+              }
+            }
+          },
+          "availableRange": {
+            "type": "object",
+            "properties": {
+              "from": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "to": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          },
+          "summary": {
+            "$ref": "#/components/schemas/Totals"
+          },
+          "weekly": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Totals"
+            }
+          },
+          "monthly": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Totals"
+            }
+          },
+          "daily": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "date": {
+                  "type": "string",
+                  "format": "date"
+                },
+                "count": {
+                  "type": "integer"
+                },
+                "distanceKm": {
+                  "type": "number"
+                }
+              }
+            }
+          },
+          "dailyFrom": {
+            "type": "string",
+            "format": "date"
+          },
+          "bestEfforts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "distanceM": {
+                  "type": "integer"
+                },
+                "seconds": {
+                  "type": "integer"
+                },
+                "activityId": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "date": {
+                  "type": "string",
+                  "format": "date"
+                }
+              }
+            }
+          },
+          "activities": {
+            "type": "object",
+            "properties": {
+              "items": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/Activity"
+                }
+              },
+              "page": {
+                "type": "integer"
+              },
+              "pageSize": {
+                "type": "integer"
+              },
+              "total": {
+                "type": "integer"
+              }
+            }
+          },
+          "notes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "Analysis": {
+        "type": "object",
+        "properties": {
+          "timeline": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "seconds": {
+                  "type": "number"
+                },
+                "distanceKm": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "paceSecondsPerKm": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "heartRate": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "cadenceSpm": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "altitudeM": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "powerW": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                }
+              }
+            }
+          },
+          "scatter": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "paceSecondsPerKm": {
+                  "type": "number"
+                },
+                "heartRate": {
+                  "type": "number"
+                },
+                "seconds": {
+                  "type": "number"
+                }
+              }
+            }
+          },
+          "zones": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "from": {
+                  "type": "integer"
+                },
+                "to": {
+                  "type": "integer"
+                },
+                "seconds": {
+                  "type": "number"
+                }
+              }
+            }
+          },
+          "heartRateDistribution": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "from": {
+                  "type": "integer"
+                },
+                "to": {
+                  "type": "integer"
+                },
+                "seconds": {
+                  "type": "number"
+                }
+              }
+            }
+          },
+          "coverage": {
+            "type": "object",
+            "properties": {
+              "samples": {
+                "type": "number"
+              },
+              "analyzedSeconds": {
+                "type": "number"
+              },
+              "heartRateSeconds": {
+                "type": "number"
+              },
+              "paceSeconds": {
+                "type": "number"
+              },
+              "gapSeconds": {
+                "type": "number"
+              },
+              "pausedSeconds": {
+                "type": "number"
+              },
+              "invalidIntervals": {
+                "type": "number"
+              }
+            }
+          },
+          "metrics": {
+            "type": "object",
+            "properties": {
+              "weightedHeartRate": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "paceSecondsPerKm": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "speedVariationPercent": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "efficiencyChangePercent": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            }
+          },
+          "notes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "Detail": {
+        "type": "object",
+        "properties": {
+          "activity": {
+            "$ref": "#/components/schemas/Activity"
+          },
+          "analysis": {
+            "$ref": "#/components/schemas/Analysis"
+          },
+          "splits": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "number": {
+                  "type": "integer"
+                },
+                "distanceKm": {
+                  "type": "number"
+                },
+                "movingSeconds": {
+                  "type": "integer"
+                },
+                "elapsedSeconds": {
+                  "type": "integer"
+                },
+                "paceSecondsPerKm": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "elevationM": {
+                  "type": "number"
+                },
+                "gapPaceSecondsPerKm": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                }
+              }
+            }
+          },
+          "laps": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "number": {
+                  "type": "integer"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "distanceKm": {
+                  "type": "number"
+                },
+                "movingSeconds": {
+                  "type": "integer"
+                },
+                "averageHeartRate": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                }
+              }
+            }
+          },
+          "splitSummary": {
+            "type": "object",
+            "properties": {
+              "paceVariationPercent": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "secondHalfPaceChangePercent": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "fastestFullKmPace": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            }
+          },
+          "availableStreams": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "detailPath": {
+            "type": "string"
+          }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}
