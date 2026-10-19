@@ -49,7 +49,7 @@ final readonly class ZeppSleepParser
         if (null !== $total && ($total <= 0 || $total > 2160)) {
             return null;
         }
-        if (null !== $start && null !== $end && null !== $total && $total > intdiv($end - $start, 60) + 1) {
+        if (!in_array(null, [$start, $end, $total], true) && $total > intdiv($end - $start, 60) + 1) {
             // Preserve source stages and timestamps, but never publish an impossible derived total.
             $total = null;
         }

@@ -23,8 +23,8 @@ final readonly class BloodPressureApiRequestHandler
     {
     }
 
-    #[Route('/api/v1/health/blood-pressure/{id}', name: 'api_v1_blood_pressure', defaults: ['id' => null], requirements: ['id' => '[a-zA-Z0-9_-]+'], priority: 30)]
-    #[Route('/admin/health/api/blood-pressure/{id}', name: 'admin_blood_pressure_api', defaults: ['id' => null], requirements: ['id' => '[a-zA-Z0-9_-]+'], priority: 30)]
+    #[Route('/api/v1/health/blood-pressure/{id}', name: 'api_v1_blood_pressure', requirements: ['id' => '[a-zA-Z0-9_-]+'], defaults: ['id' => null], priority: 30)]
+    #[Route('/admin/health/api/blood-pressure/{id}', name: 'admin_blood_pressure_api', requirements: ['id' => '[a-zA-Z0-9_-]+'], defaults: ['id' => null], priority: 30)]
     public function handle(Request $request, ?string $id): Response
     {
         try {

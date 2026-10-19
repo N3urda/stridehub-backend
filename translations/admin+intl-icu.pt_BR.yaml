@@ -331,6 +331,7 @@ Ride: Pedal
 'Rolling window (days)': 'Rolling window (days)'
 Rules: Regras
 'Rules to apply': 'Regras a aplicar'
+'Running reminders': 'Running reminders'
 Saturday: Sábado
 Save: Salvar
 'Save settings': 'Salvar configurações'
@@ -355,6 +356,7 @@ Security: Segurança
 'Sends a notification after every successful import.': 'Envia uma notificação após cada importação bem-sucedida.'
 'Sends a notification when a new app version is available. Requires a configured notification service.': 'Envia uma notificação quando uma nova versão do aplicativo está disponível. Requer um serviço de notificação configurado.'
 'Sends a notification when gear maintenance is due. Requires a configured notification service.': 'Envia uma notificação quando a manutenção do equipamento está vencida. Requer um serviço de notificação configurado.'
+'Sends evening, pre-run, weather-change and feedback reminders when enabled in your running profile. Requires a configured notification service.': 'Sends evening, pre-run, weather-change and feedback reminders when enabled in your running profile. Requires a configured notification service.'
 Sensors: Sensores
 'Sensors are only recorded for activities imported from FIT files. Activities from Strava, GPX or TCX never match this condition.': 'Os sensores só são registrados para atividades importadas de arquivos FIT. Atividades do Strava, GPX ou TCX nunca correspondem a esta condição.'
 'Set description': 'Definir descrição'

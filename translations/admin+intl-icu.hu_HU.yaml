@@ -331,6 +331,7 @@ Ride: Kerékpározás
 'Rolling window (days)': 'Rolling window (days)'
 Rules: Szabályok
 'Rules to apply': 'Alkalmazandó szabályok'
+'Running reminders': 'Running reminders'
 Saturday: Szombat
 Save: Mentés
 'Save settings': 'Beállítások mentése'
@@ -355,6 +356,7 @@ Security: Biztonság
 'Sends a notification after every successful import.': 'Értesítést küld minden sikeres importálás után.'
 'Sends a notification when a new app version is available. Requires a configured notification service.': 'Értesítést küld, ha új alkalmazásverzió érhető el. Beállított értesítési szolgáltatást igényel.'
 'Sends a notification when gear maintenance is due. Requires a configured notification service.': 'Értesítést küld, ha esedékes a felszerelés karbantartása. Beállított értesítési szolgáltatást igényel.'
+'Sends evening, pre-run, weather-change and feedback reminders when enabled in your running profile. Requires a configured notification service.': 'Sends evening, pre-run, weather-change and feedback reminders when enabled in your running profile. Requires a configured notification service.'
 Sensors: Érzékelők
 'Sensors are only recorded for activities imported from FIT files. Activities from Strava, GPX or TCX never match this condition.': 'Az érzékelők csak a FIT-fájlokból importált tevékenységeknél kerülnek rögzítésre. A Stravából, GPX- vagy TCX-fájlokból származó tevékenységek soha nem illeszkednek erre a feltételre.'
 'Set description': 'Leírás beállítása'

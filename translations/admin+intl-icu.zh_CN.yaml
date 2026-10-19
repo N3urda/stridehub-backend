@@ -331,6 +331,7 @@ Ride: Ride
 'Rolling window (days)': 'Rolling window (days)'
 Rules: Rules
 'Rules to apply': 'Rules to apply'
+'Running reminders': '跑步提醒'
 Saturday: Saturday
 Save: Save
 'Save settings': 'Save settings'
@@ -355,6 +356,7 @@ Security: Security
 'Sends a notification after every successful import.': 'Sends a notification after every successful import.'
 'Sends a notification when a new app version is available. Requires a configured notification service.': 'Sends a notification when a new app version is available. Requires a configured notification service.'
 'Sends a notification when gear maintenance is due. Requires a configured notification service.': 'Sends a notification when gear maintenance is due. Requires a configured notification service.'
+'Sends evening, pre-run, weather-change and feedback reminders when enabled in your running profile. Requires a configured notification service.': '在跑步档案中启用后，发送前晚、跑前、天气变化和跑后反馈提醒。需要配置通知服务。'
 Sensors: Sensors
 'Sensors are only recorded for activities imported from FIT files. Activities from Strava, GPX or TCX never match this condition.': 'Sensors are only recorded for activities imported from FIT files. Activities from Strava, GPX or TCX never match this condition.'
 'Set description': 'Set description'
