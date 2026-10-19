@@ -45,8 +45,15 @@ JSON 请求文件使用安全文件工具写入，包含真正的换行；不要
 | `PUT /api/v1/training/sessions/{id}/feedback` | 用 version 部分合并反馈及实际补给汇总 |
 | `PUT /api/v1/training/sessions/batch` | 原子批量创建/部分更新，1–100 节 |
 | `GET/PUT /api/v1/health/context` | 结构化报告摘要、来源约束、日常偏好 |
+| `GET /api/v1/health/blood-pressure?from=...&to=...` | 测量时间倒序的血压记录，列表为 `records` |
+| `GET/PUT/DELETE /api/v1/health/blood-pressure/{id}` | 读取、按版本保存或删除血压测量 |
+| `GET /api/v1/health/sleep?from=...&to=...` | 独立保存的 Zepp 睡眠观察，列表为 `records` |
+| `GET /api/v1/health/sleep/status` | 凭据是否配置、最近同步结果和恢复操作 |
+| `POST /api/v1/health/sleep/sync` | 用户已要求同步时拉取最近 1–90 天，正文 `{"days":30}` |
 
 资源 CRUD 的完整字段读取相应 OpenAPI。不要把臆造的 `readiness`、`diagnosis`、`healthNotes` 等字段塞进 profile/check-ins。不要调用未实现的“自动生成课表”端点：规划由本 Skill 完成，API 校验并保存。
+
+血压与睡眠的来源、单位、日期口径和同步边界见[测量参考](measurements.md)。这些列表使用 `records`，不能按训练资源的 `items` 解析。Zepp 凭据由服务端私有文件管理，客户端不接受或返回 Zepp 密码/令牌。
 
 ## 写入与并发
 

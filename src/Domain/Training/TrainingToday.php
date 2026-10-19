@@ -5,12 +5,13 @@ declare(strict_types=1);
 namespace App\Domain\Training;
 
 use App\Domain\Health\ApplicableHealthConstraints;
+use App\Domain\Health\DailyHealthObservations;
 use App\Domain\Health\HealthContextService;
 use App\Infrastructure\Time\Clock\Clock;
 
 final readonly class TrainingToday
 {
-    public function __construct(private TrainingService $training, private TrainingRepository $repository, private Clock $clock, private HealthContextService $health)
+    public function __construct(private TrainingService $training, private TrainingRepository $repository, private Clock $clock, private HealthContextService $health, private ?DailyHealthObservations $observations = null)
     {
     }
 
@@ -42,6 +43,6 @@ final readonly class TrainingToday
             $quality[] = '尚未保存健康背景，不能将空档案视作已获运动许可。';
         }
 
-        return ['date' => $date, 'timezone' => $profile['timezone'], 'generatedAt' => $now->format(DATE_ATOM), 'sessions' => $sessions, 'checkIn' => $checkIn, 'health' => $health, 'pendingFeedback' => array_reverse($pendingFeedback), 'reconciliation' => $this->training->reconciliation(), 'dataQuality' => $quality];
+        return ['date' => $date, 'timezone' => $profile['timezone'], 'generatedAt' => $now->format(DATE_ATOM), 'sessions' => $sessions, 'checkIn' => $checkIn, 'health' => $health, 'observations' => $this->observations?->forDate($date) ?? ['bloodPressure' => null, 'sleep' => null, 'sleepSync' => null], 'pendingFeedback' => array_reverse($pendingFeedback), 'reconciliation' => $this->training->reconciliation(), 'dataQuality' => $quality];
     }
 }

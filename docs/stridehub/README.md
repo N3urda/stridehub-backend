@@ -88,7 +88,7 @@ curl --fail-with-body -X PUT "$STRIDEHUB_URL/api/v1/training/sessions/batch" \
 
 ## 用 Skill 管理运动与健康
 
-仓库提供 [`stridehub-coach`](../../skills/stridehub-coach/SKILL.md)。它通过上述 HTTP API 工作，支持运动复盘、课表调整、体检摘要整理和日常安排建议，不需要 MCP。运行客户端只需 Python 3 标准库。
+仓库提供 [`stridehub-coach`](../../skills/stridehub-coach/SKILL.md)。它通过上述 HTTP API 工作，支持运动复盘、课表调整、体检摘要整理、血压记录和 Zepp 睡眠复盘，不需要 MCP。运行客户端只需 Python 3 标准库。
 
 将 `skills/stridehub-coach` 放入 Codex 的技能目录。本机已安装为指向本仓库目录的链接，连接配置位于 `~/.config/stridehub/connection.json`，只保存服务地址和本地凭据文件路径，凭据本身不进入 Skill 或 Git。其他机器可复制技能目录并创建自己的配置：
 
@@ -117,7 +117,56 @@ Skill 先读取最新数据，按已有授权执行修改；仅要求分析时�
 
 第一次读取返回 `version:0` 的空背景；PUT 必须带当前版本。省略的顶层字段保留，提供的数组整体替换，因此追加报告时应先读旧数组再合并。最多 30 份报告、合计 1000 项结果、50 条约束和 30 条生活偏好；重复 ID、未知字段及失效报告引用均拒绝，过期版本返回 409。新接口复用现有 TrainingRecord 表，无需新增迁移。
 
-API 只保存结构化摘要，不接收 PDF/图片原件，也不核验医学结论。当前健康背景由 Skill/API 管理，没有独立网页编辑器。实际解读应结合当前症状、原报告参考范围和医生意见；报告异常不自动换算成训练强度，复查日期经过不等于医嘱自动解除。服务器不会根据文本约束自动拦截所有课表修改，Skill 在排课前主动读取并考虑它们。完整报告和私人数据不要提交到本公开仓库。
+报告 API 只保存结构化摘要，不接收 PDF/图片原件，也不核验医学结论。体检摘要仍由 Skill/API 管理，没有报告网页编辑器；血压与设备睡眠另有下述健康页面。实际解读应结合当前症状、原报告参考范围和医生意见；报告异常不自动换算成训练强度，复查日期经过不等于医嘱自动解除。服务器不会根据文本约束自动拦截所有课表修改，Skill 在排课前主动读取并考虑它们。完整报告和私人数据不要提交到本公开仓库。
+
+### 血压记录与设备睡眠
+
+健康页面为 `/admin/health`，从「今日安排」进入，现有 APK 连接同一新版后端即可访问。体重历史仍在「设置 → 常规」管理。血压、设备睡眠、人工每日状态与体检摘要各自保留来源，既能一起查看，也不会相互覆盖。
+
+今日接口与课次简报中的 `observations` 单独返回 `bloodPressure`、`sleep` 和 `sleepSync`：血压只取对应本地日期内且测量时间不晚于当前时刻的最新记录，睡眠取该来源日期的记录。未来课次不会套用今天的血压或昨晚睡眠；没有对应记录就是 null。人工 `checkIn` 原样保留，健康观察不会自动形成新的健康评分或训练强度建议。
+
+血压支持同一天多次测量，保存测量时间、收缩压/舒张压（mmHg）、可选脉搏（bpm）、手臂、姿势和备注。时间必须含时区偏移，手臂和姿势允许未知；记录和图表用于查看变化，不产生诊断或自动调整课表。接口提供与手机页面相同的数据：
+
+| 接口 | 用途 |
+|---|---|
+| `GET /api/v1/health/blood-pressure?from=YYYY-MM-DD&to=YYYY-MM-DD` | 按测量时间倒序列出 `records`；日期按训练个人档案时区，包含首尾边界 |
+| `GET /api/v1/health/blood-pressure/{id}` | 读取一条记录及当前版本 |
+| `PUT /api/v1/health/blood-pressure/{id}` | 稳定 ID 创建（`version:0`）或带当前版本局部更新 |
+| `DELETE /api/v1/health/blood-pressure/{id}?version=N` | 带当前版本删除，成功返回 204 |
+| `GET /api/v1/health/sleep?from=YYYY-MM-DD&to=YYYY-MM-DD` | 查询独立的 Zepp 睡眠日记录，返回 `records` |
+| `GET /api/v1/health/sleep/status` | 查看同步配置、最近成功时间和失败恢复提示 |
+| `POST /api/v1/health/sleep/sync` | 正文 `{"days":30}`，同步最近 1–90 天 |
+
+血压 PUT 创建必须提供 `measuredAt`、`systolic` 和 `diastolic`；可选 `pulse` 默认为 null、`arm`/`posture` 默认为 unknown、`notes` 默认为空文本。收缩压须大于舒张压，三种数值仅接受 1–400 的整数，这是输入校验边界，并非正常值定义。单条血压请求限 16 KiB。读取最新版本后修改；同 ID、相同完整创建内容、`version:0` 仅在记录尚为第一版时可重复提交而不新增记录。已编辑或内容不同的 ID 返回冲突，不能通过换 ID 盲目重试。
+
+Zepp 睡眠保留原始 `sourceDate`、开始/结束时间、来源时区、深睡/浅睡/REM/清醒分钟数、评分、静息心率和醒来次数。列表的 `date` 是来源时区的醒来日期；来源时区或结束时间未知时沿用 `sourceDate`。总睡眠 `totalMinutes` 由完整的深睡、浅睡、REM 分期求和；上游明确不支持 REM 时仅求和深睡与浅睡且 `remMinutes:null`，其余分期缺失时总时长保持 null。不会用躺床时间代替实际睡眠。当前保留每个来源日期一条摘要，多设备返回同日时选择较完整/较长记录，未导入所有午睡片段明细。
+
+上游未提供的指标为 null，不补零。设备睡眠与手填 `check-ins.sleepHours` 独立保存，也不是临床诊断。同步按账号和原始来源日期更新同一条记录，内容未变时不增加版本，也不改变 `lastSyncedAt`；每次成功读取云端的时间看状态中的 `lastSuccessAt`。失败或无有效睡眠不会删除历史，账号不一致会拒绝继续同步，防止混入其他人的健康数据。
+
+### 配置 Zepp 睡眠同步
+
+睡眠同步直接使用 Zepp 云端摘要接口，与将跑步转换为 FIT 的 Zepp Connector 独立。手表应先同步到 Zepp 手机 App。服务器默认读取私有 `storage/zepp/credentials.json`，可通过 `ZEPP_CREDENTIALS_FILE` 指向其他路径；文件只允许所有者访问（0600）。凭据不经过网页、健康 API 响应或日志。
+
+本机已有授权的 amazfit-analysis 项目时，可由配置工具读取该项目保存的登录信息及 macOS Keychain 令牌，并私密写入服务器文件：
+
+```bash
+python3 tools/zepp-sleep-credentials.py --from-amazfit-project /absolute/path/to/amazfit-analysis
+```
+
+其他环境执行 `python3 tools/zepp-sleep-credentials.py`，在本机交互输入用户 ID、对应区域的 API 主机和隐藏输入的 app token；`--output /private/path/credentials.json` 可选择文件位置。该工具导入已有授权，不是 Zepp 密码登录器。Docker 部署需确保私有文件在容器内可读且不会进入镜像/Git；改用其他路径时同步设置容器中的 `ZEPP_CREDENTIALS_FILE`。更换账号前需要单独迁移或清理对应睡眠数据，工具不会直接覆盖不同账号。
+
+```bash
+# 首次读取近期历史；仅输出同步状态和计数，不输出测量值或凭据。
+bin/console app:health:sleep:sync --days=90
+```
+
+服务 daemon 运行且凭据文件已配置时，每小时第 15 分钟执行近期 30 天同步；未配置时跳过，不访问 Zepp。部署更新后需重启 daemon 载入新任务。本地开发可用现有 daemon profile 启动：
+
+```bash
+docker compose -f compose.stridehub-dev.yml --profile daemon up -d daemon
+```
+
+健康页面也可手动同步；同步请求为 JSON 对象，`{}` 默认 30 天，最大 90 天，正文限 4 KiB。同一时间只执行一次，重复并发请求返回 409。`GET /sleep/status` 仅查看状态，不访问 Zepp；`configured:true` 只表示文件存在，授权是否有效仍以同步结果为准。POST 成功或无数据返回 200；未配置、Zepp 登录过期或云端失败返回 503，正文仍是同步状态，包含 `lastError` 和 `nextAction`。不要把此处的 `auth_required` 当成 StrideHub API 密钥过期，也不要把同步失败当作没有睡眠。过期 Zepp 授权需重新登录来源工具后再运行私密配置工具，不能保证永久免登录。
 
 ## 自动提醒
 
@@ -158,7 +207,7 @@ bin/console app:training:remind --dry-run
 
 ## Zepp / Amazfit 数据
 
-项目原生支持 FIT、TCX、GPX 文件；[Dreeve Zepp Connector](https://docs.dreeve.app/integrations/zepp-connector/) 是独立容器，将 Zepp 云端数据转换为 FIT 并写入 watch 目录。它使用非官方 Zepp 接口；能展示哪些传感器指标取决于实际同步到的内容。当前功能不包含你的 Zepp 账号授权，也没有将演示数据当作你的跑步记录。
+项目原生支持 FIT、TCX、GPX 文件；[Dreeve Zepp Connector](https://docs.dreeve.app/integrations/zepp-connector/) 是独立容器，将 Zepp 云端数据转换为 FIT 并写入 watch 目录。它使用非官方 Zepp 接口；能展示哪些传感器指标取决于实际同步到的内容。运动导入需要单独配置连接器授权；本文新增的睡眠授权不自动启用跑步导入，也不会将演示数据当作你的跑步记录。
 
 ## 此目录的本地开发
 

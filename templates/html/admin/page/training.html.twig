@@ -17,7 +17,7 @@
         <nav aria-label="应用导航"><a href="{{ relativeUrl('/admin/running')|e('html_attr') }}">跑步分析 ↗</a><a href="{{ relativeUrl('/admin/activities')|e('html_attr') }}">活动记录 ↗</a><a href="{{ relativeUrl('/admin')|e('html_attr') }}">管理后台</a></nav>
     </header>
     <main id="training-main" class="sh-main">
-        <div class="sh-heading"><div><p class="sh-eyebrow">PLAN · RUN · REFLECT</p><h1>为下一次出发，做好准备。</h1><p id="runner-context" class="muted">正在读取你的跑步设置…</p></div><div class="form-actions"><a class="button" href="{{ relativeUrl('/admin/training/today')|e('html_attr') }}">今日训练</a><button type="button" class="button" id="refresh-data">刷新数据</button><button class="button primary" data-tab-target="schedule" id="quick-add-session">＋ 安排一次训练</button></div></div>
+        <div class="sh-heading"><div><p class="sh-eyebrow">PLAN · RUN · REFLECT</p><h1>为下一次出发，做好准备。</h1><p id="runner-context" class="muted">正在读取你的跑步设置…</p></div><div class="form-actions"><a class="button" href="{{ relativeUrl('/admin/health')|e('html_attr') }}">健康记录</a><a class="button" href="{{ relativeUrl('/admin/training/today')|e('html_attr') }}">今日训练</a><button type="button" class="button" id="refresh-data">刷新数据</button><button class="button primary" data-tab-target="schedule" id="quick-add-session">＋ 安排一次训练</button></div></div>
         <div id="global-status" class="notice" role="status" aria-live="polite" hidden></div>
         <noscript><p class="notice error">请开启 JavaScript 以加载和保存训练资料。</p></noscript>
         <nav class="sh-tabs" aria-label="工作台视图">

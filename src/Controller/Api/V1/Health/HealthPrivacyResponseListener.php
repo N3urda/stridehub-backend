@@ -8,12 +8,13 @@ use Symfony\Component\EventDispatcher\Attribute\AsEventListener;
 use Symfony\Component\HttpKernel\Event\ResponseEvent;
 use Symfony\Component\HttpKernel\KernelEvents;
 
-#[AsEventListener(event: KernelEvents::RESPONSE, priority: -100)]
+// Apply after Symfony's session listener (-1000), including authentication redirects.
+#[AsEventListener(event: KernelEvents::RESPONSE, priority: -1100)]
 final readonly class HealthPrivacyResponseListener
 {
     public function __invoke(ResponseEvent $event): void
     {
-        if (preg_match('#^/api/v1/health(?:/|$)#', $event->getRequest()->getPathInfo())) {
+        if (preg_match('#^/(?:api/v1/health|admin/health)(?:/|$)#', $event->getRequest()->getPathInfo())) {
             $event->getResponse()->headers->set('Cache-Control', 'no-store, private');
         }
     }

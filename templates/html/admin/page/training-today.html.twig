@@ -15,7 +15,7 @@
 <div id="today-app" data-api-base="{{ relativeUrl('/admin/training/api')|e('html_attr') }}" data-csrf="{{ csrf_token('training')|e('html_attr') }}" data-running-url="{{ relativeUrl('/admin/running')|e('html_attr') }}">
     <header class="today-header">
         <a class="sh-brand" href="{{ relativeUrl('/admin/training/today')|e('html_attr') }}"><span class="sh-mark" aria-hidden="true">S<span>↗</span></span><span>StrideHub<small>把今天，跑得明白</small></span></a>
-        <a class="today-nav-link" href="{{ relativeUrl('/admin/training')|e('html_attr') }}">完整课表 <span aria-hidden="true">↗</span></a>
+        <nav class="form-actions" aria-label="今日导航"><a class="today-nav-link" href="{{ relativeUrl('/admin/health')|e('html_attr') }}">健康记录</a><a class="today-nav-link" href="{{ relativeUrl('/admin/training')|e('html_attr') }}">完整课表 <span aria-hidden="true">↗</span></a></nav>
     </header>
     <main id="today-main" class="today-shell">
         <div class="today-heading"><div><p class="sh-eyebrow">ONE DAY AT A TIME</p><h1>今天，按自己的节奏。</h1><p id="today-date" class="muted">正在读取跑步地点的今天…</p></div><button type="button" id="today-refresh" class="button" aria-label="刷新今日数据，保留未保存草稿">刷新</button></div>
@@ -36,7 +36,7 @@
                         <div id="today-checkin-status" class="form-status full" role="status" aria-live="polite"></div>
                     </form>
                 </section>
-                <section class="card today-health" aria-labelledby="today-health-heading"><p class="sh-eyebrow">KEEP IN MIND</p><h2 id="today-health-heading">今天需要留意</h2><div id="today-health"><p class="muted">正在读取已记录的健康约束…</p></div></section>
+                <section class="card today-health" aria-labelledby="today-health-heading"><div class="section-title"><h2 id="today-health-heading">今天需要留意</h2><a href="{{ relativeUrl('/admin/health')|e('html_attr') }}">记录血压 / 查看睡眠</a></div><div id="today-observations"></div><div id="today-health"><p class="muted">正在读取已记录的健康约束…</p></div></section>
             </div>
             <div class="today-column">
                 <section class="card" id="today-followup-card" aria-labelledby="today-followup-heading"><p class="sh-eyebrow">AFTER YOUR RUN</p><h2 id="today-followup-heading">把这次跑步记完整。</h2><label class="today-session-picker" for="today-feedback-session">选择要反馈或对账的课次<select id="today-feedback-session" aria-describedby="today-selected-meta"><option value="">暂无可选课次</option></select></label><p id="today-selected-meta" class="muted"></p>

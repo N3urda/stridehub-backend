@@ -33,6 +33,10 @@ class FixtureHandler(http.server.BaseHTTPRequestHandler):
         status, response, content_type = 200, {"ok": True}, "application/json"
         if route.endswith("/echo"):
             response = {"payload": json.loads(body), "path": self.path}
+        elif route == "/api/v1/health/sleep/sync" and self.server.sleep_sync_failure:
+            status, response = 503, {"configured": True, "state": "auth_required",
+                                    "lastSuccessAt": None, "lastError": "Zepp 授权已过期。",
+                                    "nextAction": "请重新授权。", "recordCount": 2}
         elif route.endswith("/conflict"):
             status, response = 409, {"error": "version_conflict", "version": 2}
         elif route.endswith("/unauthorized"):
@@ -91,6 +95,7 @@ class StrideHubApiTest(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         self.server.requests.clear()
+        self.server.sleep_sync_failure = False
         self.env = {key: value for key, value in os.environ.items()
                     if key not in ("STRIDEHUB_URL", "DREEVE_API_KEY", "STRIDEHUB_CREDENTIALS_FILE")}
         self.env.update(HOME=str(self.root), STRIDEHUB_URL=self.server.url, DREEVE_API_KEY=TOKEN)
@@ -133,9 +138,34 @@ class StrideHubApiTest(unittest.TestCase):
         self.assertEqual(json.loads(result.stdout)["payload"], {"version": 1})
 
     def test_accepts_running_and_health_read_endpoints(self):
-        for path in ("/api/v1/running/overview?from=all&page=2", "/api/v1/health/context"):
+        for path in ("/api/v1/running/overview?from=all&page=2", "/api/v1/health/context",
+                     "/api/v1/health/blood-pressure?from=2026-10-01&to=2026-10-19",
+                     "/api/v1/health/sleep?from=2026-10-01&to=2026-10-19",
+                     "/api/v1/health/sleep/status"):
             result = self.cli("request", "GET", path)
             self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_health_measurement_transport_preserves_offset_unknowns_and_versions(self):
+        payload = {"version": 0, "measuredAt": "2026-10-19T07:30:00+08:00",
+                   "systolic": 120, "diastolic": 80, "pulse": None,
+                   "arm": "unknown", "posture": "unknown", "notes": "虚构测试"}
+        result = self.cli("request", "PUT", "/api/v1/health/blood-pressure/echo",
+                          "--body-file", "-", stdin=json.dumps(payload, ensure_ascii=False))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout)["payload"], payload)
+        self.assertEqual(self.server.requests[-1][0], "PUT")
+        self.assertEqual(self.server.requests[-1][2]["Authorization"], "Bearer " + TOKEN)
+
+        result = self.cli("request", "DELETE", "/api/v1/health/blood-pressure/empty?version=3")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout), {"status": 204})
+        self.assertEqual(self.server.requests[-1][1], "/api/v1/health/blood-pressure/empty?version=3")
+
+        result = self.cli("request", "POST", "/api/v1/health/sleep/sync",
+                          "--body-file", "-", stdin='{"days": 30}')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.server.requests[-1][0:2], ("POST", "/api/v1/health/sleep/sync"))
+        self.assertEqual(json.loads(self.server.requests[-1][3]), {"days": 30})
 
     def test_http_failures_are_not_retried(self):
         body = self.write_json("plan.json", {"version": 1})
@@ -147,6 +177,17 @@ class StrideHubApiTest(unittest.TestCase):
             self.assertIs(data.get("outcomeUnknown"), False)
             self.assertEqual(len(self.server.requests), 1)
             self.assertEqual(data["response"]["error"], "version_conflict" if status == 409 else "unauthorized")
+
+    def test_sleep_sync_provider_failure_preserves_status_without_retry(self):
+        self.server.sleep_sync_failure = True
+        result = self.cli("request", "POST", "/api/v1/health/sleep/sync",
+                          "--body-file", "-", stdin='{"days": 30}')
+        data = self.error(result, "http_error")
+        self.assertEqual(data["status"], 503)
+        self.assertEqual(data["response"]["state"], "auth_required")
+        self.assertEqual(data["response"]["recordCount"], 2)
+        self.assertIsNone(data["response"]["lastSuccessAt"])
+        self.assertEqual(len(self.server.requests), 1)
 
     def test_redirect_is_not_followed_or_forwarded_credentials(self):
         result = self.cli("request", "GET", "/api/v1/training/redirect")

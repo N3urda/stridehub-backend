@@ -27,6 +27,12 @@
                     </a>
                 </li>
                 <li>
+                    <a title="健康记录" href="{{ relativeUrl(path('admin_health')) }}" {{ isActiveNavItem({'/admin/health': false}) ? 'aria-selected="true"' : '' }}>
+                        <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12h4l3-7 4 14 3-7h4"/></svg>
+                        <span>健康记录</span>
+                    </a>
+                </li>
+                <li>
                     <a title="跑步工作台" href="{{ relativeUrl(path('admin_training')) }}" {{ isActiveNavItem({'/admin/training': true}) ? 'aria-selected="true"' : '' }}>
                         <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m4 17 5-5 4 3 7-9M14 6h6v6M4 21h16"/></svg>
                         <span>跑步工作台</span>

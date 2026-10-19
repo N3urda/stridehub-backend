@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domain\Training;
 
 use App\Domain\Health\ApplicableHealthConstraints;
+use App\Domain\Health\DailyHealthObservations;
 use App\Domain\Health\HealthContextService;
 use App\Domain\Training\Advice\RunningAdvice;
 use App\Domain\Training\Weather\ForecastProvider;
@@ -12,7 +13,7 @@ use App\Infrastructure\Time\Clock\Clock;
 
 final readonly class TrainingBriefing
 {
-    public function __construct(private TrainingService $training, private TrainingRepository $repository, private ForecastProvider $weather, private RunningAdvice $advice, private Clock $clock, private ?HealthContextService $health = null)
+    public function __construct(private TrainingService $training, private TrainingRepository $repository, private ForecastProvider $weather, private RunningAdvice $advice, private Clock $clock, private ?HealthContextService $health = null, private ?DailyHealthObservations $observations = null)
     {
     }
 
@@ -44,7 +45,7 @@ final readonly class TrainingBriefing
         $forecast = ['status' => 'unavailable', 'source' => 'Open-Meteo', 'fetchedAt' => null, 'timezone' => $profile['timezone'], 'hours' => [], 'sessionHours' => [], 'message' => '尚未配置跑步地点，无法查询天气。'];
         $healthDate = null === $session ? $now->setTimezone($zone)->format('Y-m-d') : new \DateTimeImmutable($session['startAt'])->setTimezone($zone)->format('Y-m-d');
         $health = new ApplicableHealthConstraints($this->health ?? new HealthContextService($this->repository))->forDate($healthDate);
-        $result = ['session' => $session, 'forecast' => $forecast, 'advice' => ['summary' => '添加下一次训练或设置每周跑步习惯。', 'clothing' => [], 'reasons' => [], 'warnings' => [], 'alternatives' => [], 'training' => 'unknown', 'personalization' => [], 'dataQuality' => []], 'checkIn' => null, 'health' => $health, 'generatedAt' => $now->format(DATE_ATOM)];
+        $result = ['session' => $session, 'forecast' => $forecast, 'advice' => ['summary' => '添加下一次训练或设置每周跑步习惯。', 'clothing' => [], 'reasons' => [], 'warnings' => [], 'alternatives' => [], 'training' => 'unknown', 'personalization' => [], 'dataQuality' => []], 'checkIn' => null, 'health' => $health, 'observations' => $this->observations?->forDate($healthDate) ?? ['bloodPressure' => null, 'sleep' => null, 'sleepSync' => null], 'generatedAt' => $now->format(DATE_ATOM)];
         if (null === $session) {
             return [...$result, 'advice' => $this->withHealth($result['advice'], $health)];
         }

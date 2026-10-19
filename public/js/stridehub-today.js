@@ -185,6 +185,18 @@
         const selected = currentRecord(); $('#today-selected-meta').textContent = selected ? `${statuses[selected.status] || selected.status} · ${amount(selected.durationMinutes, '分钟')} · ${amount(selected.distanceKm, '公里')}` : '有课次后再记录对应的跑后感受。';
     }
     function renderHealth() {
+        const observations = $('#today-observations');
+        if (observations) {
+            observations.replaceChildren();
+            const pressure = state.data.observations?.bloodPressure;
+            const sleep = state.data.observations?.sleep;
+            observations.append(node('p', '', pressure ? `今日血压 ${pressure.systolic}/${pressure.diastolic} mmHg · ${format(pressure.measuredAt, true)}${pressure.pulse == null ? '' : ` · 脉搏 ${pressure.pulse} 次/分`}` : '今日血压：尚未记录。'));
+            observations.append(node('p', '', sleep ? `Zepp 睡眠 ${sleep.totalMinutes == null ? '时长未知' : `${Math.floor(sleep.totalMinutes / 60)} 小时 ${Math.round(sleep.totalMinutes % 60)} 分`} · 醒来 ${format(sleep.endedAt, true)}` : '今日醒来的 Zepp 睡眠：暂无可确认的记录。'));
+            const sync = state.data.observations?.sleepSync;
+            if (sync?.lastError) observations.append(node('p', 'muted', `Zepp 同步：${sync.lastError}`));
+            observations.append(node('p', 'muted', '自动同步与手填体感分别保留；不会据此自动修改课表。'));
+            observations.append(node('div', 'divider'));
+        }
         const target = $('#today-health'); target.replaceChildren(); const constraints = state.data.health?.constraints || [];
         if (!constraints.length) target.append(node('p', 'muted', state.data.health?.version ? '没有适用于今天的已记录限制；请继续结合当前身体感受。' : '尚无健康背景记录；这不代表已获得运动许可。'));
         constraints.forEach(constraint => { const box = node('div', 'today-constraint'); add(box, node('p', '', constraint.description), node('p', 'muted', `${constraint.sourceType === 'clinician' ? '记录的医生建议' : '用户记录'}${constraint.sourceReportId ? ' · 来源 ' + constraint.sourceReportId : ''} · ${constraint.validFrom || '生效日期未注明'}${constraint.reviewOn ? ' · 复核日期 ' + constraint.reviewOn : ''}`)); target.append(box); });

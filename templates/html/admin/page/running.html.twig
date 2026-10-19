@@ -9,7 +9,7 @@
 </head>
 <body>
 <div id="running-app" data-api="{{ relativeUrl('admin/running/api')|e('html_attr') }}" data-detail-base="{{ relativeUrl('activities')|e('html_attr') }}">
-    <header class="shell topbar"><a class="brand" href="{{ relativeUrl('admin/training') }}">STRIDE<span>HUB</span></a><nav aria-label="主导航"><a href="{{ relativeUrl('activities') }}">运动记录</a><a href="{{ relativeUrl('admin/training') }}">训练课表</a><a href="{{ relativeUrl('admin/upload') }}">导入运动</a></nav></header>
+    <header class="shell topbar"><a class="brand" href="{{ relativeUrl('admin/training') }}">STRIDE<span>HUB</span></a><nav aria-label="主导航"><a href="{{ relativeUrl('admin/health') }}">健康记录</a><a href="{{ relativeUrl('activities') }}">运动记录</a><a href="{{ relativeUrl('admin/training') }}">训练课表</a><a href="{{ relativeUrl('admin/upload') }}">导入运动</a></nav></header>
     <main class="shell">
         <div class="hero"><div><p class="eyebrow">RUNNING ANALYTICS / 运动记录</p><h1>每一次出发，都有迹可循。</h1><p class="muted">从长期积累到单次复盘，用真实记录读懂你的跑步。</p></div><span class="tag">公里 · 分钟 · bpm</span></div>
         <form id="filters" class="panel filters"><label>统计范围<select name="preset"><option value="90">近 90 天</option><option value="30">近 30 天</option><option value="365">近一年</option><option value="all">全部记录</option><option value="custom">自定义</option></select></label><label>开始日期<input name="from" type="date"></label><label>结束日期<input name="to" type="date"></label><label>运动类型<select name="sportType"><option value="all">全部跑步</option><option value="Run">户外跑步</option><option value="TrailRun">越野跑</option><option value="VirtualRun">虚拟跑步</option></select></label><button type="submit">更新看板</button></form>

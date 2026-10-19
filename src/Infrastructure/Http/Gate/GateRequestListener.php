@@ -53,6 +53,7 @@ final readonly class GateRequestListener implements EventSubscriberInterface
             // firewall still authenticates these routes after this setup gate.
             || '/admin/training' === $path || str_starts_with($path, '/admin/training/')
             || '/admin/running' === $path || str_starts_with($path, '/admin/running/')
+            || '/admin/health' === $path || str_starts_with($path, '/admin/health/')
             || '/strava/webhook' === $path;
     }
 

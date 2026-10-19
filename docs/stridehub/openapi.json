@@ -3790,6 +3790,9 @@
           },
           "health": {
             "$ref": "#/components/schemas/ApplicableHealth"
+          },
+          "observations": {
+            "$ref": "#/components/schemas/HealthObservations"
           }
         },
         "required": [
@@ -3798,7 +3801,8 @@
           "advice",
           "checkIn",
           "generatedAt",
-          "health"
+          "health",
+          "observations"
         ]
       },
       "Comparison": {
@@ -4130,7 +4134,8 @@
           "health",
           "pendingFeedback",
           "reconciliation",
-          "dataQuality"
+          "dataQuality",
+          "observations"
         ],
         "properties": {
           "date": {
@@ -4177,9 +4182,382 @@
             "items": {
               "type": "string"
             }
+          },
+          "observations": {
+            "$ref": "#/components/schemas/HealthObservations"
           }
         },
         "description": "Read-only runner-local today. No synthetic rest day or next-day workout; feedback queue covers today and previous six days. Fetch a chosen session briefing separately so weather failure does not block daily operations."
+      },
+      "HealthObservations": {
+        "type": "object",
+        "description": "Read-only observations for the requested day. Blood pressure uses profile timezone; Zepp sleep matches actual wake time in profile timezone. Future or uncertain wake times are excluded. Manual check-ins remain separate. No automatic plan changes.",
+        "required": [
+          "bloodPressure",
+          "sleep",
+          "sleepSync"
+        ],
+        "properties": {
+          "bloodPressure": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/HealthBloodPressureRecord"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sleep": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/HealthSleepRecord"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sleepSync": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/HealthSleepSyncStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "HealthBloodPressureRecord": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "measuredAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T([01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(Z|[+-](?:0\\d|1[0-3]):[0-5]\\d|[+-]14:00)$",
+            "description": "实际测量时间，必须有秒和时区偏移，禁止小数秒。响应规范化为带数字偏移的 ISO 8601（Z 变为 +00:00）。"
+          },
+          "systolic": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 400,
+            "description": "收缩压，mmHg；必须大于 diastolic。边界仅用于数据校验，不表示正常范围。"
+          },
+          "diastolic": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 400,
+            "description": "舒张压，mmHg。"
+          },
+          "pulse": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "maximum": 400,
+            "default": null,
+            "description": "脉搏，bpm；未测量为 null。"
+          },
+          "arm": {
+            "type": "string",
+            "enum": [
+              "unknown",
+              "left",
+              "right"
+            ],
+            "default": "unknown"
+          },
+          "posture": {
+            "type": "string",
+            "enum": [
+              "unknown",
+              "seated",
+              "standing",
+              "lying"
+            ],
+            "default": "unknown"
+          },
+          "notes": {
+            "type": "string",
+            "maxLength": 2000,
+            "default": ""
+          },
+          "id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,80}$",
+            "maxLength": 80,
+            "readOnly": true
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "readOnly": true
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "readOnly": true
+          }
+        },
+        "required": [
+          "measuredAt",
+          "systolic",
+          "diastolic",
+          "pulse",
+          "arm",
+          "posture",
+          "notes",
+          "id",
+          "version",
+          "updatedAt"
+        ]
+      },
+      "HealthSleepRecord": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "readOnly": true,
+            "description": "稳定来源 ID，由单向账号标识与 Zepp sourceDate 生成；调用方原样使用，不解析账号。"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "readOnly": true
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "readOnly": true
+          },
+          "sourceDate": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "description": "Zepp 原始日记录日期；稳定 ID 的日期部分。"
+          },
+          "date": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "description": "用于筛选和今日展示的归属日期：来源时区和结束时间均已知时取该时区的醒来日期，否则保留 sourceDate。"
+          },
+          "source": {
+            "type": "string",
+            "const": "zepp"
+          },
+          "sourceLabel": {
+            "type": "string",
+            "const": "Zepp / Amazfit"
+          },
+          "timeZone": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[+-]\\d{2}:\\d{2}$",
+            "description": "上游提供的固定 UTC 偏移；未提供时为 null，不从服务器所在地猜测。"
+          },
+          "startedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Zepp 开始时间；未知来源时区时已知 Unix 时间戳仍可表示为 UTC。"
+          },
+          "endedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Zepp 结束时间；未知来源时区时已知 Unix 时间戳仍可表示为 UTC。"
+          },
+          "totalMinutes": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 2160,
+            "description": "由完整可用分期求和：deep+light+REM；上游明确不支持 REM 时为 deep+light。其余缺失情况为 null，不用睡眠区间长度代替实际睡眠。"
+          },
+          "deepMinutes": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 2160
+          },
+          "lightMinutes": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 2160
+          },
+          "remMinutes": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 2160,
+            "description": "不支持 REM 或未返回时为 null，不能视为测得 0。"
+          },
+          "awakeMinutes": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 2160
+          },
+          "score": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "maximum": 100,
+            "description": "设备评分，非后端临床评估。"
+          },
+          "restingHeartRate": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 20,
+            "maximum": 250,
+            "description": "Zepp 睡眠摘要中的静息心率，bpm；缺失保持 null。"
+          },
+          "wakeCount": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 1000
+          },
+          "lastSyncedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "该记录内容最近一次导入或更新的时间；云端返回相同内容时此值和 version 不变。每次成功云端读取时间看同步状态 lastSuccessAt。"
+          }
+        },
+        "required": [
+          "id",
+          "version",
+          "updatedAt",
+          "sourceDate",
+          "date",
+          "source",
+          "sourceLabel",
+          "timeZone",
+          "startedAt",
+          "endedAt",
+          "totalMinutes",
+          "deepMinutes",
+          "lightMinutes",
+          "remMinutes",
+          "awakeMinutes",
+          "score",
+          "restingHeartRate",
+          "wakeCount",
+          "lastSyncedAt"
+        ],
+        "description": "Zepp 设备观察，所有未知指标为 null。独立于人工 check-in，不表示临床睡眠诊断。当前每个来源日期保留一条摘要，多设备重复日记录择较完整/较长记录；不是所有午睡片段明细。"
+      },
+      "HealthSleepSyncStatus": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "configured": {
+            "type": "boolean",
+            "description": "服务端凭据文件存在；不保证其可读、格式正确或 Zepp 授权仍有效。"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "not_configured",
+              "idle",
+              "syncing",
+              "success",
+              "no_data",
+              "auth_required",
+              "error"
+            ]
+          },
+          "lastAttemptAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "lastSuccessAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "最近成功读取 Zepp 的时间，包括成功读取但没有有效睡眠的 no_data；失败不会清空历史成功时间。"
+          },
+          "lastError": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "安全的同步错误摘要，不包含上游原始响应或凭据。"
+          },
+          "nextAction": {
+            "type": "string",
+            "description": "可执行的配置、重新授权或重试提示。"
+          },
+          "recordCount": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "已保存睡眠记录总数，不等于本次导入数。"
+          },
+          "imported": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "updated": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "unchanged": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "skipped": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "configured",
+          "state",
+          "lastAttemptAt",
+          "lastSuccessAt",
+          "lastError",
+          "nextAction",
+          "recordCount",
+          "imported",
+          "updated",
+          "unchanged",
+          "skipped"
+        ],
+        "description": "GET status 和 POST sync 使用相同顶层结构；四项计数属于最近一次同步尝试。失败和空数据不删除已有睡眠，进行中超过五分钟会显示可重试的中断错误。"
       }
     }
   }
