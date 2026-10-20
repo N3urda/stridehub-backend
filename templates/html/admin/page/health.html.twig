@@ -14,12 +14,13 @@
     <script defer src="{{ relativeUrl(asset('js/stridehub-health.js'))|e('html_attr') }}"></script>
     <script defer src="{{ relativeUrl(asset('js/stridehub-data.js'))|e('html_attr') }}"></script>
 <script defer src="{{ relativeUrl(asset('js/stridehub-body.js'))|e('html_attr') }}"></script>
+    <script defer src="{{ relativeUrl(asset('js/stridehub-health-context.js'))|e('html_attr') }}"></script>
 {% endblock %}
 {% block page_content %}
 <div id="health-app" data-api-base="{{ relativeUrl('/admin/health/api')|e('html_attr') }}" data-profile-url="{{ relativeUrl('/admin/training/api/profile')|e('html_attr') }}" data-csrf="{{ csrf_token('health')|e('html_attr') }}">
 <div id="health-main" class="health-shell">
         <div class="health-heading"><div><h1>身体与恢复</h1><p class="muted">留住每晚睡眠、每次测量，慢慢看清身体的变化。</p></div><button type="button" id="health-refresh" class="button">刷新记录</button></div>
-        <nav class="health-jump" aria-label="健康记录导航"><a href="#sleep-section">睡眠记录</a><a href="#body-weight">体重趋势</a><a href="#pressure-section">血压记录</a></nav>
+        <nav class="health-jump" aria-label="健康记录导航"><a href="#sleep-section">睡眠记录</a><a href="#body-weight">体重趋势</a><a href="#pressure-section">血压记录</a><a href="#health-context-section">报告与健康背景</a></nav>
         <div id="health-status" class="notice" role="status" aria-live="polite" hidden></div>
         <noscript><p class="notice error">请开启 JavaScript 以读取和保存健康记录。</p></noscript>
         <form id="health-range" class="health-range"><label>从<input type="date" name="from" required></label><label>到<input type="date" name="to" required></label><button class="button" type="submit">查看这段时间</button><p id="health-timezone" class="muted"></p></form>
@@ -33,6 +34,13 @@
             <p class="health-footnote">睡眠阶段来自设备估计，缺失记录不代表没有睡眠。</p>
         </section>
         {% include 'html/stridehub/body-extra.html.twig' %}
+        <section id="health-context-section" class="health-panel" aria-labelledby="health-context-title">
+            <div class="health-section-heading"><div><h2 id="health-context-title">报告与健康背景</h2><p class="muted">展示全部已保存的报告与限制，不受上方日期范围影响。</p></div><span id="health-context-count" class="source-pill"></span></div>
+            <p id="health-context-status" role="status" aria-live="polite">正在读取…</p>
+            <div id="health-constraints"></div>
+            <div id="health-reports"></div>
+            <details id="health-preferences" hidden><summary>生活偏好与补充记录</summary><div></div></details>
+        </section>
         <section id="pressure-section" class="health-panel" aria-labelledby="pressure-title">
             <div class="health-section-heading"><div><div class="hub-section-title"><span class="hub-section-icon pressure">{{ icons.icon('pressure') }}</span><h2 id="pressure-title">血压 · 每一次测量</h2></div><p class="muted">保存高压、低压与脉搏，回看长期趋势。</p></div><button type="button" id="pressure-new" class="button primary">＋ 记一次血压</button></div>
             <div id="pressure-status" role="status" class="form-status" aria-live="polite"></div>

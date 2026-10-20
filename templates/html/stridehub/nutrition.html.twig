@@ -5,14 +5,19 @@
 {% block head_scripts %}<script defer src="{{ relativeUrl(asset('js/stridehub-data.js')) }}"></script><script defer src="{{ relativeUrl(asset('js/stridehub-workspace.js')) }}"></script>{% endblock %}
 {% block page_content %}
 <div id="data-workspace" class="hub-records data-workspace" data-view="nutrition" data-base="{{ relativeUrl('/admin/health/api') }}" data-csrf="{{ csrf_token('health')|e('html_attr') }}">
-    <header class="insights-heading"><div><p class="soft-label">NUTRITION / 饮食</p><h1>饮食计划与实际摄入</h1><p class="subtle">按餐记录食物与份量，对照每天的营养目标。</p></div><button id="data-refresh" class="hub-button" type="button">刷新数据</button></header>
+    <header class="insights-heading"><div><p class="soft-label">NUTRITION / 饮食</p><h1>饮食计划与实际摄入</h1><p class="subtle">先看当日记录，再看这段时间的变化。</p></div><div class="data-actions"><button class="hub-button primary" type="button" data-open-editor="meal">记录一餐</button><button id="data-refresh" class="hub-button" type="button">刷新</button></div></header>
     {% include 'html/stridehub/workspace-toolbar.html.twig' %}
-    <section class="hub-surface"><div class="section-title"><h2>所选日期 · 营养对比</h2><label class="data-date-label">日期<input type="date" id="nutrition-date"></label></div><div id="nutrition-metrics" class="compact-metrics"></div><p class="subtle small">实际值仅统计已记录的餐次。营养值缺失时显示 —，不代表零摄入或全天已记录完整。</p></section>
-    <section class="hub-surface"><div class="section-title"><h2>能量记录趋势</h2><span class="source-pill">目标 / 已记录 · kcal</span></div><div id="nutrition-chart" class="data-chart"></div></section>
-    <div class="data-two-columns">
-        <section class="hub-surface"><div class="section-title"><h2>当日饮食计划</h2></div><div id="nutrition-plan"></div></section>
-        <section class="hub-surface"><div class="section-title"><h2 id="meal-form-title">记录一餐</h2></div>
-            <form id="meal-form" class="data-form">
+    <section class="hub-surface nutrition-day-summary"><div class="section-title"><div><p id="nutrition-day-label" class="soft-label">当日记录</p><h2>营养目标与已记录摄入</h2></div><div class="day-navigation"><button type="button" class="hub-button" id="nutrition-prev" aria-label="前一天">←</button><label class="data-date-label"><span class="sr-only">查看日期</span><input type="date" id="nutrition-date"></label><button type="button" class="hub-button" id="nutrition-next" aria-label="后一天">→</button></div></div><div id="nutrition-metrics" class="compact-metrics nutrient-metrics"></div><div id="nutrition-coverage" class="data-context"></div><p class="subtle small">仅统计已记录的餐次，不代表全天摄入。— 表示未知；记录与目标的差值不等于热量缺口。</p></section>
+    <div class="data-two-columns day-comparison">
+        <section class="hub-surface"><div class="section-title"><h2>当日饮食计划</h2><span class="source-pill neutral">计划</span></div><div id="nutrition-plan"></div></section>
+        <section class="hub-surface"><div class="section-title"><h2>当日实际记录</h2><span id="day-meal-count" class="source-pill"></span></div><div id="day-meals"></div><button class="text-link data-text-button" type="button" data-open-editor="meal">＋ 记录一餐</button></section>
+    </div>
+    <section class="hub-surface"><div class="section-title"><div><h2>能量记录趋势</h2><p class="subtle small">选择图中的日期，查看当天明细。</p></div><span class="source-pill neutral">kcal</span></div><div id="nutrition-chart" class="data-chart"></div></section>
+    <section class="hub-surface"><details class="data-disclosure"><summary><span>范围内的饮食明细</span><span id="meal-count" class="source-pill"></span></summary><div id="meals-table" class="data-table-scroll" tabindex="0" aria-label="饮食明细，可横向滚动"></div></details><details class="data-disclosure"><summary>逐日目标与记录</summary><label class="data-checkbox"><input type="checkbox" id="nutrition-show-empty">同时显示没有计划和记录的日期</label><div id="nutrition-days" class="data-table-scroll" tabindex="0" aria-label="逐日营养对照，可横向滚动"></div></details><details class="data-disclosure" id="history-panel"><summary>修改历史</summary><div id="record-history" class="data-history"><p>编辑已有记录后，可在这里查看它的修改历史。</p></div></details></section>
+    <dialog id="meal-editor" class="data-editor" aria-labelledby="meal-editor-title">
+        <header class="editor-heading"><div><p class="soft-label">保存实际记录与计划</p><h2 id="meal-editor-title">记录一餐</h2></div><button type="button" class="editor-close" data-close-editor aria-label="关闭记录一餐">×</button></header>
+        <p class="subtle small editor-hint">关闭窗口会保留未保存的内容，离开页面前请保存。</p>
+        <form id="meal-form" class="data-form">
                 <label>日期<input name="date" type="date" required></label><label>餐次<select name="mealType"><option value="breakfast">早餐</option><option value="lunch">午餐</option><option value="dinner">晚餐</option><option value="snack">加餐</option><option value="fuel">运动补给</option><option value="other">其他</option></select></label>
                 <label class="wide">食物<input name="foods" required maxlength="2000" placeholder="例如：米饭、鸡肉、蔬菜"></label><label class="wide">份量<input name="portion" maxlength="500" placeholder="例如：米饭一碗，鸡肉 150 g"></label>
                 <label>能量 kcal<input name="energyKcal" type="number" min="0" max="30000" step="0.1"></label><label>蛋白质 g<input name="proteinGrams" type="number" min="0" max="5000" step="0.1"></label><label>碳水 g<input name="carbohydrateGrams" type="number" min="0" max="5000" step="0.1"></label><label>脂肪 g<input name="fatGrams" type="number" min="0" max="5000" step="0.1"></label>
@@ -20,9 +25,6 @@
                 <label class="wide">备注<input name="notes" maxlength="2000"></label><div class="data-actions wide"><button type="submit" class="hub-button primary">保存记录</button><button type="button" id="meal-reset" class="hub-button">新建一餐</button></div>
                 <p id="meal-status" class="data-message wide" role="status"></p>
             </form>
-        </section>
-    </div>
-    <section class="hub-surface"><div class="section-title"><h2>实际饮食明细</h2><span id="meal-count" class="source-pill"></span></div><div id="meals-table" class="data-table-scroll"></div><details><summary>修改记录</summary><div id="record-history" class="data-history"></div></details></section>
-    <section class="hub-surface"><h2>逐日目标与记录</h2><div id="nutrition-days" class="data-table-scroll"></div></section>
+    </dialog>
 </div>
 {% endblock %}

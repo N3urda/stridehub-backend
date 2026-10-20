@@ -1,5 +1,26 @@
 # StrideHub 验收记录
 
+## 页面阅读与统一日程迭代（2026-10-20）
+
+本轮调整饮食、减重、计划、总览和身体页面：数据先于录入表单，按日期对照计划与实际，完整呈现 MCP 保存的饮食计划、减重目标和健康背景。复用已有后端领域数据，没有新增接口或迁移。
+
+- **60 个定向 PHP 测试、566 条断言通过**：首次使用页面、健康工作台、结构化记录和健康背景接口。
+- **12 组真实 HTTP/浏览器验收通过**：空状态及个人时区；计划与实际联动、文本转义；真实并发版本冲突和草稿保留；图表键盘选日、范围切换、URL 恢复、日期越界恢复；体重/目标/身体测量弹窗保存；统一训练与饮食日程、减重目标；分类和日期跳转、读取失败保留原日期上下文；概览及有来源的报告/限制展示；六页 320/390px 布局；手机弹窗焦点与触屏选日；缺失营养值保留未知；刷新失败及无未捕获脚本异常。
+- 写入均使用专用数据库和 DEMO 资料。仅日期范围读取失败和刷新失败用明确的 503 拦截；键盘、触屏、保存及并发冲突通过真实页面与服务端验证。人工查看饮食、减重、计划、概览、健康报告的桌面截图及移动端截图。
+- **12 份 Twig 模板语法检查、4 份改动的生产 JavaScript 及浏览器脚本语法检查通过**；`git diff --check` 通过。本轮未重复执行整个上游 PHPUnit 套件，历史全库限制见下文。
+
+复现：按下一节配置 Playwright/Chrome，运行 `node tests/e2e/workspace-browser.cjs`。PHP 定向命令：
+
+```sh
+php vendor/bin/phpunit tests/Controller/Admin/StrideHubFirstUseTest.php \
+  tests/Controller/Api/V1/Health/HealthWorkspaceApiTest.php \
+  tests/Controller/Api/V1/Health/HealthRecordsApiTest.php \
+  tests/Controller/Api/V1/Health/HealthApiTest.php
+APP_ENV=test php bin/console lint:twig templates/html/stridehub templates/html/admin/page/health.html.twig
+```
+
+本轮未向个人数据库写入演示数据、未启用周期迭代或 AI 规划任务、未部署远程服务。
+
 ## 量化饮食、减重与统一运动工作台（2026-10-20）
 
 页面围绕数据与计划展开：新增饮食、减重页面，训练七日日历和统一运动统计；外部 AI 通过 API/Skill 读取聚合上下文、保存结构化计划。本次不新增站内聊天。

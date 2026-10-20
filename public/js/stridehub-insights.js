@@ -63,19 +63,25 @@
         const strip = $('overview-data-strip'); strip.replaceChildren();
         const latest = data.weight.records[0], goal = data.weight.goals.find(g => g.status === 'active' && g.startDate <= data.today && g.endDate >= data.today), day = data.nutrition.days.find(d => d.date === data.today);
         for (const [label, value, unit, detail, href] of [
-            ['最近体重', num(latest?.weightKg, 2), 'kg', latest?.date || '所选范围暂无记录', '/health#body-weight'],
+            ['最近体重', num(latest?.weightKg, 2), 'kg', latest?.date || '所选范围暂无记录', '/weight'],
             ['减重目标', num(goal?.targetWeightKg, 2), 'kg', goal ? goal.startDate + ' → ' + goal.endDate : '尚未设置当前目标', '/weight'],
             ['今日已记录摄入', num(day?.actualLogged.energyKcal), 'kcal', `${day?.mealCount || 0} 餐 · 目标 ${num(day?.targets.energyKcal)}`, '/nutrition'],
             ['期间已完成训练', num(data.sessions.filter(s => s.status === 'completed' && s.type !== 'rest').length), '次', `${data.sessions.filter(s => s.type !== 'rest' && !['cancelled', 'skipped'].includes(s.status)).length} 次计划`, '/plans']
         ]) { const card = node('section', 'hub-surface'); metric(card, label, value, unit, detail); const link = node('a', '', '查看明细'); link.href = base + href; card.append(link); strip.append(card); }
     }
-    function renderPlans(sessions, plans) {
-        const sessionsNext = sessions.filter(s => !['cancelled', 'completed', 'skipped'].includes(s.status) && s.startAt && dateInZone(new Date(s.startAt), state.zone) >= state.today).slice(0, 2);
-        const rows = sessionsNext.map(s => ({title: s.title, date: dateInZone(new Date(s.startAt), state.zone).slice(5, 10), text: `${s.durationMinutes ?? '—'} 分钟 · 训练课表`}));
-        for (const p of plans.filter(p => p.status === 'active' && (!p.endDate || p.endDate >= state.today) && p.startDate <= state.today).slice(0, 2)) rows.push({title: p.title, date: '进行中', text: p.goal || p.sourceLabel || '生活计划'});
+    function renderPlans(data) {
+        const next = data.sessions.filter(s => !['cancelled', 'completed', 'skipped'].includes(s.status)).sort((a, b) => Date.parse(a.startAt) - Date.parse(b.startAt))[0];
+        const meal = data.nutrition.plans.filter(p => p.status === 'active').sort((a, b) => a.date.localeCompare(b.date))[0];
+        const goal = data.weight.goals.find(g => g.status === 'active' && g.startDate <= state.today && g.endDate >= state.today);
+        const rows = [];
+        if (next) rows.push({title: next.title, date: dateInZone(new Date(next.startAt), state.zone).slice(5), text: `${next.durationMinutes} 分钟 · 训练课表`, href: '/plans'});
+        if (meal) rows.push({title: '饮食目标与餐食', date: meal.date.slice(5), text: `${num(meal.targets.energyKcal)} kcal · 蛋白质 ${num(meal.targets.proteinGrams, 1)} g`, href: '/nutrition?' + new URLSearchParams({from: data.from, to: data.to, date: meal.date})});
+        if (goal) rows.push({title: goal.title, date: '进行中', text: `减重目标 ${num(goal.startWeightKg, 2)} → ${num(goal.targetWeightKg, 2)} kg`, href: '/weight'});
+        const lifestyle = data.healthPlans.find(p => p.status === 'active' && (!p.endDate || p.endDate >= state.today) && p.startDate <= state.today);
+        if (lifestyle) rows.push({title: lifestyle.title, date: '进行中', text: lifestyle.goal || '生活计划', href: '/plans'});
         $('overview-plans').replaceChildren();
         if (!rows.length) $('overview-plans').append(node('p', 'empty-note', '尚未保存接下来的安排。'));
-        for (const row of rows.slice(0, 3)) { const el = node('div', 'plan-row'), text = node('div'); text.append(node('strong', '', row.title), node('p', '', row.text)); el.append(node('span', 'plan-time', row.date), text); $('overview-plans').append(el); }
+        for (const row of rows) { const el = node('a', 'plan-row'), text = node('div'); el.href = base + row.href; text.append(node('strong', '', row.title), node('p', '', row.text)); el.append(node('span', 'plan-time', row.date), text); $('overview-plans').append(el); }
     }
     function renderSync(data) {
         const descriptions = {syncing: '正在同步 Zepp，当前展示上次已保存的记录。', partial: '部分来源已同步，部分指标暂时无法读取。', no_data: '本次未返回有效数据，已有历史记录仍保留。', not_configured: '尚未连接 Zepp。请在服务端连接已有账号授权。', auth_required: 'Zepp 授权已过期，需要重新连接账号。', error: '本次同步失败，历史数据仍然保留。', empty: '已连接，但这段时间未返回数据。'};
@@ -91,7 +97,7 @@
         try { const today = await api('/training/api/today'); if (generation !== state.generation) return; state.zone = today.timezone; state.today = today.date; }
         catch (e) { if (generation !== state.generation) return; errors.set('时区', e.message); state.today = dateInZone(new Date(), state.zone); }
         state.from = shiftDay(state.today, 1 - state.days);
-        $('overview-date').textContent = new Intl.DateTimeFormat('zh-CN', {timeZone: state.zone, month: 'long', day: 'numeric', weekday: 'long'}).format(new Date());
+        $('overview-date').textContent = new Intl.DateTimeFormat('zh-CN', {timeZone: 'UTC', month: 'long', day: 'numeric', weekday: 'long'}).format(new Date(state.today + 'T12:00:00Z'));
         $('overview-range').textContent = `${state.from} 至 ${state.today} · ${state.zone}`;
         const query = `?from=${state.from}&to=${state.today}`;
         const jobs = [
@@ -100,7 +106,7 @@
             ['运动', api('/health/api/workouts' + query), renderRunning, 'running-metrics'],
             ['目标与饮食', api('/health/api/workspace' + query), renderDataStrip, 'overview-data-strip'],
             ['连接状态', api('/health/api/zepp/status'), renderSync, 'sync-description'],
-            ['计划', Promise.all([api(`/training/api/sessions?from=${state.today}&to=${shiftDay(state.today, 30)}`), api('/health/api/plans')]), data => renderPlans(data[0].items, data[1].plans), 'overview-plans']
+            ['计划', api(`/health/api/workspace?from=${state.today}&to=${shiftDay(state.today, 6)}`), renderPlans, 'overview-plans']
         ];
         await Promise.all(jobs.map(async ([label, promise, render, id]) => { try { const data = await promise; if (generation === state.generation) render(label === '睡眠' ? data.records : data); } catch (e) { if (generation === state.generation) { errors.set(label, e.message); sectionFailure(id, '暂时无法读取。请刷新后重试。'); if (label === '睡眠') { $('latest-sleep-date').textContent = '睡眠读取失败'; $('latest-sleep-duration').textContent = '—'; $('latest-sleep-window').textContent = e.message; } } } }));
         if (generation !== state.generation) return;

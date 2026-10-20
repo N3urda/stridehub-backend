@@ -5,18 +5,31 @@
 {% block head_scripts %}<script defer src="{{ relativeUrl(asset('js/stridehub-data.js')) }}"></script><script defer src="{{ relativeUrl(asset('js/stridehub-workspace.js')) }}"></script>{% endblock %}
 {% block page_content %}
 <div id="data-workspace" class="hub-records data-workspace" data-view="weight" data-base="{{ relativeUrl('/admin/health/api') }}" data-csrf="{{ csrf_token('health')|e('html_attr') }}">
-    <header class="insights-heading"><div><p class="soft-label">WEIGHT / 减重</p><h1>目标与体重变化</h1><p class="subtle">实测体重、七日均值与阶段目标，分别保留。</p></div><button id="data-refresh" class="hub-button" type="button">刷新数据</button></header>
+    <header class="insights-heading"><div><p class="soft-label">WEIGHT / 减重</p><h1>目标与体重变化</h1><p class="subtle">把实测变化和目标进度放在一起看。</p></div><div class="data-actions"><button class="hub-button primary" type="button" data-open-editor="weight-entry">记录体重</button><button id="data-refresh" class="hub-button" type="button">刷新</button></div></header>
     {% include 'html/stridehub/workspace-toolbar.html.twig' %}
-    <section class="hub-surface"><div class="section-title"><h2>体重概览</h2><a class="text-link" href="{{ relativeUrl('/admin/health#body-weight') }}">记录体重</a></div><div id="weight-data-metrics" class="compact-metrics"></div><div id="weight-data-chart" class="data-chart"></div><p class="subtle small">七日均值只使用对应日期及前六天的实测值，并显示样本天数；目标点是计划值。</p></section>
-    <div class="data-two-columns"><section class="hub-surface"><h2>减重目标</h2><div id="weight-goals"></div></section>
-    <section class="hub-surface"><h2 id="goal-form-title">设置目标</h2><form id="goal-form" class="data-form">
+    <section class="hub-surface"><div class="section-title"><h2>体重趋势</h2><span class="source-pill neutral">实测 / 七日均值 / 目标点</span></div><div id="weight-data-metrics" class="compact-metrics"></div><div id="weight-data-chart" class="data-chart"></div><p class="subtle small">七日均值只使用测量当天及前六天的实测值。目标点是计划值，不补全缺失测量。</p></section>
+    <div class="data-two-columns"><section class="hub-surface"><div class="section-title"><h2>减重目标</h2><button class="hub-button" type="button" data-open-editor="goal">设置目标</button></div><div id="weight-goals"></div></section>
+    <section class="hub-surface"><div class="section-title"><h2>腰围与体脂</h2><button class="hub-button" type="button" data-open-editor="measurement">记录测量</button></div><div id="measurement-summary" class="compact-metrics"></div><div id="measurements-table" class="data-table-scroll" tabindex="0" aria-label="身体测量明细，可横向滚动"></div></section></div>
+    <section class="hub-surface"><details class="data-disclosure"><summary>体重记录与趋势均值</summary><div id="weight-data-table" class="data-table-scroll" tabindex="0" aria-label="体重记录，可横向滚动"></div></details><details class="data-disclosure" id="history-panel"><summary>目标与测量的修改历史</summary><div id="record-history" class="data-history"><p>编辑已有目标或测量后，可在这里查看它的修改历史。</p></div></details></section>
+    <dialog id="goal-editor" class="data-editor" aria-labelledby="goal-editor-title">
+        <header class="editor-heading"><div><p class="soft-label">保存实际记录与计划</p><h2 id="goal-editor-title">设置目标</h2></div><button type="button" class="editor-close" data-close-editor aria-label="关闭设置目标">×</button></header>
+        <p class="subtle small editor-hint">关闭窗口会保留未保存的内容，离开页面前请保存。</p>
+        <form id="goal-form" class="data-form">
         <label class="wide">目标名称<input name="title" required maxlength="200" placeholder="填写你的目标"></label><label>开始日期<input name="startDate" type="date" required></label><label>结束日期<input name="endDate" type="date" required></label>
         <label>起始体重 kg<input name="startWeightKg" type="number" min="0.1" max="1000" step="0.01" required></label><label>目标体重 kg<input name="targetWeightKg" type="number" min="0.1" max="1000" step="0.01" required></label>
         <label>状态<select name="status"><option value="active">进行中</option><option value="draft">草稿</option><option value="paused">暂停</option><option value="completed">已完成</option><option value="cancelled">已取消</option></select></label>
         <label class="wide">备注<input name="notes" maxlength="2000"></label><div class="data-actions wide"><button class="hub-button primary" type="submit">保存目标</button><button class="hub-button" type="button" id="goal-reset">新建目标</button></div><p id="goal-status" class="data-message wide" role="status"></p>
-    </form><details><summary>修改记录</summary><div id="record-history" class="data-history"></div></details></section></div>
-    <section class="hub-surface"><h2>体重记录与趋势均值</h2><div id="weight-data-table" class="data-table-scroll"></div></section>
-    <div class="data-two-columns"><section class="hub-surface"><h2>腰围与体脂记录</h2><div id="measurements-table" class="data-table-scroll"></div></section>
-    <section class="hub-surface"><h2>记录身体测量</h2><form id="measurement-form" class="data-form"><label>日期<input name="date" type="date" required></label><label>腰围 cm<input name="waistCm" type="number" min="1" max="400" step="0.1"></label><label>体脂率 %<input name="bodyFatPercent" type="number" min="0" max="100" step="0.1"></label><label>来源<input name="sourceLabel" maxlength="200" placeholder="例如：家用体脂秤"></label><label class="wide">备注<input name="notes" maxlength="2000"></label><div class="data-actions wide"><button class="hub-button primary" type="submit">保存测量</button><button class="hub-button" id="measurement-reset" type="button">新建测量</button></div><p id="measurement-status" class="data-message wide" role="status"></p></form></section></div>
+    </form>
+    </dialog>
+    <dialog id="measurement-editor" class="data-editor" aria-labelledby="measurement-editor-title">
+        <header class="editor-heading"><div><p class="soft-label">保存实际记录与计划</p><h2 id="measurement-editor-title">记录身体测量</h2></div><button type="button" class="editor-close" data-close-editor aria-label="关闭记录身体测量">×</button></header>
+        <p class="subtle small editor-hint">关闭窗口会保留未保存的内容，离开页面前请保存。</p>
+        <form id="measurement-form" class="data-form"><label>日期<input name="date" type="date" required></label><label>腰围 cm<input name="waistCm" type="number" min="1" max="400" step="0.1"></label><label>体脂率 %<input name="bodyFatPercent" type="number" min="0" max="100" step="0.1"></label><label>来源<input name="sourceLabel" maxlength="200" placeholder="例如：家用体脂秤"></label><label class="wide">备注<input name="notes" maxlength="2000"></label><div class="data-actions wide"><button class="hub-button primary" type="submit">保存测量</button><button class="hub-button" id="measurement-reset" type="button">新建测量</button></div><p id="measurement-status" class="data-message wide" role="status"></p></form>
+    </dialog>
+    <dialog id="weight-entry-editor" class="data-editor" aria-labelledby="weight-entry-editor-title">
+        <header class="editor-heading"><div><p class="soft-label">保存实际记录与计划</p><h2 id="weight-entry-editor-title">记录体重</h2></div><button type="button" class="editor-close" data-close-editor aria-label="关闭记录体重">×</button></header>
+        <p class="subtle small editor-hint">关闭窗口会保留未保存的内容，离开页面前请保存。</p>
+        <form id="weight-entry-form" class="data-form"><label>测量日期<input name="date" type="date" required></label><label>体重 kg<input name="weightKg" type="number" min="0.1" max="1000" step="0.01" required></label><label class="wide">来源说明<input name="sourceLabel" maxlength="200" placeholder="例如：家用体重秤"></label><label class="wide">备注<input name="notes" maxlength="2000"></label><p id="weight-existing" class="data-context wide"></p><div class="data-actions wide"><button type="submit" class="hub-button primary">保存体重</button><button type="button" class="hub-button" id="weight-entry-review">读取最新记录</button></div><p id="weight-entry-status" class="data-message wide" role="status"></p></form>
+    </dialog>
 </div>
 {% endblock %}

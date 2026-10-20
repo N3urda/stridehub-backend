@@ -5,10 +5,12 @@
 {% block head_scripts %}<script defer src="{{ relativeUrl(asset('js/stridehub-data.js')) }}"></script><script defer src="{{ relativeUrl(asset('js/stridehub-plans.js')) }}"></script>{% endblock %}
 {% block page_content %}
 <div id="plans-app" class="hub-records data-workspace" data-base="{{ relativeUrl('/admin') }}" data-csrf="{{ csrf_token('health')|e('html_attr') }}">
-    <header class="insights-heading"><div><p class="soft-label">我的计划</p><h1>训练日程与计划</h1><p class="subtle">查看训练安排、分段目标与完成记录。</p></div><button id="plans-refresh" class="hub-button" type="button">刷新计划</button></header>
+    <header class="insights-heading"><div><p class="soft-label">我的计划</p><h1>训练、饮食与目标</h1><p class="subtle">按日期查看安排，对照已完成的训练和实际记录。</p></div><button id="plans-refresh" class="hub-button" type="button">刷新计划</button></header>
     <div id="plans-status" class="hub-notice" role="status" aria-live="polite" hidden></div>
-    <nav class="plan-filter" aria-label="计划类型"><button type="button" data-category="all" class="selected" aria-pressed="true">全部</button><button type="button" data-category="training">训练</button><button type="button" data-category="weight">减重</button><button type="button" data-category="sleep">作息</button><button type="button" data-category="other">其他</button></nav>
+    <nav class="plan-filter" aria-label="计划类型"><button type="button" data-category="all" class="selected" aria-pressed="true">全部</button><button type="button" data-category="training">训练</button><button type="button" data-category="nutrition">饮食</button><button type="button" data-category="weight">减重</button><button type="button" data-category="sleep">作息</button><button type="button" data-category="other">其他</button></nav>
+    <div class="plan-week-controls"><div class="data-actions"><button class="hub-button" type="button" id="plans-prev">← 上一段</button><button class="hub-button" type="button" id="plans-current">今天起 7 天</button><button class="hub-button" type="button" id="plans-next">下一段 →</button></div><span id="plans-period" class="subtle small"></span></div>
     <form id="plans-range" class="data-range"><label>开始日期<input type="date" name="from" required></label><label>结束日期<input type="date" name="to" required></label><button class="hub-button" type="submit">查看日程</button><a class="text-link" href="{{ relativeUrl('/admin/training') }}">编辑训练课表</a><a class="text-link" href="{{ relativeUrl('/admin/nutrition') }}">饮食计划</a><a class="text-link" href="{{ relativeUrl('/admin/weight') }}">减重目标</a></form>
+    <section id="plans-summary" class="hub-surface compact-metrics" aria-label="所选日期计划概览"></section>
     <div id="plan-stream" class="hub-plan-stream"><p class="empty-note">正在读取已保存的计划…</p></div>
 </div>
 {% endblock %}
