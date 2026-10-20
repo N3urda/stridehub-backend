@@ -1,0 +1,139 @@
+#!/usr/bin/env python3
+"""Local MCP process manager. No dependencies beyond Python 3 and project PHP."""
+import argparse
+import fcntl
+import json
+import os
+from pathlib import Path
+import secrets
+import shutil
+import signal
+import socket
+import subprocess
+import sys
+import time
+import urllib.error
+import urllib.request
+
+ROOT = Path(__file__).resolve().parent.parent
+RUNTIME = ROOT / "var/runtime/mcp"
+STATE = RUNTIME / "server.json"
+ROUTER = ROOT / "tools/mcp/router.php"
+
+
+def save_private(path, value):
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as out:
+        json.dump(value, out, ensure_ascii=False, indent=2)
+        out.write("\n")
+    path.chmod(0o600)
+
+
+def environment():
+    env = os.environ.copy()
+    env.setdefault("APP_ENV", "prod")
+    env.setdefault("APP_DEBUG", "0")
+    # Existing application configuration (.env.local / process env) wins in bootstrap.php.
+    path = RUNTIME / "credentials.json"
+    if not path.exists():
+        save_private(path, {"token": secrets.token_urlsafe(48), "appSecret": secrets.token_hex(32)})
+    return env
+
+
+def active(state):
+    if not state:
+        return False
+    try:
+        command = subprocess.check_output(["ps", "-p", str(state["pid"]), "-o", "args="], text=True).strip()
+        return str(ROUTER) in command and f"127.0.0.1:{state['port']}" in command
+    except subprocess.CalledProcessError:
+        return False
+
+
+def ready(port):
+    try:
+        urllib.request.urlopen(f"http://127.0.0.1:{port}/mcp", timeout=2)
+    except urllib.error.HTTPError as error:
+        return error.code == 401
+    except (OSError, urllib.error.URLError):
+        pass
+    return False
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("action", choices=["start", "stop", "status", "stdio", "init", "config"])
+    parser.add_argument("--port", type=int, default=8082)
+    args = parser.parse_args()
+    if not 1024 <= args.port <= 65535:
+        parser.error("port must be between 1024 and 65535")
+    RUNTIME.mkdir(parents=True, exist_ok=True, mode=0o700)
+    RUNTIME.chmod(0o700)
+    php = os.environ.get("STRIDEHUB_PHP") or shutil.which("php")
+    if not php or not (ROOT / "vendor/autoload.php").exists():
+        parser.error("PHP 8.5 and composer install are required")
+    # Serialize initialization/start/stop so concurrent clients do not rotate credentials.
+    with (RUNTIME / "manager.lock").open("a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        env = environment()
+        state = json.loads(STATE.read_text()) if STATE.exists() else None
+        if args.action == "stdio":
+            # The descriptor is non-inheritable; exec releases the manager lock.
+            os.chdir(ROOT)
+            os.execve(php, [php, "-d", "display_errors=stderr", str(ROOT / "tools/mcp/console.php"), "app:mcp:serve", "--no-interaction", "--no-ansi"], env)
+        if args.action == "init":
+            (ROOT / "storage/database").mkdir(parents=True, exist_ok=True, mode=0o700)
+            return subprocess.call([php, str(ROOT / "tools/mcp/console.php"), "doctrine:migrations:migrate", "--no-interaction"], cwd=ROOT, env=env)
+        if args.action == "config":
+            path = RUNTIME / "mcp.json"
+            save_private(path, {"mcpServers": {"stridehub": {"command": sys.executable, "args": [str(ROOT / "bin/stridehub-mcp"), "stdio"], "env": {"STRIDEHUB_PHP": php}}}})
+            print(path)
+            return 0
+        if args.action == "status":
+            running = active(state)
+            print(json.dumps({"running": running, "ready": running and ready(state["port"]), "url": f"http://127.0.0.1:{state['port']}/mcp" if running else None, "pid": state["pid"] if running else None}))
+            return 0 if running else 1
+        if args.action == "stop":
+            if active(state):
+                os.kill(state["pid"], signal.SIGTERM)
+                for _ in range(50):
+                    if not active(state):
+                        break
+                    time.sleep(0.1)
+                else:
+                    print("MCP process has not stopped; retained state for inspection.", file=sys.stderr)
+                    return 1
+            STATE.unlink(missing_ok=True)
+            print("StrideHub MCP stopped.")
+            return 0
+        if active(state):
+            print(f"StrideHub MCP already running: http://127.0.0.1:{state['port']}/mcp")
+            return 0
+        with socket.socket() as probe:
+            try:
+                probe.bind(("127.0.0.1", args.port))
+            except OSError:
+                parser.error("port is already in use; choose --port without stopping other processes")
+        log_path = RUNTIME / "server.log"
+        with log_path.open("ab") as log:
+            log_path.chmod(0o600)
+            process = subprocess.Popen([php, "-d", "memory_limit=512M", "-d", "display_errors=0", "-S", f"127.0.0.1:{args.port}", str(ROUTER)],
+                                       cwd=ROOT, env=env, stdin=subprocess.DEVNULL, stdout=log, stderr=log, start_new_session=True)
+        save_private(STATE, {"pid": process.pid, "port": args.port})
+        for _ in range(40):
+            if process.poll() is not None:
+                break
+            if ready(args.port):
+                print(f"StrideHub MCP running: http://127.0.0.1:{args.port}/mcp")
+                print(f"Private credentials: {RUNTIME / 'credentials.json'} (environment/.env.local overrides apply)")
+                return 0
+            time.sleep(0.25)
+        if process.poll() is None:
+            process.terminate()
+        STATE.unlink(missing_ok=True)
+        print(f"Startup failed. Inspect local log: {log_path}", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

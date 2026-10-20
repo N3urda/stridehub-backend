@@ -60,7 +60,7 @@ final readonly class GateRequestListener implements EventSubscriberInterface
 
     private function isSetupIndependent(string $path): bool
     {
-        if (in_array($path, ['/', '/admin', '/admin/login', '/admin/logout', '/admin/upload', '/admin/importStatus'], true)) {
+        if (in_array($path, ['/mcp', '/', '/admin', '/admin/login', '/admin/logout', '/admin/upload', '/admin/importStatus'], true)) {
             return true;
         }
 

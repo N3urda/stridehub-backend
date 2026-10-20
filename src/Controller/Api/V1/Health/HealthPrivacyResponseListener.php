@@ -14,7 +14,7 @@ final readonly class HealthPrivacyResponseListener
 {
     public function __invoke(ResponseEvent $event): void
     {
-        if (preg_match('#^/(?:api/v1/health|admin/health)(?:/|$)#', $event->getRequest()->getPathInfo())) {
+        if (preg_match('#^/(?:mcp|api/v1/health|admin/health)(?:/|$)#', $event->getRequest()->getPathInfo())) {
             $event->getResponse()->headers->set('Cache-Control', 'no-store, private');
         }
     }

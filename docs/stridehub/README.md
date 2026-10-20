@@ -1,6 +1,6 @@
 # StrideHub 运动健康管理
 
-以数据的保存与展示为核心，通过 HTTP API + Skill 让外部 AI 聊天工具读取真实记录、调整训练和生活计划。主界面为总览、身体、运动、饮食、减重、计划；Dreeve 原有导入与高级设置仍保留在次级入口。项目不提供 MCP 服务。
+以数据的保存与展示为核心，通过专用 MCP 服务让外部 AI 聊天工具读取真实记录、调整训练、饮食和减重计划。主界面为总览、身体、运动、饮食、减重、计划；Dreeve 原有导入与高级设置仍保留在次级入口。AI 接入见 [MCP 服务](MCP.md)：9 个任务型工具、自动发现参数、原子保存与操作回执。
 
 新增的量化饮食、减重目标、腰围/体脂、统一运动来源与训练日历，以及页面字段和 API 对照，见 [数据工作台](DATA-WORKSPACE.md)。分析与问答留在外部聊天工具，页面展示已保存的记录、图表、计划与实际差异。
 
@@ -25,7 +25,7 @@ Android 客户端源码位于 [`android/`](../../android/README.md)。安装 APK
 
 [详细 Zepp 日数据](zepp-data-api.md)、[Zepp 运动及原始传感器](zepp-workouts-api.md)、[健康计划与体重 API](HEALTH-PLANS-AND-WEIGHT.md)。新记录复用已有存储表，无额外数据库迁移；升级代码后需重启应用及 daemon 才会加载新路由/定时任务。daemon 启动且授权存在时，每小时第 15 分钟同步日数据、第 25 分钟同步运动。只启动网页进程不代表后台调度运行。
 
-## 给 Codex 使用的 HTTP API
+## 兼容 HTTP API（新 AI 接入使用 MCP）
 
 基础路径：`/api/v1/training`。所有接口包括 OpenAPI 文档都使用现有 Dreeve Bearer 鉴权。管理员界面的 API Key 设置可以生成密钥；把它写入服务器的 `DREEVE_API_KEY`，重启服务后生效。轮换时替换该配置，旧密钥随之失效。密钥只放环境变量，不能提交到 Git，也不需要填入网页。
 
@@ -99,7 +99,7 @@ curl --fail-with-body -X PUT "$STRIDEHUB_URL/api/v1/training/sessions/batch" \
 
 ## 用 Skill 管理运动与健康
 
-仓库提供 [`stridehub-coach`](../../skills/stridehub-coach/SKILL.md)。它通过上述 HTTP API 工作，支持运动复盘、课表调整、体检摘要整理、血压记录和 Zepp 睡眠复盘，不需要 MCP。运行客户端只需 Python 3 标准库。
+仓库提供 [`stridehub-coach`](../../skills/stridehub-coach/SKILL.md)。它优先通过 MCP 完成身体与运动复盘、课表/饮食/减重计划、实际记录及健康背景整理。以下 Python HTTP 客户端保留给明确使用旧接口的兼容任务，只需 Python 3 标准库。
 
 将 `skills/stridehub-coach` 放入 Codex 的技能目录。本机已安装为指向本仓库目录的链接，连接配置位于 `~/.config/stridehub/connection.json`，只保存服务地址和本地凭据文件路径，凭据本身不进入 Skill 或 Git。其他机器可复制技能目录并创建自己的配置：
 
