@@ -371,7 +371,13 @@ final readonly class ZeppDataService
                 $record['fieldSources']['samples.stress'][] = $rawId;
             }
         } elseif ('blood_oxygen' === $type) {
-            $value = ZeppDataParser::number($event['extra']['spo2'] ?? null, 1, 100);
+            $extra = $event['extra'] ?? [];
+            if (is_string($extra)) {
+                $extra = json_decode($extra, true, 12);
+            }
+            // ODI/OSA events are retained as source records, not spot SpO2 readings.
+            $value = in_array($event['subType'] ?? 'click', ['click'], true) && is_array($extra)
+                ? ZeppDataParser::number($extra['spo2'] ?? null, 1, 100) : null;
             if (null !== $value) {
                 $record['samples']['oxygen'][] = ['at' => $at->format(DATE_ATOM), 'percent' => $value];
                 $values = array_column($record['samples']['oxygen'], 'percent');

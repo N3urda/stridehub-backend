@@ -87,6 +87,63 @@ final class ZeppDataTest extends TestCase
         self::assertFalse($history[0]['options']['allow_redirects']);
     }
 
+    public function testEventsUseRegionalAccountIdWithoutChangingLegacyBandIdentity(): void
+    {
+        $path = $this->directory.'/storage/zepp/credentials.json';
+        $stored = json_decode(file_get_contents($path), true);
+        $stored['eventsUserId'] = 'events-user';
+        file_put_contents($path, json_encode($stored));
+        $credentials = new ZeppCredentials(KernelProjectDir::fromString($this->directory))->read();
+        self::assertSame('fixture-user', $credentials['userId']);
+        $history = [];
+        $stack = HandlerStack::create(new MockHandler([
+            new Response(200, [], '{"items":[]}'), new Response(200, [], '{"code":1,"data":[]}'),
+            new Response(200, [], '{"items":[]}'),
+        ]));
+        $stack->push(Middleware::history($history));
+        $client = new ZeppDataClient(new Client(['handler' => $stack]));
+        $from = new \DateTimeImmutable('2026-09-30T00:00:00+08:00');
+        $client->events($credentials, 'readiness', $from, $from->modify('+1 day'), 'Asia/Shanghai');
+        $client->band($credentials, '2026-09-30', '2026-09-30');
+        unset($credentials['eventsUserId']);
+        $client->events($credentials, 'all_day_stress', $from, $from->modify('+1 day'), 'Asia/Shanghai');
+        self::assertSame('api-mifit-cn3.zepp.com', $history[0]['request']->getUri()->getHost());
+        self::assertSame('/users/events-user/events', $history[0]['request']->getUri()->getPath());
+        parse_str($history[1]['request']->getUri()->getQuery(), $query);
+        self::assertSame('fixture-user', $query['userid']);
+        self::assertSame('/users/fixture-user/events', $history[2]['request']->getUri()->getPath());
+        self::assertFalse($history[0]['options']['allow_redirects']);
+        $stored['eventsUserId'] = '../other-user';
+        file_put_contents($path, json_encode($stored));
+        $this->expectException(ZeppSyncError::class);
+        new ZeppCredentials(KernelProjectDir::fromString($this->directory))->read();
+    }
+
+    public function testEncodedOxygenAndExtendedRecordsAreRetainedWithoutTreatingOsaAsSpotReadings(): void
+    {
+        $at = strtotime('2026-09-30T12:00:00+08:00') * 1000;
+        $oxygen = [
+            ['timestamp' => $at, 'subType' => 'click', 'extra' => '{"spo2":98}'],
+            ['timestamp' => $at + 1000, 'subType' => 'osa_event', 'extra' => '{"spo2":87,"spo2_decrease":7}'],
+            ['timestamp' => $at + 2000, 'subType' => 'click', 'extra' => 'malformed'],
+        ];
+        [$service] = $this->service([
+            self::bandResponse(), new Response(200, [], '{"items":[]}'),
+            new Response(200, [], json_encode(['items' => $oxygen])),
+            new Response(200, [], json_encode(['items' => [['timestamp' => $at, 'totalPai' => '45']]])),
+            new Response(200, [], json_encode(['items' => [['timestamp' => (string) $at, 'rdnsScore' => '72']]])),
+        ]);
+        self::assertSame('success', $service->sync(2)['state']);
+        $day = $service->day('2026-09-30');
+        self::assertSame(98, $day['oxygen']['averagePercent']);
+        self::assertSame(1, $day['oxygen']['sampleCount']);
+        self::assertCount(6, $day['rawRecordIds']);
+        $raw = array_map(fn (string $id): array => $service->raw($id)['payload'], $day['rawRecordIds']);
+        self::assertContains($oxygen[1], $raw);
+        self::assertSame('success', $service->status()['sources']['readiness']['state']);
+        self::assertSame('success', $service->status()['sources']['PaiHealthInfo']['state']);
+    }
+
     public function testDetailedSyncKeepsSourceAndSeparatesSleepWakeDateFromDailyActivity(): void
     {
         [$service, $repository] = $this->service(self::responses());

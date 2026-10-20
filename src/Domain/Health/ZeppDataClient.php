@@ -15,7 +15,7 @@ final readonly class ZeppDataClient
     {
     }
 
-    /** @param array{userId:string, host:string, appToken:string} $credentials
+    /** @param array{userId:string, host:string, appToken:string, eventsUserId?:string} $credentials
      * @return list<mixed>
      */
     public function band(array $credentials, string $from, string $to): array
@@ -30,7 +30,7 @@ final readonly class ZeppDataClient
         return $payload['data'];
     }
 
-    /** @param array{userId:string, host:string, appToken:string} $credentials
+    /** @param array{userId:string, host:string, appToken:string, eventsUserId?:string} $credentials
      * @return list<mixed>
      */
     public function events(array $credentials, string $type, \DateTimeImmutable $from, \DateTimeImmutable $to, string $timezone): array
@@ -38,8 +38,10 @@ final readonly class ZeppDataClient
         if (!in_array($type, self::EVENTS, true)) {
             throw new \InvalidArgumentException('Unsupported event type.');
         }
-        // This API uses the global events host, independently of the regional band host.
-        $payload = $this->request($credentials, 'api-mifit.zepp.com', '/users/'.$credentials['userId'].'/events', [
+        // Legacy band IDs can differ from the authenticated account's events ID.
+        // Keep the legacy ID (and stored account ownership) unchanged.
+        $eventsUserId = $credentials['eventsUserId'] ?? $credentials['userId'];
+        $payload = $this->request($credentials, $credentials['host'], '/users/'.$eventsUserId.'/events', [
             'eventType' => $type, 'from' => $from->getTimestamp() * 1000, 'to' => $to->getTimestamp() * 1000 - 1, 'limit' => 1000, 'timeZone' => $timezone,
         ]);
         if (!is_array($payload['items'] ?? null) || !array_is_list($payload['items']) || count($payload['items']) >= 1000) {
@@ -49,7 +51,7 @@ final readonly class ZeppDataClient
         return $payload['items'];
     }
 
-    /** @param array{userId:string, host:string, appToken:string} $credentials
+    /** @param array{userId:string, host:string, appToken:string, eventsUserId?:string} $credentials
      * @param array<string, int|string> $query
      *
      * @return array<string, mixed>

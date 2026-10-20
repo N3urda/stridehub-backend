@@ -16,6 +16,12 @@ All routes require the existing Bearer API key under `/api/v1/health/zepp`, or a
 
 The command `app:health:zepp:sync --days=90` performs an initial backfill. The existing daemon refreshes configured daily connections at minute 15 of every hour and workouts at minute 25 using `app:health:zepp:workouts:sync`. `--if-configured` skips absent connections. Source time windows are fetched in small chunks. The legacy sleep read API receives the same normalized sleep records, preserving existing consumers.
 
+### Legacy and events account identifiers
+
+The legacy band/workout `userId` can differ from the account ID returned by an authenticated `/v2/users/me/events` response. Using the legacy ID for `/users/{id}/events` then returns HTTP 403 with code `-2005`, even while sleep and workout synchronization succeeds. The private credentials file accepts an optional `eventsUserId`, verified from a response for the same authenticated account; only events use this ID, on the configured regional host. Do not replace the legacy `userId` or reset stored account ownership. Without the optional field, existing same-ID accounts retain their behavior. Credential refresh preserves the optional field for the same legacy account.
+
+Blood-oxygen `extra` may be a JSON string. Only `click` spot readings contribute to the oxygen sample chart; ODI/OSA events remain intact in raw source records. PAI and readiness records are also preserved in raw sources; their successful import does not imply separate dashboard cards exist.
+
 ## Daily record
 
 Each record includes `date`, `sourceDate`, `source: zepp`, `timeZone`, `lastSyncedAt`, `rawRecordIds`, `sourceFields`, `retainedFields`, and the groups below. A missing measurement is **null**, never a synthetic zero. A measured zero, such as zero steps, remains zero. `coverage` marks each group `available` or `missing`; source failures live in `/status.sources` independently of historical availability. A step goal alone does not count as observed activity. `retainedFields` identifies values or series preserved from earlier source versions when the latest response omitted them; AI consumers must not treat them as newly measured.
