@@ -1,6 +1,6 @@
 ---
 name: stridehub-coach
-description: Use when a user wants to use StrideHub to review running records, blood pressure or Zepp sleep, adjust training schedules, incorporate examination reports, or plan daily routines (运动健康管理、血压、睡眠、体检报告、动态课表).
+description: Use when a user wants to use StrideHub to review activity and detailed Zepp records, record weight or blood pressure, adjust training schedules, incorporate examination reports, or save weight, sleep and daily routine plans (运动健康管理、体重、血压、睡眠、Zepp 数据、体检报告、动态课表、减重与作息计划).
 ---
 
 # StrideHub Coach
@@ -26,6 +26,7 @@ python3 <skill-directory>/scripts/stridehub_api.py request GET /api/v1/training/
 | 解读或记录体检报告、医嘱 | [报告与健康背景](references/health-reports.md)；原始材料及已有健康背景 |
 | 记录或复盘血压、查看 Zepp 睡眠 | [血压与睡眠](references/measurements.md)；测量时间、来源、近期记录及同步状态 |
 | 调整睡眠、饮食、日常安排 | [报告与健康背景](references/health-reports.md)；当前健康约束、实际作息、用户目标和训练安排 |
+| 记录体重、读取完整 Zepp 数据、保存减重或作息计划 | [数据记录与 AI 计划](references/data-records.md)；真实数据覆盖、健康约束及已有计划 |
 
 ## 执行约定
 
@@ -35,5 +36,6 @@ python3 <skill-directory>/scripts/stridehub_api.py request GET /api/v1/training/
 - 保留原始单位、实验室参考范围、来源与日期。模糊数字不猜测；不把异常指标直接换算成跑量、配速、药物或补充剂处方。实际解读医学问题时查阅当前可靠医学来源；需要诊疗判断的部分交由医疗专业人员。
 - 写入前取最新版本，尽量只提交目标字段；嵌套对象及数组是整体替换，必须合并保留无关内容。409 后重新读取并比较，不能只换版本重发旧对象。冲突或网络不确定的处理见 API 参考。
 - 无导入记录、缺失传感器和未填写反馈都保持未知。使用服务端汇总；不从第一页记录推断全部历史，不编造恢复分数。
+- 数据读取与计划保存见[数据记录与 AI 计划](references/data-records.md)。体重 API 复用已有历史，使用字符串版本；健康计划使用整数版本。计划目标不能写成体重测量，AI 来源和理由必须独立保留。
 - 血压记录使用专门的健康 API，保留测量时间与姿势；Zepp 睡眠是独立的设备观察，不能覆盖用户手填的睡眠或当作临床诊断。需要使用它们时按测量参考读取，勿把单次读数直接换算成训练强度。
 - 结束时说明依据、建议、已保存的记录及版本、仍缺的数据。AI 建议和正式课表分开表述，成功响应后重新读取核验。此 Skill 按调用执行，不会自行启动后台规划、通知或数据同步。

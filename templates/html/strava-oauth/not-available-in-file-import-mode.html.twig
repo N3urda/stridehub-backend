@@ -1,19 +1,15 @@
+{% extends 'html/stridehub/shell.html.twig' %}
+{% set activeNav = 'settings' %}
+{% set pageKicker = 'ADVANCED · DATA CONNECTIONS' %}
+{% set showPageHeading = false %}
+{% set showLogout = false %}
+{% set workspaceLabel = '数据连接' %}
+{% block title %}Strava 数据连接 · StrideHub{% endblock %}
+{% block base_stylesheets %}<link href="{{ relativeUrl(asset('css/dist/tailwind.min.css')) }}" rel="stylesheet">{% endblock %}
+{% block page_content %}
 {% autoescape false %}
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <title>{{ appName }}</title>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width">
-    <meta name="theme-color" content="#F26822">
-    <meta name="mobile-web-app-title" content="{{ appName }}">
-    <meta name="mobile-web-app-capable" content="yes">
-    <link rel="icon" type="image/x-icon" href="{{ relativeUrl('assets/images/logo.svg') }}">
-    <link href="{{ relativeUrl(asset('css/dist/tailwind.min.css')) }}" rel="stylesheet"/>
-</head>
-<body class="min-h-screen bg-gray-50 text-gray-900 antialiased">
-{% include 'html/navigation/top-nav-bar.html.twig' %}
-<section class="flex min-h-screen flex-col justify-center px-6 py-12 sm:px-12">
+<nav class="hub-admin-return" aria-label="返回总览"><a href="{{ relativeUrl('/admin/insights') }}">← 返回总览</a></nav>
+<section class="hub-legacy-setup flex flex-col justify-center px-0 py-8">
     <div class="mx-auto w-full max-w-xl p-6 bg-white border border-gray-200 rounded-lg shadow-xs">
         <h2 class="text-2xl font-bold tracking-tight">Strava authorization is not needed here</h2>
         <p class="mt-1 text-sm text-gray-500">
@@ -28,6 +24,5 @@
         </a>
     </div>
 </section>
-</body>
-</html>
 {% endautoescape %}
+{% endblock %}

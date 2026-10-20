@@ -130,6 +130,15 @@
         const records = state.sleeps; const summary = $('#sleep-summary'); const target = $('#sleep-records'); summary.replaceChildren(); target.replaceChildren();
         const measured = records.filter(r => r.totalMinutes != null);
         if (records.length) { const latest = records[0]; metric(summary, '期间最近一晚', minutes(latest.totalMinutes), `${latest.date} · Zepp / Amazfit`); metric(summary, '有记录夜晚的平均时长', measured.length ? minutes(Math.round(measured.reduce((n,r) => n + r.totalMinutes, 0) / measured.length)) : '未知', `${measured.length} 晚有时长，空缺日期不参与`); }
+        let visual = $('#body-sleep-visual');
+        if (!visual) { visual = node('div', 'body-sleep-visual'); visual.id = 'body-sleep-visual'; summary.before(visual); }
+        visual.replaceChildren();
+        if (records.length) {
+            const latest = records[0], head = node('div', 'body-sleep-head'), text = node('div');
+            text.append(node('p', 'subtle', latest.date + ' · 最近一晚'), node('div', 'sleep-duration', minutes(latest.totalMinutes)), node('p', 'subtle', displayTime(latest.startedAt) + ' 入睡 · ' + displayTime(latest.endedAt) + ' 醒来'));
+            const moon = svgNode('svg', {viewBox: '0 0 80 80', class: 'sleep-icon', 'aria-hidden': 'true'}); moon.append(svgNode('path', {d: 'M46 8A31 31 0 1 0 72 53 30 30 0 0 1 46 8Z'})); head.append(text, moon);
+            const bar = node('div', 'stage-bar'), legend = node('div', 'stage-legend'); window.StrideHubData?.stages(bar, legend, latest); visual.append(head, bar, legend, node('p', 'subtle', '各阶段累计时长；不代表阶段发生顺序。')); visual.hidden = false;
+        } else visual.hidden = true;
         const chart = $('#sleep-chart');
         if (!measured.length) chart.replaceChildren(node('p', 'health-empty', '这段时间暂无可用睡眠时长。可以扩大日期范围，或完成 Zepp 同步后重试。'));
         else {
@@ -152,7 +161,7 @@
         const last = status.lastSuccessAt ? `最近成功：${displayTime(status.lastSuccessAt)}。` : '尚无成功同步记录。';
         output('#sleep-status', `${known[status.state] || (status.configured ? 'Zepp 已连接' : '尚未连接 Zepp')}。${last}${status.lastError ? ' ' + status.lastError : ''}${status.nextAction ? ' ' + status.nextAction : ''}`, !!status.lastError);
         $('#sleep-sync').disabled = !status.configured || status.state === 'syncing';
-        $('#sleep-setup').textContent = status.configured ? '连接已配置。后台会定期同步；手动同步可立即检查新记录。' : '尚未配置 Zepp 连接。请在运行 StrideHub 的服务器完成 Zepp 登录连接，再刷新本页。';
+        $('#sleep-setup').textContent = status.configured ? '连接已配置。后台任务启动后会定期同步，也可手动检查新记录。' : '尚未配置 Zepp 连接。请在运行 StrideHub 的服务器完成 Zepp 登录连接，再刷新本页。';
     }
     function query() { return '?from=' + range.elements.from.value + '&to=' + range.elements.to.value; }
     async function refresh() {

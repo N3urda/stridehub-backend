@@ -42,7 +42,6 @@ Activity: Actividad
 'Add widget': 'Añadir widget'
 'Add {fit}, {tcx} or {gpx} files. They are processed every few minutes.': 'Añade archivos {fit}, {tcx} o {gpx}. Se procesan cada pocos minutos.'
 Admin: Admin
-'Admin panel': 'Panel de administración'
 'Admin username': 'Nombre de usuario de administrador'
 'Advanced (per-date & per-sport-type overrides)': 'Avanzado (excepciones por fecha y tipo de deporte)'
 'Age-based estimate': 'Estimación basada en la edad'
@@ -66,7 +65,6 @@ Apply: Aplicar
 'Are you sure you want to delete {task} on {component} for {gear}, performed on {date}?': '¿Estás seguro de que quieres eliminar la tarea {task} en el componente {component} para el equipamiento {gear}, realizada el {date}?'
 'Are you sure you want to remove the {widget} widget?': '¿Estás seguro de que quieres quitar el widget {widget}?'
 'Assign gear': 'Asignar equipamiento'
-'Athlete settings': 'Ajustes del atleta'
 'Attached to': 'Acoplado a'
 'Automatically fill in gear, commute, sport type and more on newly imported activities. Rules run top to bottom, and can also be applied to activities you already imported.': 'Rellena automáticamente el equipamiento, los desplazamientos, el tipo de deporte y más en las actividades recién importadas. Las reglas se ejecutan de arriba a abajo y también se pueden aplicar a las actividades que ya hayas importado.'
 'Automation rules': 'Reglas de automatización'
@@ -75,10 +73,8 @@ Apply: Aplicar
 'Average cadence': 'Cadencia media'
 'Average heart rate (bpm)': 'Average heart rate (bpm)'
 'Average power': 'Potencia media'
-'Back to app': 'Volver a la aplicación'
 'Back to the admin panel': 'Volver al panel de administración'
 'Base URI': 'URI base'
-'Before you can use the app, we need to know a few things about you. These are used to calculate your heart rate zones and training load. You can fine-tune all other settings later on.': 'Antes de poder usar la aplicación, necesitamos saber algunas cosas sobre ti. Se utilizan para calcular tus zonas de frecuencia cardíaca y tu carga de entrenamiento. Podrás ajustar todos los demás parámetros más adelante.'
 Birthday: 'Fecha de nacimiento'
 'Calculate energy (kJ)': 'Calcular energía (kJ)'
 Cancel: Cancelar
@@ -148,8 +144,6 @@ Endpoint: Endpoint
 'Ends near': 'Termina cerca de'
 'Energy in kJ will be calculated from average power × moving time, for activities that do not already provide it.': 'La energía en kJ se calculará a partir de la potencia media × el tiempo en movimiento, para las actividades que no lo proporcionen.'
 'Enter an existing activity to preview which rules would apply and what they would change. Nothing is saved.': 'Introduce una actividad existente para previsualizar qué reglas se aplicarían y qué cambiarían. No se guardará nada.'
-'Enter your password': 'Introduce tu contraseña'
-'Enter your username': 'Introduce tu nombre de usuario'
 Every: Cada
 FTP: FTP
 'FTP history (cycling)': 'Historial de FTP (ciclismo)'
@@ -283,7 +277,6 @@ Operator: Operador
 'PHP date format for short dates, e.g. d-m-y renders to 01-01-25.': 'Formato de fecha de PHP para fechas cortas, ej. d-m-y se muestra como 01-01-25.'
 'Parts you track maintenance for, eg: chains, cassettes, brake pads...': 'Piezas de las que haces seguimiento de mantenimiento, ej: cadenas, casetes, pastillas de freno...'
 'Passes near': 'Pasa cerca de'
-Password: Contraseña
 'Paste the value above, replacing any key that is already there.': 'Pega el valor anterior, reemplazando cualquier clave que ya esté ahí.'
 'Performed on': 'Realizado el'
 'Photos attached to your Strava activities will not be downloaded or stored on disk. Photos that were downloaded before are kept.': 'Photos attached to your Strava activities will not be downloaded or stored on disk. Photos that were downloaded before are kept.'
@@ -302,7 +295,6 @@ Radius: Radio
 'Recording devices will appear here once activities have been imported.': 'Los dispositivos de grabación aparecerán aquí una vez que se hayan importado las actividades.'
 'Recreate your containers': 'Vuelve a crear tus contenedores'
 'Register maintenance': 'Registrar mantenimiento'
-'Remember me for 7 days': 'Recordarme durante 7 días'
 Remove: Quitar
 'Remove Eddington': 'Quitar Eddington'
 'Remove action': 'Quitar acción'
@@ -372,13 +364,9 @@ Settings: Ajustes
 'Show in dashboard widget': 'Mostrar en el widget del panel de control'
 'Show last X years by default': 'Mostrar los últimos X años por defecto'
 'Show options': 'Mostrar opciones'
-'Show password': 'Mostrar contraseña'
 'Show the workout assistant in the UI.': 'Mostrar el asistente de entrenamiento en la interfaz.'
 'Showing {first} - {last} of {total}': 'Mostrando del {first} al {last} de {total}'
-'Sign in': 'Iniciar sesión'
-'Sign in to the admin panel': 'Iniciar sesión en el panel de administración'
 'Sign out': 'Cerrar sesión'
-'Signing in...': 'Iniciando sesión...'
 'Skip activities recorded before': 'Omitir actividades registradas antes del'
 Skipped: Omitido
 'Skipped (an earlier rule stopped processing).': 'Omitido (una regla anterior detuvo el procesamiento).'
@@ -481,7 +469,6 @@ Unit: Unidad
 Uploaded: Subido
 Uploading...: Subiendo...
 'Used to calculate the training load of this activity': 'Used to calculate the training load of this activity'
-Username: 'Nombre de usuario'
 'Verify token': 'Verificar token'
 Version: Versión
 Warning: Advertencia

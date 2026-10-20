@@ -66,7 +66,7 @@ final readonly class SleepService
         $state = $configured ? ($stored['state'] ?? 'idle') : 'not_configured';
         $lastAttemptAt = $stored['lastAttemptAt'] ?? null;
         // A terminated process cannot leave an unrecoverable "syncing" badge.
-        if ('syncing' === $state && is_string($lastAttemptAt) && new \DateTimeImmutable($lastAttemptAt) < $this->clock->getCurrentDateTimeImmutable()->modify('-5 minutes')) {
+        if ('syncing' === $state && is_string($lastAttemptAt) && new \DateTimeImmutable($stored['leaseUntil'] ?? new \DateTimeImmutable($lastAttemptAt)->modify('+5 minutes')->format(DATE_ATOM)) < $this->clock->getCurrentDateTimeImmutable()) {
             $state = 'error';
         }
 
@@ -91,21 +91,18 @@ final readonly class SleepService
             throw new TrainingError('正在同步 Zepp 睡眠，请稍后刷新状态。', 409);
         }
         try {
-            $now = $this->clock->getCurrentDateTimeImmutable();
+            $now = $this->clock->getCurrentDateTimeImmutable()->setTimezone(new \DateTimeZone($this->repository->find('profile', 'default')['timezone'] ?? 'Asia/Shanghai'));
             $stored = $this->repository->find('sleep-sync', 'zepp') ?? ['version' => 0];
             // App and daemon may live in separate containers with separate /tmp flock stores.
             // The versioned DB claim below also fences those processes across the shared DB.
-            if ('syncing' === ($stored['state'] ?? null) && new \DateTimeImmutable($stored['lastAttemptAt']) > $now->modify('-5 minutes')) {
+            if ('syncing' === ($stored['state'] ?? null) && new \DateTimeImmutable($stored['leaseUntil'] ?? new \DateTimeImmutable($stored['lastAttemptAt'])->modify('+5 minutes')->format(DATE_ATOM)) > $now) {
                 throw new TrainingError('正在同步 Zepp 睡眠，请稍后刷新状态。', 409);
             }
-            $state = [...$stored, 'state' => 'syncing', 'lastAttemptAt' => $now->format(DATE_ATOM), 'lastError' => null, 'nextAction' => '正在连接 Zepp。', 'imported' => 0, 'updated' => 0, 'unchanged' => 0, 'skipped' => 0];
+            $state = [...$stored, 'state' => 'syncing', 'lastAttemptAt' => $now->format(DATE_ATOM), 'leaseUntil' => $now->modify('+5 minutes')->format(DATE_ATOM), 'lastError' => null, 'nextAction' => '正在连接 Zepp。', 'imported' => 0, 'updated' => 0, 'unchanged' => 0, 'skipped' => 0];
             $state = $this->repository->save('sleep-sync', 'zepp', $state, $stored['version']);
             try {
                 $credentials = $this->credentials->read();
-                $accountKey = hash('sha256', 'stridehub-zepp-sleep:'.$credentials['userId']);
-                if (isset($stored['accountKey']) && !hash_equals($stored['accountKey'], $accountKey)) {
-                    throw new ZeppSyncError('error', 'Zepp 账号与已保存的睡眠数据不一致。', '请恢复原账号授权；更换用户前需单独迁移或清理其睡眠数据，避免混入他人记录。');
-                }
+                $accountKey = ZeppAccountGuard::claim($this->repository, $credentials['userId']);
                 $from = $now->modify('-'.($days - 1).' days')->format('Y-m-d');
                 $to = $now->format('Y-m-d');
                 // Actual Zepp rows can be keyed one day after the local wake date.

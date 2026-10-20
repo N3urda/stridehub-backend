@@ -42,7 +42,6 @@ Activity: Tevékenység
 'Add widget': 'Widget hozzáadása'
 'Add {fit}, {tcx} or {gpx} files. They are processed every few minutes.': 'Adj hozzá {fit}, {tcx} vagy {gpx} fájlokat. Néhány percenként feldolgozásra kerülnek.'
 Admin: Admin
-'Admin panel': Adminfelület
 'Admin username': 'Admin felhasználónév'
 'Advanced (per-date & per-sport-type overrides)': 'Speciális (dátum és sporttípus szerinti felülírások)'
 'Age-based estimate': 'Életkor alapú becslés'
@@ -66,7 +65,6 @@ Apply: Alkalmaz
 'Are you sure you want to delete {task} on {component} for {gear}, performed on {date}?': 'Biztosan törölni szeretnéd a(z) {task} feladatot a(z) {component} komponensen a(z) {gear} felszereléshez, amely {date} napon történt?'
 'Are you sure you want to remove the {widget} widget?': 'Biztosan el szeretnéd távolítani a(z) {widget} widgetet?'
 'Assign gear': 'Felszerelés hozzárendelése'
-'Athlete settings': 'Sportoló beállításai'
 'Attached to': 'Hozzárendelve ehhez'
 'Automatically fill in gear, commute, sport type and more on newly imported activities. Rules run top to bottom, and can also be applied to activities you already imported.': 'Automatikusan kitölti a felszerelést, ingázást, sporttípust és továbbiakat az újonnan importált tevékenységeken. A szabályok fentről lefelé futnak, és a már importált tevékenységekre is alkalmazhatók.'
 'Automation rules': 'Automatizálási szabályok'
@@ -75,10 +73,8 @@ Apply: Alkalmaz
 'Average cadence': 'Átlagos kadencia'
 'Average heart rate (bpm)': 'Average heart rate (bpm)'
 'Average power': 'Átlagos teljesítmény'
-'Back to app': 'Vissza az alkalmazáshoz'
 'Back to the admin panel': 'Vissza az adminfelülethez'
 'Base URI': 'Alap URI'
-'Before you can use the app, we need to know a few things about you. These are used to calculate your heart rate zones and training load. You can fine-tune all other settings later on.': 'Mielőtt használni tudnád az alkalmazást, néhány dolgot tudnunk kell rólad. Ezeket a pulzuszónáid és edzésterhelésed kiszámításához használjuk. A többi beállítást később finomhangolhatod.'
 Birthday: Születésnap
 'Calculate energy (kJ)': 'Energia számítása (kJ)'
 Cancel: Mégse
@@ -148,8 +144,6 @@ Endpoint: Végpont
 'Ends near': 'A közelében ér véget'
 'Energy in kJ will be calculated from average power × moving time, for activities that do not already provide it.': 'Az energia kJ-ban az átlagos teljesítmény × mozgásidő alapján kerül kiszámításra azoknál a tevékenységeknél, amelyek ezt még nem tartalmazzák.'
 'Enter an existing activity to preview which rules would apply and what they would change. Nothing is saved.': 'Adj meg egy meglévő tevékenységet, hogy megnézd, mely szabályok érvényesülnének és mit módosítanának. Semmi nem kerül mentésre.'
-'Enter your password': 'Add meg a jelszavad'
-'Enter your username': 'Add meg a felhasználóneved'
 Every: Minden
 FTP: FTP
 'FTP history (cycling)': 'FTP-előzmények (kerékpározás)'
@@ -283,7 +277,6 @@ Operator: Operátor
 'PHP date format for short dates, e.g. d-m-y renders to 01-01-25.': 'PHP dátumformátum a rövid dátumokhoz, pl. a d-m-y így jelenik meg: 01-01-25.'
 'Parts you track maintenance for, eg: chains, cassettes, brake pads...': 'Alkatrészek, amelyek karbantartását követed, pl.: láncok, kazetták, fékbetétek...'
 'Passes near': 'Elhalad a közelében'
-Password: Jelszó
 'Paste the value above, replacing any key that is already there.': 'Illeszd be a fenti értéket, felülírva a már ott lévő kulcsot.'
 'Performed on': 'Elvégezve ekkor'
 'Photos attached to your Strava activities will not be downloaded or stored on disk. Photos that were downloaded before are kept.': 'Photos attached to your Strava activities will not be downloaded or stored on disk. Photos that were downloaded before are kept.'
@@ -302,7 +295,6 @@ Radius: Sugár
 'Recording devices will appear here once activities have been imported.': 'A rögzítő eszközök itt jelennek meg, miután tevékenységeket importáltál.'
 'Recreate your containers': 'Hozd létre újra a konténereket'
 'Register maintenance': 'Karbantartás rögzítése'
-'Remember me for 7 days': 'Emlékezz rám 7 napig'
 Remove: Eltávolítás
 'Remove Eddington': 'Eddington eltávolítása'
 'Remove action': 'Művelet eltávolítása'
@@ -372,13 +364,9 @@ Settings: Beállítások
 'Show in dashboard widget': 'Megjelenítés a dashboard widgetben'
 'Show last X years by default': 'Alapértelmezés szerint az utolsó X év megjelenítése'
 'Show options': 'Beállítások megjelenítése'
-'Show password': 'Jelszó megjelenítése'
 'Show the workout assistant in the UI.': 'Az edzésasszisztens megjelenítése a felületen.'
 'Showing {first} - {last} of {total}': '{first} – {last} megjelenítve, összesen {total}'
-'Sign in': Bejelentkezés
-'Sign in to the admin panel': 'Bejelentkezés az adminfelületre'
 'Sign out': Kijelentkezés
-'Signing in...': Bejelentkezés...
 'Skip activities recorded before': 'Az ezen dátum előtt rögzített tevékenységek kihagyása'
 Skipped: Kihagyva
 'Skipped (an earlier rule stopped processing).': 'Kihagyva (egy korábbi szabály leállította a feldolgozást).'
@@ -481,7 +469,6 @@ Unit: Mértékegység
 Uploaded: Feltöltve
 Uploading...: Feltöltés...
 'Used to calculate the training load of this activity': 'Used to calculate the training load of this activity'
-Username: Felhasználónév
 'Verify token': 'Ellenőrző token'
 Version: Verzió
 Warning: Figyelmeztetés

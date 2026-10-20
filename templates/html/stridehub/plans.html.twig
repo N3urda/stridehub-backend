@@ -1,0 +1,13 @@
+{% extends 'html/stridehub/shell.html.twig' %}
+{% set activeNav = 'plans' %}{% set showPageHeading = false %}
+{% block title %}我的计划 · StrideHub{% endblock %}
+{% block stylesheets %}<link rel="stylesheet" href="{{ relativeUrl(asset('css/stridehub-insights.css')) }}">{% endblock %}
+{% block head_scripts %}<script defer src="{{ relativeUrl(asset('js/stridehub-data.js')) }}"></script><script defer src="{{ relativeUrl(asset('js/stridehub-plans.js')) }}"></script>{% endblock %}
+{% block page_content %}
+<div id="plans-app" class="hub-records" data-base="{{ relativeUrl('/admin') }}" data-csrf="{{ csrf_token('health')|e('html_attr') }}">
+    <header class="insights-heading"><div><p class="soft-label">我的计划</p><h1>把下一步，过成每一天。</h1><p class="subtle">训练、减重、作息。AI 帮你安排，你专注于记录与执行。</p></div><button id="plans-refresh" class="hub-button" type="button">刷新计划</button></header>
+    <div id="plans-status" class="hub-notice" role="status" aria-live="polite" hidden></div>
+    <nav class="plan-filter" aria-label="计划类型"><button type="button" data-category="all" class="selected" aria-pressed="true">全部</button><button type="button" data-category="training">训练</button><button type="button" data-category="weight">减重</button><button type="button" data-category="sleep">作息</button><button type="button" data-category="other">其他</button></nav>
+    <div class="hub-plan-layout"><div id="plan-stream" class="hub-plan-stream"><p class="empty-note">正在读取已保存的计划…</p></div><aside class="hub-surface" id="ai-handoff"><div class="section-title"><h2>和 AI 一起制定计划</h2><span class="source-pill">基于你的数据</span></div><p class="handoff-tip">在连接了 StrideHub 的 Codex 中，把你的目标告诉 AI。它可以读取记录、保存计划，再根据后续变化调整。</p><div id="handoff-prompt" class="handoff-copy">使用 $stridehub-coach，读取我最近 30 天的睡眠、心率、活动、体重和运动明细，先说明数据缺口，再结合我的目标制定训练与生活计划。经我确认后保存到 StrideHub，保留已有安排。</div><button id="copy-handoff" type="button" class="hub-button full-button">复制给 AI</button><p id="copy-status" class="handoff-tip" role="status" aria-live="polite"></p><p class="handoff-tip">这里展示已经保存的计划。尚未连接 AI 时，不会自动生成计划或推算热量目标。</p><details class="data-details"><summary>课表执行与补充记录</summary><a href="{{ relativeUrl('/admin/training/today') }}">今日训练、跑后反馈与运动关联</a><a href="{{ relativeUrl('/admin/training') }}">手动调整课表与个人偏好</a><a href="{{ relativeUrl('/admin/health') }}">记录体重和血压</a></details></aside></div>
+</div>
+{% endblock %}

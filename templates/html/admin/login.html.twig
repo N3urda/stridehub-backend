@@ -1,56 +1,57 @@
 {% autoescape false %}
     <!DOCTYPE html>
-    <html lang="en">
+    <html lang="zh-CN" data-theme="light">
     <head>
-        <title>{{ appName }} | Login</title>
+        <title>登录 · StrideHub</title>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width">
-        <meta name="theme-color" content="#F26822">
-        <meta name="mobile-web-app-title" content="{{ appName }}">
+        <meta name="theme-color" content="#f2f5f9">
+        <meta name="mobile-web-app-title" content="StrideHub">
         <meta name="mobile-web-app-capable" content="yes">
         <meta name="js-dist-url" content="{{ relativeUrl('js/dist/') }}">
-        <link rel="icon" type="image/x-icon" href="{{ relativeUrl('assets/images/logo.svg') }}">
+        <link rel="icon" type="image/svg+xml" href="{{ relativeUrl('assets/images/stridehub-mark.svg') }}">
         <link href="{{ relativeUrl(asset('css/dist/tailwind.min.css')) }}" rel="stylesheet"/>
         <script>
-            document.documentElement.setAttribute('data-theme', localStorage.getItem('theme') || 'light');
+            document.documentElement.setAttribute('data-theme', 'light');
         </script>
+        <link rel="stylesheet" href="{{ relativeUrl(asset('css/stridehub-shell.css'))|e('html_attr') }}">
     </head>
-    <body class="min-h-screen bg-gray-50 text-gray-900 antialiased admin">
+    <body class="stridehub-app hub-login-page min-h-screen bg-gray-50 text-gray-900 antialiased admin">
     <section class="flex min-h-screen flex-col justify-center px-6 py-12 sm:px-12">
         <div class="mx-auto w-full max-w-sm">
-            <img class="mx-auto h-12 w-auto" src="{{ relativeUrl('assets/images/logo.svg') }}" alt="{{ appName }}">
-            <h1 class="mt-6 text-center text-2xl font-bold tracking-tight">{{ appName }}</h1>
-            <p class="mt-1 text-center text-sm text-gray-500">{{ "Sign in to the admin panel"|trans({}, 'admin') }}</p>
+            {% import 'html/stridehub/icons.html.twig' as icons %}<div class="hub-login-brand">{{ icons.mark() }}</div>
+            <h1 class="mt-6 text-center text-2xl font-bold tracking-tight">StrideHub</h1>
+            <p class="mt-1 text-center text-sm text-gray-500">记录身体、运动与每一点改变。</p>
             <div class="mt-6 p-6 bg-white border border-gray-200 rounded-lg shadow-xs">
                 {% if error %}
                     <div class="mb-4 overflow-hidden rounded-xl border border-red-200 bg-red-100/60 text-red-700">
-                        <p class="px-4 py-3 text-sm">{{ error.messageKey|trans(error.messageData, 'security') }}</p>
+                        <p class="px-4 py-3 text-sm">{{ error.messageKey == 'Invalid credentials.' ? '用户名或密码不正确，请重试。' : error.messageKey|trans(error.messageData, 'security') }}</p>
                     </div>
                 {% endif %}
                 <form class="space-y-4" method="post" action="{{ relativeUrl(path('admin_login')) }}">
                 <div>
-                    <label for="username">{{ "Username"|trans({}, 'admin') }}</label>
+                    <label for="username">用户名</label>
                     <div class="mt-1 flex items-center rounded-xl border border-gray-300 shadow-sm overflow-hidden focus-within:border-primary focus-within:ring-1 focus-within:ring-primary">
                         <span class="flex items-center self-stretch px-3 bg-gray-100 text-gray-500 border-r border-gray-300">
                             <svg class="size-4" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                               <path stroke="currentColor" stroke-width="2" d="M7 17v1a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-1a3 3 0 0 0-3-3h-4a3 3 0 0 0-3 3Zm8-9a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"/>
                             </svg>
                         </span>
-                        <input type="text" id="username" name="_username" autocomplete="username" required autofocus placeholder="{{ "Enter your username"|trans({}, 'admin') }}"
+                        <input type="text" id="username" name="_username" autocomplete="username" required autofocus placeholder="输入用户名"
                                class="unstyled block w-full border-0 px-3 py-2 bg-transparent focus:outline-none focus:ring-0">
                     </div>
                 </div>
                 <div>
-                    <label for="password">{{ "Password"|trans({}, 'admin') }}</label>
+                    <label for="password">密码</label>
                     <div class="mt-1 flex items-center rounded-xl border border-gray-300 shadow-sm overflow-hidden focus-within:border-primary focus-within:ring-1 focus-within:ring-primary">
                         <span class="flex items-center self-stretch px-3 bg-gray-100 text-gray-500 border-r border-gray-300">
                             <svg class="size-4" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                               <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 14v3m-3-6V7a3 3 0 1 1 6 0v4m-8 0h10a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1Z"/>
                             </svg>
                         </span>
-                        <input type="password" id="password" name="_password" autocomplete="current-password" required placeholder="{{ "Enter your password"|trans({}, 'admin') }}"
+                        <input type="password" id="password" name="_password" autocomplete="current-password" required placeholder="输入密码"
                                class="unstyled block w-full border-0 px-3 py-2 bg-transparent focus:outline-none focus:ring-0">
-                        <button type="button" data-toggle-password="password" aria-label="{{ "Show password"|trans({}, 'admin') }}"
+                        <button type="button" data-toggle-password="password" aria-label="显示密码"
                                 class="unstyled cursor-pointer flex items-center self-stretch px-3 text-gray-500 hover:text-gray-700 focus:outline-none">
                             <svg class="size-4" data-icon-show aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                               <path stroke="currentColor" stroke-width="2" d="M21 12c0 1.2-4.03 6-9 6s-9-4.8-9-6c0-1.2 4.03-6 9-6s9 4.8 9 6Z"/>
@@ -64,12 +65,12 @@
                 </div>
                 <label class="flex items-center gap-2 text-sm text-gray-700">
                     <input type="checkbox" name="_remember_me">
-                    <span>{{ "Remember me for 7 days"|trans({}, 'admin') }}</span>
+                    <span>7 天内保持登录</span>
                 </label>
                 <input type="hidden" name="_csrf_token" value="{{ csrf_token('authenticate') }}">
                 <button type="submit" data-has-loading-state class="group w-full btn--primary btn--large">
-                    <span class="label">{{ "Sign in"|trans({}, 'admin') }}</span>
-                    <span class="label--loading">{{ "Signing in..."|trans({}, 'admin') }}</span>
+                    <span class="label">登录</span>
+                    <span class="label--loading">正在登录…</span>
                 </button>
             </form>
             </div>
@@ -77,7 +78,7 @@
                 <a href="{{ relativeUrl('/') }}"
                    class="inline-flex items-center gap-x-1.5 text-sm font-medium text-gray-500 hover:text-gray-900">
                     <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>
-                    {{ "Back to app"|trans({}, 'admin') }}
+                    返回 StrideHub
                 </a>
             </p>
         </div>

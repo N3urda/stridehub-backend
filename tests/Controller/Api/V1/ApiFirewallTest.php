@@ -82,7 +82,9 @@ class ApiFirewallTest extends ControllerWebTestCase
 
         $this->client->request('GET', '/');
 
-        $this->assertResponseIsSuccessful();
+        $this->assertResponseRedirects('/admin/insights');
+        $this->client->followRedirect();
+        $this->assertResponseRedirects('/admin/login');
         $this->assertFalse($this->getContainer()->get(AuthenticatedVisitor::class)->isAuthenticated());
     }
 

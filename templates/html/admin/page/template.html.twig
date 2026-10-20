@@ -1,42 +1,41 @@
-{% autoescape false %}
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <title>{{ appName }} | {{ "Admin panel"|trans({}, 'admin') }}</title>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width">
-        <meta name="theme-color" content="#F26822">
-        <meta name="mobile-web-app-title" content="{{ appName }}">
-        <meta name="mobile-web-app-capable" content="yes">
-        <meta name="csrf-token" content="{{ csrf_token('dispatch-command') }}">
-        <meta name="dispatch-command-url" content="{{ relativeUrl(path('admin_dispatch_command')) }}">
-        <meta name="import-status-url" content="{{ relativeUrl(path('admin_import_status')) }}">
-        <meta name="js-dist-url" content="{{ relativeUrl('js/dist/') }}">
-        <link rel="icon" type="image/x-icon" href="{{ relativeUrl('assets/images/logo.svg') }}">
-        <link href="{{ relativeUrl(asset('css/dist/tailwind.min.css')) }}" rel="stylesheet"/>
-        {% block stylesheets %}{% endblock %}
-        <script>
-            document.documentElement.setAttribute('data-theme', localStorage.getItem('theme') || 'light');
-        </script>
-    </head>
-    <body class="min-h-screen bg-gray-50 text-gray-900 antialiased admin">
-        {% include 'html/admin/component/toast-messages.html.twig' %}
-        {% set hideAdminNavigation = hideAdminNavigation ?? false %}
-        {% set hasSubNav = isActiveNavItem({'/admin/gear': false}) or isActiveNavItem({'/admin/settings': false}) or (isActiveNavItem({'/admin/automation-rules': false}) and importMode.isFiles()) %}
-        <!-- NAVIGATION -->
-        {% include 'html/admin/navigation/top-nav-bar.html.twig' with {
-            showDrawerToggle: not hideAdminNavigation,
-            showReturnToApp: not hideAdminNavigation,
-        } %}
-        <!-- SIDEBAR -->
-        {% if not hideAdminNavigation %}
-            {% include 'html/admin/navigation/icon-rail.html.twig' %}
-        {% endif %}
-        <main class="p-4 {{ hideAdminNavigation ? '' : (hasSubNav ? 'md:ml-76' : 'md:ml-16') }} h-auto min-h-screen pt-20 text-gray-900">
-            {% block main %}
-            {% endblock main %}
-        </main>
-        <script src="{{ relativeUrl(asset('js/dist/admin.min.js')) }}" type="module"></script>
-    </body>
-    </html>
-{% endautoescape %}
+{% extends 'html/stridehub/shell.html.twig' %}
+{% set activeNav = 'settings' %}
+{% set pageKicker = 'ADVANCED · DATA & CONNECTIONS' %}
+{% set showPageHeading = false %}
+{% block title %}数据与高级设置 · StrideHub{% endblock %}
+{% block body_class %}admin{% endblock %}
+{% block head_meta %}
+    <meta name="csrf-token" content="{{ csrf_token('dispatch-command')|e('html_attr') }}">
+    <meta name="dispatch-command-url" content="{{ relativeUrl(path('admin_dispatch_command'))|e('html_attr') }}">
+    <meta name="import-status-url" content="{{ relativeUrl(path('admin_import_status'))|e('html_attr') }}">
+    <meta name="js-dist-url" content="{{ relativeUrl('js/dist/')|e('html_attr') }}">
+{% endblock %}
+{% block base_stylesheets %}<link href="{{ relativeUrl(asset('css/dist/tailwind.min.css'))|e('html_attr') }}" rel="stylesheet">{% endblock %}
+{% block topbar_status %}
+    {% if importStatus.isPending() %}
+        <span id="import-pending-badge" class="hub-import-pending" role="status"
+              title="{{ 'Changes still need to be processed before they appear on the app'|trans({}, 'admin')|e('html_attr') }}">
+            <span aria-hidden="true"></span>{{ 'Import pending'|trans({}, 'admin') }}
+        </span>
+    {% endif %}
+{% endblock %}
+{% block page_content %}
+    {% include 'html/admin/component/toast-messages.html.twig' %}
+    {% if not hideAdminNavigation|default(false) %}
+        <nav class="hub-admin-return" aria-label="返回记录"><a data-return-to-records href="{{ redirectUrl(relativeUrl('/admin/insights'))|e('html_attr') }}">← 返回记录</a></nav>
+        <header class="hub-admin-intro"><p class="hub-admin-intro-title">数据与高级设置</p><p>管理数据来源、连接与运行设置。日常记录和计划在左侧导航中。</p></header>
+        <nav class="hub-admin-links" aria-label="高级管理导航">
+            <a href="{{ relativeUrl('/admin/upload')|e('html_attr') }}"{% if isActiveNavItem({'/admin/upload': true}) %} aria-current="page"{% endif %}>导入运动</a>
+            <a href="{{ relativeUrl('/admin/file-imports')|e('html_attr') }}"{% if isActiveNavItem({'/admin/file-imports': false}) %} aria-current="page"{% endif %}>导入历史</a>
+            <a href="{{ relativeUrl('/admin/activities')|e('html_attr') }}">管理记录</a>
+            <a href="{{ relativeUrl('/admin/settings/general')|e('html_attr') }}">基础设置</a>
+            <a href="{{ relativeUrl('/admin/settings/integrations')|e('html_attr') }}">数据连接</a>
+            <a href="{{ relativeUrl('/admin/settings/daemon')|e('html_attr') }}">同步运行</a>
+            <a href="{{ relativeUrl('/admin/gear')|e('html_attr') }}"{% if isActiveNavItem({'/admin/gear': false}) %} aria-current="page"{% endif %}>装备</a>
+            <a href="{{ relativeUrl('/admin/automation-rules')|e('html_attr') }}"{% if isActiveNavItem({'/admin/automation-rules': false}) %} aria-current="page"{% endif %}>自动处理</a>
+        </nav>
+        <div class="hub-admin-subnav">{% include 'html/admin/navigation/contextual-panel.html.twig' %}</div>
+    {% endif %}
+    <div class="hub-advanced-content">{% block main %}{% endblock %}</div>
+{% endblock %}
+{% block scripts %}<script src="{{ relativeUrl(asset('js/dist/admin.min.js'))|e('html_attr') }}" type="module"></script>{% endblock %}

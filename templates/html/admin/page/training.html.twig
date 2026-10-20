@@ -1,23 +1,20 @@
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="theme-color" content="#173f38">
-    <title>跑步工作台 · StrideHub</title>
-    <link rel="icon" href="{{ relativeUrl('assets/images/logo.svg')|e('html_attr') }}">
+{% extends 'html/stridehub/shell.html.twig' %}
+{% import 'html/stridehub/icons.html.twig' as icons %}
+{% set activeNav = 'plans' %}
+{% set pageKicker = 'PLAN & REFLECT' %}
+{% set showPageHeading = false %}
+{% block title %}课表与反馈 · StrideHub{% endblock %}
+{% block body_class %}{% endblock %}
+{% block stylesheets %}
     <link rel="stylesheet" href="{{ relativeUrl(asset('css/stridehub-training.css'))|e('html_attr') }}">
+{% endblock %}
+{% block head_scripts %}
     <script defer src="{{ relativeUrl(asset('js/stridehub-training.js'))|e('html_attr') }}"></script>
-</head>
-<body>
-<a class="skip-link" href="#training-main">跳到主要内容</a>
+{% endblock %}
+{% block page_content %}
 <div id="training-app" data-today-url="{{ relativeUrl('/admin/training/today')|e('html_attr') }}" data-api-base="{{ relativeUrl('/admin/training/api')|e('html_attr') }}" data-csrf="{{ csrf_token('training')|e('html_attr') }}">
-    <header class="sh-header">
-        <a class="sh-brand" href="{{ relativeUrl('/admin/training')|e('html_attr') }}"><span class="sh-mark" aria-hidden="true">S<span>↗</span></span><span>StrideHub<small>你的跑步工作台</small></span></a>
-        <nav aria-label="应用导航"><a href="{{ relativeUrl('/admin/running')|e('html_attr') }}">跑步分析 ↗</a><a href="{{ relativeUrl('/admin/activities')|e('html_attr') }}">活动记录 ↗</a><a href="{{ relativeUrl('/admin')|e('html_attr') }}">管理后台</a></nav>
-    </header>
-    <main id="training-main" class="sh-main">
-        <div class="sh-heading"><div><p class="sh-eyebrow">PLAN · RUN · REFLECT</p><h1>为下一次出发，做好准备。</h1><p id="runner-context" class="muted">正在读取你的跑步设置…</p></div><div class="form-actions"><a class="button" href="{{ relativeUrl('/admin/health')|e('html_attr') }}">健康记录</a><a class="button" href="{{ relativeUrl('/admin/training/today')|e('html_attr') }}">今日训练</a><button type="button" class="button" id="refresh-data">刷新数据</button><button class="button primary" data-tab-target="schedule" id="quick-add-session">＋ 安排一次训练</button></div></div>
+<div id="training-main" class="training-shell">
+        <div class="sh-heading"><div><p class="sh-eyebrow">PLAN · RUN · REFLECT</p><h1>课表与执行反馈</h1><p id="runner-context" class="muted">正在读取你的计划信息…</p></div><div class="form-actions"><a class="button" href="{{ relativeUrl('/admin/health')|e('html_attr') }}">健康记录</a><a class="button" href="{{ relativeUrl('/admin/training/today')|e('html_attr') }}">今日训练</a><button type="button" class="button" id="refresh-data">刷新数据</button><button class="button primary" data-tab-target="schedule" id="quick-add-session">＋ 安排一次训练</button></div></div>
         <div id="global-status" class="notice" role="status" aria-live="polite" hidden></div>
         <noscript><p class="notice error">请开启 JavaScript 以加载和保存训练资料。</p></noscript>
         <nav class="sh-tabs" aria-label="工作台视图">
@@ -77,7 +74,6 @@
             <article class="card editor-card"><div class="section-title"><h2>跑步偏好</h2><span class="save-state" id="profile-save-state">正在读取</span></div><form id="profile-form" class="form-grid"><label class="full">时区<input name="timezone" required value="Asia/Shanghai" placeholder="Asia/Shanghai" list="timezone-options"></label><datalist id="timezone-options"><option value="Asia/Shanghai"><option value="Asia/Tokyo"><option value="Europe/London"><option value="America/New_York"><option value="America/Los_Angeles"><option value="Australia/Sydney"><option value="UTC"></datalist><label class="full">常用地点名称<input name="locationLabel" maxlength="120" placeholder="例如：杭州 · 钱塘江"></label><label>纬度<input name="latitude" type="number" min="-90" max="90" step="any"></label><label>经度<input name="longitude" type="number" min="-180" max="180" step="any"></label><p class="field-help full">填写经纬度后才能查询天气。两项都留空可清除地点。</p><label>冷热偏好<select name="thermalPreference"><option value="cold">我比较怕冷</option><option value="neutral">正常</option><option value="warm">我比较怕热</option></select></label><label>常用开跑时间<input name="usualStartTime" type="time" value="06:30" required></label><label>常用时长（分钟）<input name="usualDurationMinutes" type="number" min="1" max="1440" value="60" required></label><fieldset class="full"><legend>习惯跑步日</legend><div class="weekday-picker">{% for day in ['一', '二', '三', '四', '五', '六', '日'] %}<label><input type="checkbox" name="runningDays" value="{{ loop.index }}"><span>周{{ day }}</span></label>{% endfor %}</div><p class="field-help">没有具体训练时，简报会参考这些习惯，并明确标记为习惯建议。</p></fieldset><label class="check-line full"><input type="checkbox" name="notificationsEnabled">开启训练提醒</label><label>前一晚提醒时间<input name="eveningReminderTime" type="time" value="20:00" required></label><label>跑前提前分钟<input name="preRunReminderMinutes" type="number" min="5" max="240" value="60" required></label><div class="form-actions full"><button class="button primary" type="submit">保存跑步设置</button></div><p class="form-status full" role="status" aria-live="polite"></p></form></article></div>
         </section>
         <footer class="sh-footer"><span>StrideHub · 让每次出发都有准备</span><a href="{{ relativeUrl('/admin/training/guide')|e('html_attr') }}">使用指南</a><span>建议供训练参考，请结合身体感受调整。</span></footer>
-    </main>
+    </div>
 </div>
-</body>
-</html>
+{% endblock %}

@@ -40,7 +40,7 @@ final readonly class IndexPage implements Cacheable
     public function getCacheability(): Cacheability
     {
         return Cacheability::for(
-            cacheKey: 'index',
+            cacheKey: 'index.stridehub-shell-v1',
             cacheTags: CacheTags::of(
                 RootCacheTag::ACTIVITIES,
                 RootCacheTag::ACTIVITY_IMAGES,

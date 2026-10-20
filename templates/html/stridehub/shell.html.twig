@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#f2f5f9">
+    <meta name="mobile-web-app-title" content="StrideHub">
+    <title>{% block title %}{{ pageTitle|default('你的数据记录') }} · StrideHub{% endblock %}</title>
+    <link rel="icon" type="image/svg+xml" href="{{ relativeUrl('assets/images/stridehub-mark.svg')|e('html_attr') }}">
+    {% block head_meta %}{% endblock %}
+    {% block base_stylesheets %}{% endblock %}
+    {% block stylesheets %}{% endblock %}
+    <link rel="stylesheet" href="{{ relativeUrl(asset('css/stridehub-shell.css'))|e('html_attr') }}">
+    {% block head_scripts %}{% endblock %}
+</head>
+<body class="stridehub-app {% block body_class %}{% endblock %}">
+<a class="hub-skip-link" href="#hub-main">跳到页面内容</a>
+<div class="sh-shell">
+    {% include 'html/stridehub/navigation.html.twig' %}
+    <div class="sh-main">
+        <div class="hub-topbar"><span class="hub-topbar-label">{{ pageKicker|default('MY HEALTH, MY STORY') }}</span><div class="hub-topbar-actions"><details class="hub-mobile-menu"><summary aria-label="更多操作">{% import 'html/stridehub/icons.html.twig' as topbarIcons %}{{ topbarIcons.icon('settings') }}</summary><div><a href="{{ relativeUrl('/admin/training/today')|e('html_attr') }}">今日执行</a><a href="{{ relativeUrl('/admin/settings/general')|e('html_attr') }}">高级设置</a>{% if (showLogout ?? true) and is_granted('ROLE_ADMIN') %}<form method="post" action="{{ relativeUrl(path('admin_logout'))|e('html_attr') }}"><input type="hidden" name="_csrf_token" value="{{ csrf_token('logout')|e('html_attr') }}"><button type="submit">退出登录</button></form>{% endif %}</div></details>{% block topbar_status %}{% endblock %}<span class="hub-private-label"><span aria-hidden="true"></span>{{ workspaceLabel|default('我的私人数据空间') }}</span><a href="{{ relativeUrl('/admin/upload')|e('html_attr') }}" class="hub-import-link">导入记录 <span aria-hidden="true">↗</span></a></div></div>
+        <main id="hub-main" class="sh-page-content">
+            {% if showPageHeading ?? true %}<header class="hub-page-heading"><div><h1>{{ pageTitle|default('你的数据记录') }}</h1>{% if pageSubtitle|default('') %}<p>{{ pageSubtitle }}</p>{% endif %}</div>{% block page_actions %}{% endblock %}</header>{% endif %}
+            {% block page_content %}{% endblock %}
+        </main>
+    </div>
+</div>
+{% block scripts %}{% endblock %}
+</body>
+</html>

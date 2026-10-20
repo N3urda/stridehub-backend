@@ -2,6 +2,10 @@
 
 namespace App\Tests\Infrastructure\Http\Gate;
 
+use App\Infrastructure\Config\AdminAllowedIpAddresses;
+use App\Infrastructure\Http\ClientIpResolver;
+use App\Infrastructure\Http\Gate\AdminAllowedIpGate;
+use App\Infrastructure\Http\Gate\ConditionalRedirectGate;
 use App\Infrastructure\Http\Gate\Gate;
 use App\Infrastructure\Http\Gate\GateDecision;
 use App\Infrastructure\Http\Gate\GateRequestListener;
@@ -10,7 +14,9 @@ use PHPUnit\Framework\TestCase;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpKernel\Event\RequestEvent;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Symfony\Component\HttpKernel\HttpKernelInterface;
+use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 
 class GateRequestListenerTest extends TestCase
 {
@@ -130,6 +136,59 @@ class GateRequestListenerTest extends TestCase
         $listener->onKernelRequest($event);
 
         $this->assertNull($event->getResponse());
+    }
+
+    #[DataProvider('provideDataWorkspacePaths')]
+    public function testDataWorkspaceSkipsOnlySetupRedirects(string $path): void
+    {
+        $setupGate = new class($this->createStub(UrlGeneratorInterface::class)) extends ConditionalRedirectGate {
+            protected function shouldGuard(): bool
+            {
+                throw new \LogicException('A workspace request must not evaluate legacy setup.');
+            }
+
+            protected function allowedPaths(): array
+            {
+                return [];
+            }
+
+            protected function redirectToRouteName(): string
+            {
+                return 'admin_settings_athlete';
+            }
+        };
+        $redirect = new RedirectResponse('/policy-denied');
+        $listener = new GateRequestListener([$setupGate, $this->gate(GateDecision::respond($redirect))]);
+        $event = new RequestEvent($this->createStub(HttpKernelInterface::class), Request::create($path), HttpKernelInterface::MAIN_REQUEST);
+        $listener->onKernelRequest($event);
+        self::assertSame($redirect, $event->getResponse(), 'Non-setup policies must still run.');
+    }
+
+    #[DataProvider('provideProtectedAdminWorkspacePaths')]
+    public function testNewAndExistingWorkspaceRoutesStillEnforceAllowedIps(string $path): void
+    {
+        $listener = new GateRequestListener([new AdminAllowedIpGate(AdminAllowedIpAddresses::fromString('192.168.1.1'), new ClientIpResolver())]);
+        $event = new RequestEvent($this->createStub(HttpKernelInterface::class), Request::create($path, server: ['REMOTE_ADDR' => '10.0.0.1']), HttpKernelInterface::MAIN_REQUEST);
+        self::expectException(NotFoundHttpException::class);
+        $listener->onKernelRequest($event);
+    }
+
+    /** @return iterable<string, array{string}> */
+    public static function provideDataWorkspacePaths(): iterable
+    {
+        foreach (['/', '/admin', '/admin/login', '/admin/logout', '/admin/upload', '/admin/importStatus', '/admin/insights', '/admin/plans', '/admin/health', '/admin/health/api/weight', '/admin/running', '/admin/running/api/overview', '/admin/training', '/admin/training/api/today', '/api/v1/health/weight', '/api/v1/training/profile', '/api/v1/running/overview'] as $path) {
+            yield $path => [$path];
+        }
+    }
+
+    /** @return iterable<string, array{string}> */
+    public static function provideProtectedAdminWorkspacePaths(): iterable
+    {
+        foreach (self::provideDataWorkspacePaths() as $name => [$path]) {
+            if (str_starts_with($path, '/admin')) {
+                yield $name => [$path];
+            }
+        }
     }
 
     private function gate(GateDecision $decision): Gate

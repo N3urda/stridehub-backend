@@ -32,6 +32,13 @@ final readonly class GateRequestListener implements EventSubscriberInterface
         }
 
         foreach ($this->gates as $gate) {
+            // The data workspace is usable before an athlete profile, Strava connection,
+            // or first imported activity exists. Only setup redirects are skipped:
+            // IP restrictions and the firewall still protect these requests.
+            if ($gate instanceof ConditionalRedirectGate && $this->isSetupIndependent($request->getPathInfo())) {
+                continue;
+            }
+
             $decision = $gate->handle($request);
             if (!$decision->hasBeenApplied()) {
                 continue;
@@ -48,13 +55,16 @@ final readonly class GateRequestListener implements EventSubscriberInterface
     private function isAlwaysOpen(string $path): bool
     {
         return 1 === preg_match('#^/(_(profiler|wdt)|css|images|js|files)/#', $path)
-            || '/api/v1' === $path || str_starts_with($path, '/api/v1/')
-            // Training can be planned before importing the first activity. The admin
-            // firewall still authenticates these routes after this setup gate.
-            || '/admin/training' === $path || str_starts_with($path, '/admin/training/')
-            || '/admin/running' === $path || str_starts_with($path, '/admin/running/')
-            || '/admin/health' === $path || str_starts_with($path, '/admin/health/')
             || '/strava/webhook' === $path;
+    }
+
+    private function isSetupIndependent(string $path): bool
+    {
+        if (in_array($path, ['/', '/admin', '/admin/login', '/admin/logout', '/admin/upload', '/admin/importStatus'], true)) {
+            return true;
+        }
+
+        return array_any(['/api/v1', '/admin/insights', '/admin/plans', '/admin/training', '/admin/running', '/admin/health'], fn (string $prefix): bool => $path === $prefix || str_starts_with($path, $prefix.'/'));
     }
 
     /**

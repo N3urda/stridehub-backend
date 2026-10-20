@@ -19,7 +19,6 @@ final readonly class FileUploadRequestHandler
     ) {
     }
 
-    #[Route(path: '/admin', name: 'admin', methods: ['GET'], priority: 10)]
     #[Route(path: '/admin/upload', name: 'admin_file_upload', methods: ['GET'], priority: 10)]
     public function index(): HtmlResponse
     {

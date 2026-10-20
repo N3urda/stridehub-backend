@@ -1,27 +1,40 @@
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="theme-color" content="#173f38">
-    <title>健康记录 · StrideHub</title>
-    <link rel="icon" href="{{ relativeUrl('assets/images/logo.svg')|e('html_attr') }}">
+{% extends 'html/stridehub/shell.html.twig' %}
+{% import 'html/stridehub/icons.html.twig' as icons %}
+{% set activeNav = 'body' %}
+{% set pageKicker = 'BODY & RECOVERY' %}
+{% set showPageHeading = false %}
+{% block title %}身体记录 · StrideHub{% endblock %}
+{% block body_class %}{% endblock %}
+{% block stylesheets %}
     <link rel="stylesheet" href="{{ relativeUrl(asset('css/stridehub-training.css'))|e('html_attr') }}">
     <link rel="stylesheet" href="{{ relativeUrl(asset('css/stridehub-health.css'))|e('html_attr') }}">
+    <link rel="stylesheet" href="{{ relativeUrl(asset('css/stridehub-insights.css'))|e('html_attr') }}">
+{% endblock %}
+{% block head_scripts %}
     <script defer src="{{ relativeUrl(asset('js/stridehub-health.js'))|e('html_attr') }}"></script>
-</head>
-<body>
-<a class="skip-link" href="#health-main">跳到健康记录</a>
+    <script defer src="{{ relativeUrl(asset('js/stridehub-data.js'))|e('html_attr') }}"></script>
+<script defer src="{{ relativeUrl(asset('js/stridehub-body.js'))|e('html_attr') }}"></script>
+{% endblock %}
+{% block page_content %}
 <div id="health-app" data-api-base="{{ relativeUrl('/admin/health/api')|e('html_attr') }}" data-profile-url="{{ relativeUrl('/admin/training/api/profile')|e('html_attr') }}" data-csrf="{{ csrf_token('health')|e('html_attr') }}">
-    <header class="health-header"><a class="sh-brand" href="{{ relativeUrl('/admin/training/today')|e('html_attr') }}">StrideHub</a><a href="{{ relativeUrl('/admin/training/today')|e('html_attr') }}">返回今日安排</a></header>
-    <main id="health-main" class="health-shell">
-        <div class="health-heading"><div><h1>身体的变化，慢慢看清。</h1><p class="muted">记录每次测量，也看见每晚休息。</p></div><button type="button" id="health-refresh" class="button">刷新记录</button></div>
-        <nav class="health-jump" aria-label="健康记录导航"><a href="#pressure-section">血压记录</a><a href="#sleep-section">Zepp 睡眠</a><a href="{{ relativeUrl('/admin/settings/general')|e('html_attr') }}">体重历史</a></nav>
+<div id="health-main" class="health-shell">
+        <div class="health-heading"><div><h1>身体与恢复</h1><p class="muted">留住每晚睡眠、每次测量，慢慢看清身体的变化。</p></div><button type="button" id="health-refresh" class="button">刷新记录</button></div>
+        <nav class="health-jump" aria-label="健康记录导航"><a href="#sleep-section">睡眠记录</a><a href="#body-weight">体重趋势</a><a href="#pressure-section">血压记录</a></nav>
         <div id="health-status" class="notice" role="status" aria-live="polite" hidden></div>
         <noscript><p class="notice error">请开启 JavaScript 以读取和保存健康记录。</p></noscript>
         <form id="health-range" class="health-range"><label>从<input type="date" name="from" required></label><label>到<input type="date" name="to" required></label><button class="button" type="submit">查看这段时间</button><p id="health-timezone" class="muted"></p></form>
+        <section id="sleep-section" class="health-panel sleep-panel" aria-labelledby="sleep-title">
+            <div class="health-section-heading"><div><div class="hub-section-title"><span class="hub-section-icon">{{ icons.icon('sleep') }}</span><h2 id="sleep-title">睡眠 · 夜晚的记录</h2></div><p class="muted">来自 Zepp 的睡眠时长、阶段与夜间变化。</p></div><button type="button" id="sleep-sync" class="button">立即同步</button></div>
+            <div id="sleep-status" role="status" class="form-status" aria-live="polite">正在读取同步状态…</div>
+            <div id="sleep-summary" class="health-metrics"></div>
+            <div id="sleep-chart" class="health-chart" aria-label="睡眠时长趋势"></div>
+            <details class="health-history"><summary>每晚睡眠记录</summary><div id="sleep-records"><p class="muted">正在读取…</p></div></details>
+            <details class="health-help"><summary>没有看到睡眠数据？</summary><p>先在手机 Zepp App 中完成手表同步，再点击“立即同步”。未记录的睡眠阶段会显示“未知”，不会填成 0。</p><p id="sleep-setup">正在检查连接状态。</p><p>睡眠记录与手填的每日身体状态分别保存。同步不会覆盖你的睡眠体感、疲劳或疼痛反馈。</p></details>
+            <p class="health-footnote">睡眠阶段来自设备估计，缺失记录不代表没有睡眠。</p>
+        </section>
+        {% include 'html/stridehub/body-extra.html.twig' %}
         <section id="pressure-section" class="health-panel" aria-labelledby="pressure-title">
-            <div class="health-section-heading"><div><h2 id="pressure-title">血压</h2><p class="muted">保留每次测量的时间、手臂和体位，便于一起回顾。</p></div><button type="button" id="pressure-new" class="button primary">＋ 记一次血压</button></div>
+            <div class="health-section-heading"><div><div class="hub-section-title"><span class="hub-section-icon pressure">{{ icons.icon('pressure') }}</span><h2 id="pressure-title">血压 · 每一次测量</h2></div><p class="muted">保存高压、低压与脉搏，回看长期趋势。</p></div><button type="button" id="pressure-new" class="button primary">＋ 记一次血压</button></div>
             <div id="pressure-status" role="status" class="form-status" aria-live="polite"></div>
             <div id="pressure-summary" class="health-metrics"></div>
             <div id="pressure-chart" class="health-chart" aria-label="血压趋势"></div>
@@ -42,17 +55,7 @@
             <details class="health-history" open><summary>逐次测量记录</summary><div id="pressure-records"><p class="muted">正在读取…</p></div></details>
             <p class="health-footnote">图表展示原始测量值，不根据单次读数判定疾病，也不会自动改变课表。</p>
         </section>
-        <section id="sleep-section" class="health-panel sleep-panel" aria-labelledby="sleep-title">
-            <div class="health-section-heading"><div><h2 id="sleep-title">Zepp 睡眠</h2><p class="muted">同步手表已上传到 Zepp 的睡眠记录。</p></div><button type="button" id="sleep-sync" class="button">立即同步</button></div>
-            <div id="sleep-status" role="status" class="form-status" aria-live="polite">正在读取同步状态…</div>
-            <div id="sleep-summary" class="health-metrics"></div>
-            <div id="sleep-chart" class="health-chart" aria-label="睡眠时长趋势"></div>
-            <details class="health-history" open><summary>每晚睡眠记录</summary><div id="sleep-records"><p class="muted">正在读取…</p></div></details>
-            <details class="health-help"><summary>没有看到睡眠数据？</summary><p>先在手机 Zepp App 中完成手表同步，再点击“立即同步”。未记录的睡眠阶段会显示“未知”，不会填成 0。</p><p id="sleep-setup">正在检查连接状态。</p><p>睡眠记录与手填的每日身体状态分别保存。同步不会覆盖你的睡眠体感、疲劳或疼痛反馈。</p></details>
-            <p class="health-footnote">睡眠阶段来自设备估计，缺失记录不代表没有睡眠。</p>
-        </section>
-        <footer class="sh-footer"><span>StrideHub · 健康数据仅在登录后可见</span><a href="{{ relativeUrl('/admin/training/today')|e('html_attr') }}">今日安排</a><a href="{{ relativeUrl('/admin/training')|e('html_attr') }}">训练课表</a></footer>
-    </main>
+        <footer class="sh-footer"><span>每一条记录，都是了解自己的起点。</span><a href="{{ relativeUrl('/admin/training/today')|e('html_attr') }}">今日安排</a><a href="{{ relativeUrl('/admin/plans')|e('html_attr') }}">我的计划</a></footer>
+    </div>
 </div>
-</body>
-</html>
+{% endblock %}

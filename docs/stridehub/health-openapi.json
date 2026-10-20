@@ -981,6 +981,1669 @@
           }
         }
       }
+    },
+    "/api/v1/health/plans": {
+      "get": {
+        "operationId": "getHealthPlans",
+        "summary": "列出已保存的健康计划，按 startDate 倒序",
+        "responses": {
+          "200": {
+            "description": "当前记录",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthPlanList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "缺少或无效 Bearer token",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "记录不存在",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段、日期、类型或 JSON 验证失败",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/health/plans/{id}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,80}$",
+            "maxLength": 80
+          }
+        }
+      ],
+      "get": {
+        "operationId": "getHealthPlan",
+        "summary": "读取一个健康计划",
+        "responses": {
+          "200": {
+            "description": "当前记录",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthPlanRecord"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "缺少或无效 Bearer token",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "记录不存在",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段、日期、类型或 JSON 验证失败",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "saveHealthPlan",
+        "summary": "创建或部分更新健康计划",
+        "description": "新记录 version:0，相同创建重放在 version:1 时幂等；已有记录带当前整数版本。items 整体替换。source:ai 必须提供 rationale。请求上限 1 MiB。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HealthPlanPatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "创建、更新或相同创建请求重放的记录",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthPlanRecord"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "缺少或无效 Bearer token",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "记录不存在",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "版本冲突，请重新读取并比较",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "请求超过 1 MiB",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "必须使用 application/json",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段、日期、类型或 JSON 验证失败",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "缺少当前 version",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteHealthPlan",
+        "summary": "按版本删除健康计划",
+        "parameters": [
+          {
+            "name": "version",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "已删除，无响应体",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            }
+          },
+          "401": {
+            "description": "缺少或无效 Bearer token",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "记录不存在",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "版本冲突，请重新读取并比较",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段、日期、类型或 JSON 验证失败",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "缺少当前 version",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/health/weight": {
+      "get": {
+        "operationId": "listWeightRecords",
+        "summary": "读取唯一体重历史，以 kg 返回，按日期倒序",
+        "description": "支持 from/to（含边界），version 总是覆盖完整历史与单位；旧记录来源为 unknown，不推断测量时间。",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            },
+            "description": "包含边界，按训练个人档案时区的本地日期筛选；省略时此端不限制。"
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            },
+            "description": "包含边界，按训练个人档案时区的本地日期筛选；省略时此端不限制。"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "符合日期范围的全部记录",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WeightList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "缺少或无效 Bearer token",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段、日期、类型或 JSON 验证失败",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/health/weight/{date}": {
+      "parameters": [
+        {
+          "name": "date",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "date"
+          }
+        }
+      ],
+      "put": {
+        "operationId": "saveWeightRecord",
+        "summary": "保存当天实测体重",
+        "description": "固定 kg，读取整体字符串 version 后写入；当天记录覆盖、其他日期保留。请求上限 16 KiB。返回完整最新列表。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WeightPatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "创建、更新或相同创建请求重放的记录",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WeightList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "缺少或无效 Bearer token",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "记录不存在",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "体重历史或单位已改变，请重新读取并比较",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "请求超过 16 KiB",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "必须使用 application/json",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段、日期、类型或 JSON 验证失败",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "缺少当前 version",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteWeightRecord",
+        "summary": "按当前整体版本删除一天的体重记录",
+        "parameters": [
+          {
+            "name": "version",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$",
+              "description": "GET 返回的整体体重历史与单位校验值，不是整数。旧接口修改也会导致 409。"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "已删除，无响应体",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            }
+          },
+          "401": {
+            "description": "缺少或无效 Bearer token",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "记录不存在",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "体重历史或单位已改变，请重新读取并比较",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段、日期、类型或 JSON 验证失败",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "缺少当前 version",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/health/zepp/days": {
+      "get": {
+        "operationId": "listZeppDays",
+        "summary": "Read compact daily Zepp measurements and coverage",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            },
+            "description": "Inclusive source calendar date; sleep is joined to actual local wake date."
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            },
+            "description": "Inclusive source calendar date; sleep is joined to actual local wake date."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Saved Zepp source data; no-store, private.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ZeppDayList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "缺少或无效 StrideHub Bearer token；不同于 Zepp 登录过期",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段、日期、类型或 JSON 验证失败",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/health/zepp/days/{date}": {
+      "get": {
+        "operationId": "readZeppDay",
+        "summary": "Read one day with observed minute samples and original stages",
+        "parameters": [
+          {
+            "name": "date",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Saved Zepp source data; no-store, private.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ZeppDayDetail"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "缺少或无效 StrideHub Bearer token；不同于 Zepp 登录过期",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段、日期、类型或 JSON 验证失败",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/health/zepp/status": {
+      "get": {
+        "operationId": "readZeppSyncStatus",
+        "summary": "Read separate source availability and synchronization status",
+        "responses": {
+          "200": {
+            "description": "Saved Zepp source data; no-store, private.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ZeppSyncStatus"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "缺少或无效 StrideHub Bearer token；不同于 Zepp 登录过期",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段、日期、类型或 JSON 验证失败",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/health/zepp/raw/{id}": {
+      "get": {
+        "operationId": "readZeppRawSource",
+        "summary": "Read sensitive original source payload only when needed",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Original payload, source kind, optional decodedSummary and fetchedAt. Contains device metadata. Never cache.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "缺少或无效 StrideHub Bearer token；不同于 Zepp 登录过期",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Source record does not exist"
+          }
+        }
+      }
+    },
+    "/api/v1/health/zepp/sync": {
+      "post": {
+        "operationId": "syncDetailedZeppData",
+        "summary": "Read detailed Zepp data, retain source versions and normalize daily records",
+        "description": "Body days is 1..90. Partial event authorization failure preserves valid band data and returns HTTP 200 state partial. Daily and legacy sleep records update together.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SleepSyncRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Saved Zepp source data; no-store, private.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ZeppSyncStatus"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "缺少或无效 StrideHub Bearer token；不同于 Zepp 登录过期",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "已有睡眠同步正在执行，读取状态后稍后重试",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "同步请求超过 4 KiB",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "必须使用 application/json",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段、日期、类型或 JSON 验证失败",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Zepp 未配置、授权过期或同步失败；返回 SleepSyncStatus，保留历史记录。此处 auth_required 是 Zepp 授权问题，不表示 StrideHub Bearer 失效。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SleepSyncStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/health/zepp/workouts": {
+      "get": {
+        "operationId": "listZeppWorkouts",
+        "summary": "List compact Zepp cloud workouts without raw tracks",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            },
+            "description": "Inclusive workout local start calendar date."
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            },
+            "description": "Inclusive workout local start calendar date."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Saved Zepp source data; no-store, private.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ZeppWorkoutList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "缺少或无效 StrideHub Bearer token；不同于 Zepp 登录过期",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段、日期、类型或 JSON 验证失败",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/health/zepp/workouts/{id}": {
+      "get": {
+        "operationId": "readZeppWorkout",
+        "summary": "Read a workout with observed streams and original source details",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^zepp-[a-f0-9]{16}-[0-9]{1,16}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Saved Zepp source data; no-store, private.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ZeppWorkoutDetail"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "缺少或无效 StrideHub Bearer token；不同于 Zepp 登录过期",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段、日期、类型或 JSON 验证失败",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/health/zepp/workouts/status": {
+      "get": {
+        "operationId": "readZeppWorkoutSyncStatus",
+        "summary": "Read separate workout import progress and source status",
+        "responses": {
+          "200": {
+            "description": "Saved Zepp source data; no-store, private.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ZeppWorkoutSyncStatus"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "缺少或无效 StrideHub Bearer token；不同于 Zepp 登录过期",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段、日期、类型或 JSON 验证失败",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/health/zepp/workouts/sources/{id}": {
+      "get": {
+        "operationId": "readZeppWorkoutSource",
+        "summary": "Read an immutable original workout source version",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Original payload, source kind, optional decodedSummary and fetchedAt. Contains device metadata. Never cache.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "缺少或无效 StrideHub Bearer token；不同于 Zepp 登录过期",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Source record does not exist"
+          }
+        }
+      }
+    },
+    "/api/v1/health/zepp/workouts/sync": {
+      "post": {
+        "operationId": "syncZeppWorkouts",
+        "summary": "Synchronize Zepp workout history and detailed tracks",
+        "description": "days 1..90. Keeps prior data on partial detail failures, preserves source versions and account ownership. HTTP200 state partial identifies retained or failed detail data.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SleepSyncRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Saved Zepp source data; no-store, private.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ZeppWorkoutSyncStatus"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "缺少或无效 StrideHub Bearer token；不同于 Zepp 登录过期",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "已有睡眠同步正在执行，读取状态后稍后重试",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "同步请求超过 4 KiB",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "必须使用 application/json",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段、日期、类型或 JSON 验证失败",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Zepp 未配置、授权过期或同步失败；返回 SleepSyncStatus，保留历史记录。此处 auth_required 是 Zepp 授权问题，不表示 StrideHub Bearer 失效。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "no-store, private，包括鉴权和验证错误。"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SleepSyncStatus"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1762,6 +3425,987 @@
           }
         },
         "description": "必须是 JSON 对象；空对象默认同步最近 30 个日历日。不是无限全历史导入。"
+      },
+      "HealthPlanItem": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1
+          },
+          "date": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date",
+            "default": null
+          },
+          "time": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+            "default": null
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "completed",
+              "skipped"
+            ],
+            "default": "pending"
+          },
+          "notes": {
+            "type": "string",
+            "maxLength": 2000,
+            "default": ""
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ]
+      },
+      "HealthPlanPatch": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "weight",
+              "sleep",
+              "nutrition",
+              "recovery",
+              "general"
+            ],
+            "default": "general"
+          },
+          "goal": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 1
+          },
+          "startDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "endDate": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date",
+            "default": null
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "active",
+              "paused",
+              "completed",
+              "cancelled"
+            ],
+            "default": "draft"
+          },
+          "items": {
+            "type": "array",
+            "maxItems": 200,
+            "items": {
+              "$ref": "#/components/schemas/HealthPlanItem"
+            },
+            "default": []
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "user",
+              "ai",
+              "clinician"
+            ],
+            "default": "user"
+          },
+          "sourceLabel": {
+            "type": "string",
+            "maxLength": 200,
+            "default": ""
+          },
+          "rationale": {
+            "type": "string",
+            "maxLength": 10000,
+            "default": "",
+            "description": "AI 计划必须非空；记录依据和不确定性。不能冒充医嘱。"
+          },
+          "notes": {
+            "type": "string",
+            "maxLength": 4000,
+            "default": ""
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "version"
+        ],
+        "description": "顶层部分更新。创建需要 title、goal、startDate。items 整体替换；条目 id 唯一，date 必须位于计划日期内。只保存已提供的计划，不自动生成。"
+      },
+      "HealthPlanRecord": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "weight",
+              "sleep",
+              "nutrition",
+              "recovery",
+              "general"
+            ],
+            "default": "general"
+          },
+          "goal": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 1
+          },
+          "startDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "endDate": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date",
+            "default": null
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "active",
+              "paused",
+              "completed",
+              "cancelled"
+            ],
+            "default": "draft"
+          },
+          "items": {
+            "type": "array",
+            "maxItems": 200,
+            "items": {
+              "$ref": "#/components/schemas/HealthPlanItem"
+            },
+            "default": []
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "user",
+              "ai",
+              "clinician"
+            ],
+            "default": "user"
+          },
+          "sourceLabel": {
+            "type": "string",
+            "maxLength": 200,
+            "default": ""
+          },
+          "rationale": {
+            "type": "string",
+            "maxLength": 10000,
+            "default": "",
+            "description": "AI 计划必须非空；记录依据和不确定性。不能冒充医嘱。"
+          },
+          "notes": {
+            "type": "string",
+            "maxLength": 4000,
+            "default": ""
+          },
+          "id": {
+            "type": "string",
+            "readOnly": true
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "readOnly": true
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "readOnly": true
+          }
+        },
+        "required": [
+          "title",
+          "category",
+          "goal",
+          "startDate",
+          "endDate",
+          "status",
+          "items",
+          "source",
+          "sourceLabel",
+          "rationale",
+          "notes",
+          "id",
+          "version",
+          "updatedAt"
+        ]
+      },
+      "HealthPlanList": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "plans": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HealthPlanRecord"
+            }
+          }
+        },
+        "required": [
+          "plans"
+        ]
+      },
+      "WeightRecord": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date"
+          },
+          "weightKg": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 1000
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "manual",
+              "import",
+              "unknown"
+            ]
+          },
+          "sourceLabel": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "notes": {
+            "type": "string",
+            "maxLength": 2000
+          }
+        },
+        "required": [
+          "date",
+          "weightKg",
+          "source",
+          "sourceLabel",
+          "notes"
+        ]
+      },
+      "WeightList": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "records": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WeightRecord"
+            }
+          },
+          "version": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "description": "GET 返回的整体体重历史与单位校验值，不是整数。旧接口修改也会导致 409。"
+          },
+          "unit": {
+            "type": "string",
+            "const": "kg"
+          }
+        },
+        "required": [
+          "records",
+          "version",
+          "unit"
+        ]
+      },
+      "WeightPatch": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "weightKg": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 1000
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "manual",
+              "import",
+              "unknown"
+            ]
+          },
+          "sourceLabel": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "notes": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "version": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "description": "GET 返回的整体体重历史与单位校验值，不是整数。旧接口修改也会导致 409。"
+          }
+        },
+        "required": [
+          "version",
+          "weightKg"
+        ],
+        "description": "固定 kg，一天一条真实测量；复用已有 WEIGHT_HISTORY，无第二份体重存储。省略来源/备注时保留旧值，新条目 source 默认 manual。"
+      },
+      "ZeppDay": {
+        "type": "object",
+        "required": [
+          "date",
+          "source",
+          "coverage",
+          "rawRecordIds"
+        ],
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date"
+          },
+          "sourceDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "zepp"
+            ]
+          },
+          "timeZone": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "lastSyncedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "sleep": {
+            "anyOf": [
+              {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/SleepRecord"
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "activity": {
+            "type": "object",
+            "properties": {
+              "steps": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "distanceMeters": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "caloriesKcal": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "activeMinutes": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "walkingMinutes": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "runningMinutes": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "stepGoal": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            }
+          },
+          "heartRate": {
+            "type": "object",
+            "properties": {
+              "restingBpm": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "averageBpm": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "minBpm": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "maxBpm": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "sampleCount": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            }
+          },
+          "oxygen": {
+            "type": "object",
+            "properties": {
+              "averagePercent": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "minPercent": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "sampleCount": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            }
+          },
+          "stress": {
+            "type": "object",
+            "properties": {
+              "average": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "max": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "sampleCount": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            }
+          },
+          "body": {
+            "type": "object",
+            "properties": {
+              "weightKg": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "bodyFatPercent": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            }
+          },
+          "coverage": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string",
+              "enum": [
+                "available",
+                "missing"
+              ]
+            }
+          },
+          "sourceFields": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "rawRecordIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          },
+          "retainedFields": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Missing fields/streams retained from earlier source versions; do not treat these as newly measured."
+          },
+          "fieldSources": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "description": "Metric or stream path to original raw record IDs, including complementary device rows."
+          }
+        }
+      },
+      "ZeppDayList": {
+        "type": "object",
+        "required": [
+          "records"
+        ],
+        "properties": {
+          "records": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ZeppDay"
+            }
+          }
+        }
+      },
+      "ZeppDayDetail": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ZeppDay"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "samples": {
+                "type": "object",
+                "description": "heartRate [{at,bpm}], oxygen [{at,percent}], stress [{at,value}]; missing samples remain gaps."
+              },
+              "sleepStages": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                },
+                "description": "Original start/stop/mode entries; device-dependent codes are not guessed."
+              },
+              "activityStages": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "ZeppSyncStatus": {
+        "type": "object",
+        "required": [
+          "configured",
+          "state",
+          "sources"
+        ],
+        "properties": {
+          "configured": {
+            "type": "boolean"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "not_configured",
+              "idle",
+              "syncing",
+              "success",
+              "partial",
+              "no_data",
+              "auth_required",
+              "error"
+            ]
+          },
+          "sources": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object"
+            }
+          },
+          "lastAttemptAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "lastSuccessAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "lastError": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "nextAction": {
+            "type": "string"
+          },
+          "recordCount": {
+            "type": "integer"
+          },
+          "rawRecordCount": {
+            "type": "integer"
+          },
+          "imported": {
+            "type": "integer"
+          },
+          "updated": {
+            "type": "integer"
+          },
+          "unchanged": {
+            "type": "integer"
+          },
+          "skipped": {
+            "type": "integer"
+          }
+        }
+      },
+      "ZeppWorkout": {
+        "type": "object",
+        "required": [
+          "id",
+          "source",
+          "startedAt",
+          "date",
+          "streamCounts",
+          "detailState"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "zepp"
+            ]
+          },
+          "sourceId": {
+            "type": "string"
+          },
+          "date": {
+            "type": "string",
+            "format": "date"
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "endedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "sportType": {
+            "type": [
+              "integer",
+              "string",
+              "null"
+            ]
+          },
+          "sportName": {
+            "type": "string"
+          },
+          "durationSeconds": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "distanceMeters": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "caloriesKcal": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "averageHeartRateBpm": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "maxHeartRateBpm": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "averageSpeedMetersPerSecond": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "averageCadenceSpm": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "ascentMeters": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "descentMeters": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "detailState": {
+            "type": "string"
+          },
+          "streamCounts": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "integer"
+            }
+          },
+          "retainedFields": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "lastSyncedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ZeppWorkoutList": {
+        "type": "object",
+        "required": [
+          "records"
+        ],
+        "properties": {
+          "records": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ZeppWorkout"
+            }
+          }
+        }
+      },
+      "ZeppWorkoutDetail": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ZeppWorkout"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "streams": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "array",
+                  "items": {
+                    "type": "object"
+                  }
+                },
+                "description": "Observed time series, including heartRate, pace, cadence, altitude, location, distance, stride and power when returned. Missing series are empty, retained prior series are marked."
+              },
+              "sourceSummary": {
+                "type": "object"
+              },
+              "sourceDetail": {
+                "type": [
+                  "object",
+                  "null"
+                ]
+              },
+              "sourceRecordIds": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "detailFetchedAt": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              }
+            }
+          }
+        ]
+      },
+      "ZeppWorkoutSyncStatus": {
+        "type": "object",
+        "required": [
+          "configured",
+          "state"
+        ],
+        "properties": {
+          "configured": {
+            "type": "boolean"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "not_configured",
+              "idle",
+              "syncing",
+              "success",
+              "partial",
+              "no_data",
+              "auth_required",
+              "error"
+            ]
+          },
+          "lastAttemptAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "lastSuccessAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "lastError": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "nextAction": {
+            "type": "string"
+          },
+          "recordCount": {
+            "type": "integer"
+          },
+          "rawRecordCount": {
+            "type": "integer"
+          },
+          "imported": {
+            "type": "integer"
+          },
+          "updated": {
+            "type": "integer"
+          },
+          "unchanged": {
+            "type": "integer"
+          },
+          "skipped": {
+            "type": "integer"
+          },
+          "detailsFetched": {
+            "type": "integer"
+          },
+          "detailsFailed": {
+            "type": "integer"
+          },
+          "detailsPartial": {
+            "type": "integer"
+          },
+          "sampleCount": {
+            "type": "integer"
+          },
+          "pages": {
+            "type": "integer"
+          }
+        }
       }
     },
     "responses": {
