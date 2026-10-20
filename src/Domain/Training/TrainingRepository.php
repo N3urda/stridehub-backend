@@ -64,6 +64,8 @@ final readonly class TrainingRepository
         $naturalKey = match ($kind) {
             'check-ins' => $payload['date'] ?? null,
             'sessions' => $payload['activityId'] ?? null,
+            'meal-plans' => 'active' === ($payload['status'] ?? null) ? $payload['date'] : null,
+            'workout-links' => $payload['activityId'] ?? null,
             default => null,
         };
         $data = ['payload' => json_encode($payload, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE), 'version' => $expectedVersion + 1, 'updatedAt' => $now, 'naturalKey' => $naturalKey];

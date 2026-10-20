@@ -6,6 +6,7 @@
         let res;
         try { res = await fetch(url, {credentials: 'same-origin', cache: 'no-store', ...options, headers: {Accept: 'application/json', ...options.headers}}); }
         catch { throw new Error('连接中断，请检查网络后刷新。'); }
+        if (res.status === 204 && !res.redirected) return {};
         const data = await res.json().catch(() => null);
         if (!res.ok || !data || res.redirected) { const e = new Error(res.status === 401 || res.redirected || !data ? '登录已过期，请重新登录后再试。' : data.message || [data.lastError, data.nextAction].filter(Boolean).join(' ') || `暂时无法读取（${res.status}），请稍后重试。`); e.status = res.status; throw e; }
         return data;

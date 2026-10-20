@@ -28,6 +28,18 @@ final readonly class InsightsPageRequestHandler
         return $this->page('plans');
     }
 
+    #[Route('/admin/nutrition', name: 'admin_nutrition', methods: ['GET'], priority: 40)]
+    public function nutrition(): HtmlResponse
+    {
+        return $this->page('nutrition');
+    }
+
+    #[Route('/admin/weight', name: 'admin_weight', methods: ['GET'], priority: 40)]
+    public function weight(): HtmlResponse
+    {
+        return $this->page('weight');
+    }
+
     private function page(string $name): HtmlResponse
     {
         $response = new HtmlResponse($this->twig->render('html/stridehub/'.$name.'.html.twig'));

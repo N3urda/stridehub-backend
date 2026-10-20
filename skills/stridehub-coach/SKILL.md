@@ -1,6 +1,6 @@
 ---
 name: stridehub-coach
-description: Use when a user wants to use StrideHub to review activity and detailed Zepp records, record weight or blood pressure, adjust training schedules, incorporate examination reports, or save weight, sleep and daily routine plans (运动健康管理、体重、血压、睡眠、Zepp 数据、体检报告、动态课表、减重与作息计划).
+description: Use when a user wants to use StrideHub to review activity and health records, record meals or measurements, adjust training and meal plans, track weight goals, or incorporate examination reports (运动健康管理、饮食记录与计划、减重目标、身体测量、Zepp 数据、体检报告、动态课表).
 ---
 
 # StrideHub Coach
@@ -27,6 +27,7 @@ python3 <skill-directory>/scripts/stridehub_api.py request GET /api/v1/training/
 | 记录或复盘血压、查看 Zepp 睡眠 | [血压与睡眠](references/measurements.md)；测量时间、来源、近期记录及同步状态 |
 | 调整睡眠、饮食、日常安排 | [报告与健康背景](references/health-reports.md)；当前健康约束、实际作息、用户目标和训练安排 |
 | 记录体重、读取完整 Zepp 数据、保存减重或作息计划 | [数据记录与 AI 计划](references/data-records.md)；真实数据覆盖、健康约束及已有计划 |
+| 保存餐食计划、记录实际饮食、设置减重目标、记录腰围/体脂 | [数据记录与 AI 计划](references/data-records.md) 的量化记录部分；读取 workspace 与健康 OpenAPI，计划与实际分开保存 |
 
 ## 执行约定
 

@@ -1,5 +1,24 @@
 # StrideHub 验收记录
 
+## 量化饮食、减重与统一运动工作台（2026-10-20）
+
+页面围绕数据与计划展开：新增饮食、减重页面，训练七日日历和统一运动统计；外部 AI 通过 API/Skill 读取聚合上下文、保存结构化计划。本次不新增站内聊天。
+
+- **236 个定向 PHP 测试、1574 条断言通过**：健康/训练/跑步领域及 API、首次使用。新增覆盖营养缺失与零值、原子批量回滚、版本与历史、删除后 ID 不复用、计划引用、七日均值的日历窗口、目标与实测分离、云端跑步对账、合并后别名互斥及批量冲突回滚。
+- 完整 PHPUnit 执行 **4548 个测试、147293 条断言**，无错误，剩余 **7 个平台快照失败**。在相同 PHP 8.5.11/macOS 环境，对干净主分支 `31bff634` 单独执行 4537 个测试，7 个失败的测试名及快照差异完全相同，均为预期 `Linux` 与实际 `Darwin`。本次导航引起的 10 份 HTML 快照已检查并更新。
+- 全库 PHPStan、Rector、CS Fixer 检查通过；最终改动另经定向静态分析。Composer 严格验证、PSR-4、Twig/JavaScript 语法、OpenAPI 本地引用及 operationId 唯一性检查通过。
+- `tests/e2e/workspace-browser.cjs` 使用专用数据库与真实 HTTP，通过 **8 组浏览器验收**：空状态及个人时区、API 餐食计划与网页实际摄入联动、文本转义、真实并发 409 与草稿保留、目标/测量分别持久化、七日训练日历、五个数据页面的 320/390px 布局，以及刷新失败保留旧数据与无未捕获异常。只有最后的刷新失败使用明确的 503 拦截；其他写入均由服务端处理。已人工查看桌面和移动端截图。
+
+复现浏览器验收需要 PHP/Composer 依赖、Playwright 和 Chrome：
+
+```sh
+PLAYWRIGHT_MODULE=/absolute/path/to/playwright \
+CHROMIUM_EXECUTABLE=/absolute/path/to/chrome \
+node tests/e2e/workspace-browser.cjs
+```
+
+脚本只监听 `127.0.0.1:8091`，只重建 `tests/dreeveworkspace-browser.db`，使用 DEMO 资料；截图与日志保存在被忽略的 `var/runtime/workspace-browser/`。测试没有访问个人 Zepp 账户，也不代表远程服务已部署。完整 PHPUnit 另需按仓库 CI 配置生成 countries 资源、编译 `fit-tool` 并将其加入 PATH；建议设置 `memory_limit=1G`。
+
 ## 数据工作台与详细 Zepp 记录（2026-10-19 至 2026-10-20）
 
 本次在本机开发服务验证了统一的总览、身体、运动、计划页面，原始运动档案、文件导入和高级设置沿用统一外壳。下面早期章节为历史验收，不代表当前数据接入状态。

@@ -1,0 +1,9 @@
+<section id="workout-catalog" class="hub-records data-workspace hub-surface catalog-panel" data-base="{{ relativeUrl('/admin/health/api') }}" data-csrf="{{ csrf_token('health')|e('html_attr') }}">
+    <div class="section-title"><h2>统一运动统计</h2><span class="source-pill">Zepp / 导入文件</span></div>
+    <form id="catalog-range" class="data-range"><label>开始日期<input name="from" type="date" required></label><label>结束日期<input name="to" type="date" required></label><button type="submit" class="hub-button">查看统计</button></form>
+    <p id="catalog-status" class="hub-notice" role="status">正在读取…</p>
+    <div id="catalog-metrics" class="compact-metrics"></div>
+    <div id="catalog-chart" class="data-chart"></div>
+    <div id="catalog-table" class="data-table-scroll"></div>
+    <p class="subtle small">同一次运动的多个来源经确认后只计一次。存在待核对重复时累计值留空。单次传感器曲线保留在下方来源详情中。</p>
+</section>

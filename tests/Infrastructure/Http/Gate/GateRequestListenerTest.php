@@ -176,7 +176,7 @@ class GateRequestListenerTest extends TestCase
     /** @return iterable<string, array{string}> */
     public static function provideDataWorkspacePaths(): iterable
     {
-        foreach (['/', '/admin', '/admin/login', '/admin/logout', '/admin/upload', '/admin/importStatus', '/admin/insights', '/admin/plans', '/admin/health', '/admin/health/api/weight', '/admin/running', '/admin/running/api/overview', '/admin/training', '/admin/training/api/today', '/api/v1/health/weight', '/api/v1/training/profile', '/api/v1/running/overview'] as $path) {
+        foreach (['/', '/admin', '/admin/login', '/admin/logout', '/admin/upload', '/admin/importStatus', '/admin/insights', '/admin/plans', '/admin/health', '/admin/nutrition', '/admin/weight', '/admin/health/api/weight', '/admin/running', '/admin/running/api/overview', '/admin/training', '/admin/training/api/today', '/api/v1/health/weight', '/api/v1/training/profile', '/api/v1/running/overview'] as $path) {
             yield $path => [$path];
         }
     }

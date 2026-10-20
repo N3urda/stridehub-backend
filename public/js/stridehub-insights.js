@@ -45,28 +45,36 @@
         const names = {sleep: '睡眠', activity: '日常活动', heartRate: '心率', oxygen: '血氧', stress: '压力', body: '身体成分'};
         $('data-coverage').replaceChildren(...Object.entries(names).map(([key, label]) => { const dates = new Set(records.filter(r => r.coverage?.[key] === 'available').map(r => r.date)); if (key === 'sleep') sleeps.forEach(r => dates.add(r.date)); return node('div', 'coverage-item' + (dates.size ? '' : ' missing'), `${label} · ${dates.size ? dates.size + ' 天' : '未提供'}`); }));
     }
-    function renderRunning(results) {
-        const imported = results[0], cloud = results[1].records;
-        const hasCloud = cloud.length > 0;
-        const data = hasCloud ? {summary: {distanceKm: cloud.some(r => r.distanceMeters != null) ? cloud.filter(r => r.distanceMeters != null).reduce((n,r) => n + r.distanceMeters / 1000, 0) : null, count: cloud.length, movingSeconds: cloud.some(r => r.durationSeconds != null) ? cloud.filter(r => r.durationSeconds != null).reduce((n,r) => n + r.durationSeconds, 0) : null}, activities: {items: cloud.map(r => ({id:r.id,name:r.sportName || '运动',startAt:r.startedAt,distanceKm:r.distanceMeters == null ? null : r.distanceMeters / 1000,movingSeconds:r.durationSeconds}))}} : imported;
-        $('running-caption').textContent = hasCloud ? 'Zepp 云端运动 · 不与文件导入重复相加' : '这段时间已导入的跑步积累';
+    function renderRunning(data) {
         const s = data.summary; $('running-metrics').replaceChildren();
-        metric($('running-metrics'), hasCloud ? '累计运动' : '累计跑步', num(s.distanceKm, 1), 'km'); metric($('running-metrics'), '训练次数', num(s.count), '次'); metric($('running-metrics'), '运动时间', num(s.movingSeconds == null ? null : s.movingSeconds / 3600, 1), '小时');
+        $('running-caption').textContent = data.pendingDuplicates ? `${data.pendingDuplicates} 条来源待核对，累计值暂不显示` : '统一运动记录 · 已确认的同次来源只计一次';
+        metric($('running-metrics'), '累计运动', num(s.distanceKm, 1), 'km');
+        metric($('running-metrics'), '运动次数', num(s.count), '次');
+        metric($('running-metrics'), '运动时间', num(s.movingSeconds == null ? null : s.movingSeconds / 3600, 1), '小时');
         $('recent-activities').replaceChildren();
-        for (const item of data.activities.items.slice(0, 3)) {
-            const row = node('a', 'activity-row'); row.href = base + '/running?' + (hasCloud ? 'zeppWorkout=' : 'activityId=') + encodeURIComponent(item.id);
-            const mark = node('span', 'activity-mark'); const icon = svg('svg', {viewBox: '0 0 24 24', 'aria-hidden': 'true'}); icon.append(svg('circle', {cx: 15, cy: 4, r: 2}), svg('path', {d: 'm8 8 4-2 4 5 4 1M12 6l-2 7 5 3-2 6M10 13l-4 4H2'})); mark.append(icon);
-            const text = node('div'); text.append(node('strong', '', item.name), node('p', '', time(item.startAt, state.zone) + ' · ' + Math.round(item.movingSeconds / 60) + ' 分钟'));
-            const distance = node('span', 'activity-distance', num(item.distanceKm, 2)); distance.append(node('small', '', ' km')); row.append(mark, text, distance); $('recent-activities').append(row);
+        for (const item of data.records.slice(0, 3)) {
+            const source = item.sources[0], row = node('a', 'activity-row'); row.href = base + '/running?' + (source.source === 'zepp' ? 'zeppWorkout=' : 'activityId=') + encodeURIComponent(source.id);
+            const text = node('div'); text.append(node('strong', '', item.name), node('p', '', time(item.startAt, state.zone) + ' · ' + num(item.durationMinutes) + ' 分钟'));
+            row.append(text, node('span', 'activity-distance', num(item.distanceKm, 2) + ' km')); $('recent-activities').append(row);
         }
-        if (!data.activities.items.length) $('recent-activities').append(node('p', 'empty-note', '这段时间还没有导入的跑步记录。Zepp 日常活动与运动文件分别保存。'));
+        if (!data.records.length) $('recent-activities').append(node('p', 'empty-note', '这段时间还没有运动记录。'));
+    }
+    function renderDataStrip(data) {
+        const strip = $('overview-data-strip'); strip.replaceChildren();
+        const latest = data.weight.records[0], goal = data.weight.goals.find(g => g.status === 'active' && g.startDate <= data.today && g.endDate >= data.today), day = data.nutrition.days.find(d => d.date === data.today);
+        for (const [label, value, unit, detail, href] of [
+            ['最近体重', num(latest?.weightKg, 2), 'kg', latest?.date || '所选范围暂无记录', '/health#body-weight'],
+            ['减重目标', num(goal?.targetWeightKg, 2), 'kg', goal ? goal.startDate + ' → ' + goal.endDate : '尚未设置当前目标', '/weight'],
+            ['今日已记录摄入', num(day?.actualLogged.energyKcal), 'kcal', `${day?.mealCount || 0} 餐 · 目标 ${num(day?.targets.energyKcal)}`, '/nutrition'],
+            ['期间已完成训练', num(data.sessions.filter(s => s.status === 'completed' && s.type !== 'rest').length), '次', `${data.sessions.filter(s => s.type !== 'rest' && !['cancelled', 'skipped'].includes(s.status)).length} 次计划`, '/plans']
+        ]) { const card = node('section', 'hub-surface'); metric(card, label, value, unit, detail); const link = node('a', '', '查看明细'); link.href = base + href; card.append(link); strip.append(card); }
     }
     function renderPlans(sessions, plans) {
         const sessionsNext = sessions.filter(s => !['cancelled', 'completed', 'skipped'].includes(s.status) && s.startAt && dateInZone(new Date(s.startAt), state.zone) >= state.today).slice(0, 2);
         const rows = sessionsNext.map(s => ({title: s.title, date: dateInZone(new Date(s.startAt), state.zone).slice(5, 10), text: `${s.durationMinutes ?? '—'} 分钟 · 训练课表`}));
         for (const p of plans.filter(p => p.status === 'active' && (!p.endDate || p.endDate >= state.today) && p.startDate <= state.today).slice(0, 2)) rows.push({title: p.title, date: '进行中', text: p.goal || p.sourceLabel || '生活计划'});
         $('overview-plans').replaceChildren();
-        if (!rows.length) $('overview-plans').append(node('p', 'empty-note', '下一份计划，从了解你开始。\n让 AI 结合你的真实记录安排训练、减重或作息，保存后就会出现在这里。'));
+        if (!rows.length) $('overview-plans').append(node('p', 'empty-note', '尚未保存接下来的安排。'));
         for (const row of rows.slice(0, 3)) { const el = node('div', 'plan-row'), text = node('div'); text.append(node('strong', '', row.title), node('p', '', row.text)); el.append(node('span', 'plan-time', row.date), text); $('overview-plans').append(el); }
     }
     function renderSync(data) {
@@ -89,7 +97,8 @@
         const jobs = [
             ['睡眠', api('/health/api/sleep' + query), renderSleep, 'overview-sleep-chart'],
             ['Zepp 日记录', api('/health/api/zepp/days' + query), data => renderDaily(data.records), 'activity-metrics'],
-            ['运动', Promise.all([api('/running/api/overview' + query), api('/health/api/zepp/workouts' + query)]), renderRunning, 'running-metrics'],
+            ['运动', api('/health/api/workouts' + query), renderRunning, 'running-metrics'],
+            ['目标与饮食', api('/health/api/workspace' + query), renderDataStrip, 'overview-data-strip'],
             ['连接状态', api('/health/api/zepp/status'), renderSync, 'sync-description'],
             ['计划', Promise.all([api(`/training/api/sessions?from=${state.today}&to=${shiftDay(state.today, 30)}`), api('/health/api/plans')]), data => renderPlans(data[0].items, data[1].plans), 'overview-plans']
         ];

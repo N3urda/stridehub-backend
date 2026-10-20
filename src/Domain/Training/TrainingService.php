@@ -101,11 +101,19 @@ final readonly class TrainingService
                 }
                 if ([] !== $payload['activityIds']) {
                     if ($validateLinks) {
+                        $canonicalIds = [];
                         foreach ($payload['activityIds'] as $activityId) {
-                            if (null === $this->activities->find($activityId)) {
+                            $activity = $this->activities->find($activityId);
+                            if (null === $activity) {
                                 throw new TrainingError('关联运动不存在、已删除或不是跑步记录：'.$activityId);
                             }
+                            if (in_array($activity['id'], $canonicalIds, true)) {
+                                throw new TrainingError('同一次运动的不同来源不能重复关联。', 409);
+                            }
+                            $canonicalIds[] = $activity['id'];
                         }
+                        $payload['activityIds'] = $canonicalIds;
+                        $payload['activityId'] = $canonicalIds[0] ?? null;
                     }
                     if ('rest' === $payload['type']) {
                         throw new TrainingError('休息日不能关联跑步记录。');
@@ -207,7 +215,7 @@ final readonly class TrainingService
         } elseif (array_any($actualActivities, static fn (array $activity): bool => null === $activity['averageHeartRate'])) {
             $quality[] = '部分或全部记录缺少心率；平均心率仅按有测量值的记录及其运动时长加权，不能代表缺失部分。';
         }
-        $quality[] = '距离、时长与平均心率来自已导入记录；不估算强度达标、睡眠、HRV 或生理恢复评分。';
+        $quality[] = '距离、时长与平均心率来自已记录运动；不估算强度达标、睡眠、HRV 或生理恢复评分。';
         $linked = array_merge([], ...array_column($this->repository->list('sessions'), 'activityIds'));
         $candidates = array_values(array_filter($this->activities->near(new \DateTimeImmutable($session['startAt']), new \DateTimeZone($this->profile()['timezone'])), static fn (array $activity): bool => !in_array($activity['id'], $linked, true)));
         $delta = null;
@@ -215,7 +223,7 @@ final readonly class TrainingService
         if ($missing || $overlap) {
             $suggestion = '关联记录不完整或时间重叠，请先核对记录；当前不以部分或重复汇总判断训练完成质量。';
         } elseif (null !== $actual) {
-            $delta = ['distanceKm' => null === $session['distanceKm'] ? null : round($actual['distanceKm'] - $session['distanceKm'], 3), 'durationMinutes' => round($actual['durationMinutes'] - $session['durationMinutes'], 2)];
+            $delta = ['distanceKm' => null === $session['distanceKm'] || null === $actual['distanceKm'] ? null : round($actual['distanceKm'] - $session['distanceKm'], 3), 'durationMinutes' => null === $actual['durationMinutes'] ? null : round($actual['durationMinutes'] - $session['durationMinutes'], 2)];
             $suggestion = $actual['durationMinutes'] > $session['durationMinutes'] * 1.2 ? '实际时长明显超过计划；结合跑后体感检查下一次训练安排。' : '训练已关联。结合计划差异和跑后体感决定是否调整后续课表。';
         } elseif ('planned' === $session['status'] && strtotime($session['startAt']) + $session['durationMinutes'] * 60 < $this->clock->getCurrentDateTimeImmutable()->getTimestamp()) {
             $suggestion = '这节课的计划时间已过。先检查是否有未导入的运动；如确实漏训，可改期或标记跳过，避免机械补齐所有跑量。';
@@ -286,8 +294,8 @@ final readonly class TrainingService
         $elapsed = 0;
         $earliest = $activities[0]['startAt'];
         foreach ($activities as $activity) {
-            $seconds += $activity['movingSeconds'];
-            $distance += $activity['distanceKm'];
+            $seconds = null === $seconds || null === $activity['movingSeconds'] ? null : $seconds + $activity['movingSeconds'];
+            $distance = null === $distance || null === $activity['distanceKm'] ? null : $distance + $activity['distanceKm'];
             if (null !== $activity['averageHeartRate'] && $activity['movingSeconds'] > 0) {
                 $weightedHeartRate += $activity['averageHeartRate'] * $activity['movingSeconds'];
                 $heartRateSeconds += $activity['movingSeconds'];
@@ -298,7 +306,7 @@ final readonly class TrainingService
             }
         }
 
-        return ['id' => $activities[0]['id'], 'activityIds' => array_column($activities, 'id'), 'name' => 1 === count($activities) ? $activities[0]['name'] : '合计 '.count($activities).' 条跑步记录', 'startAt' => $earliest, 'distanceKm' => round($distance, 3), 'durationMinutes' => round($seconds / 60, 2), 'movingSeconds' => $seconds, 'elapsedSeconds' => $elapsed, 'averageHeartRate' => $heartRateSeconds > 0 ? round($weightedHeartRate / $heartRateSeconds, 1) : null, 'aggregated' => count($activities) > 1];
+        return ['id' => $activities[0]['id'], 'activityIds' => array_column($activities, 'id'), 'name' => 1 === count($activities) ? $activities[0]['name'] : '合计 '.count($activities).' 条跑步记录', 'startAt' => $earliest, 'distanceKm' => null === $distance ? null : round($distance, 3), 'durationMinutes' => null === $seconds ? null : round($seconds / 60, 2), 'movingSeconds' => $seconds, 'elapsedSeconds' => $elapsed, 'averageHeartRate' => $heartRateSeconds > 0 ? round($weightedHeartRate / $heartRateSeconds, 1) : null, 'aggregated' => count($activities) > 1];
     }
 
     /** @param list<array<string, mixed>> $activities */
