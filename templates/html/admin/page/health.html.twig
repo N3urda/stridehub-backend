@@ -24,10 +24,11 @@
         <nav class="health-jump" aria-label="健康记录导航"><a href="#sleep-section">睡眠记录</a><a href="#body-weight">体重趋势</a><a href="#collection-history">逐次采集</a><a href="#zepp-sources">手表来源</a><a href="#collection-devices">手机与设置</a><a href="#pressure-section">血压记录</a><a href="#health-context-section">报告与健康背景</a></nav>
         <div id="health-status" class="notice" role="status" aria-live="polite" hidden></div>
         <noscript><p class="notice error">请开启 JavaScript 以读取和保存健康记录。</p></noscript>
-        <form id="health-range" class="health-range"><label>从<input type="date" name="from" required></label><label>到<input type="date" name="to" required></label><button class="button" type="submit">查看这段时间</button><p id="health-timezone" class="muted"></p></form>
+        <form id="health-range" class="health-range"><div class="health-range-shortcuts" aria-label="快速选择日期范围"><button type="button" class="button" data-health-days="7">最近 7 天</button><button type="button" class="button" data-health-days="30">最近 30 天</button><button type="button" class="button" data-health-days="90">最近 90 天</button></div><label>开始日期<input type="date" name="from" required></label><label>结束日期<input type="date" name="to" required></label><button class="button" type="submit">查看这段时间</button><p id="health-timezone" class="muted"></p></form>
         <section id="sleep-section" class="health-panel sleep-panel" aria-labelledby="sleep-title">
-            <div class="health-section-heading"><div><div class="hub-section-title"><span class="hub-section-icon">{{ icons.icon('sleep') }}</span><h2 id="sleep-title">睡眠 · 夜晚的记录</h2></div><p class="muted">来自 Zepp 的睡眠时长、阶段与夜间变化。</p></div><button type="button" id="sleep-sync" class="button">立即同步</button></div>
+            <div class="health-section-heading"><div><div class="hub-section-title"><span class="hub-section-icon">{{ icons.icon('sleep') }}</span><h2 id="sleep-title">睡眠 · 夜晚的记录</h2></div><p class="muted">来自 Zepp 的睡眠时长、阶段与夜间变化。</p></div><button type="button" id="sleep-sync" class="button" disabled>立即同步</button></div>
             <div id="sleep-status" role="status" class="form-status" aria-live="polite">正在读取同步状态…</div>
+            <div id="sleep-record-status" role="status" class="form-status" aria-live="polite" hidden></div>
             <div id="sleep-summary" class="health-metrics"></div>
             <div id="sleep-chart" class="health-chart" aria-label="睡眠时长趋势"></div>
             <details class="health-history"><summary>每晚睡眠记录</summary><div id="sleep-records"><p class="muted">正在读取…</p></div></details>

@@ -307,5 +307,11 @@
     $('data-refresh').addEventListener('click', () => load());
     range.addEventListener('submit', e => { e.preventDefault(); load(); });
     window.addEventListener('beforeunload', e => { if (state.drafts.size) { e.preventDefault(); e.returnValue = ''; } });
-    load();
+    load().then(() => {
+        const requested = initialQuery.get('record');
+        const allowed = app.dataset.view === 'nutrition' ? ['meal'] : ['weight-entry', 'measurement', 'goal'];
+        if (!state.data || !allowed.includes(requested)) return;
+        const url = new URL(location.href); url.searchParams.delete('record'); window.history.replaceState(null, '', url);
+        openEditor(requested);
+    });
 })();

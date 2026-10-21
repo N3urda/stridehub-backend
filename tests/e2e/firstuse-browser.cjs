@@ -35,7 +35,7 @@ print('No athlete profile or activities were created.')`, db], {encoding: 'utf8'
     assert.match(page.url(), /\/admin\/login$/);
     await page.locator('[name=_username]').fill(credentials.username);
     await page.locator('[name=_password]').fill(credentials.password);
-    await Promise.all([page.waitForURL(/\/admin\/insights$/), page.locator('button[type=submit]').click()]);
+    await Promise.all([page.waitForURL(url => url.pathname === '/admin/insights'), page.locator('button[type=submit]').click()]);
     await page.locator('#overview-refresh:enabled').waitFor();
     assert.match(await page.locator('#latest-sleep-date').innerText(), /还没有睡眠/);
     await page.screenshot({path: path.join(output, 'empty-overview.png'), fullPage: true});
@@ -43,17 +43,20 @@ print('No athlete profile or activities were created.')`, db], {encoding: 'utf8'
         const response = await page.goto(base + '/admin/' + route);
         assert.equal(response.status(), 200, route);
         assert.equal(new URL(page.url()).pathname, '/admin/' + route, route + ' must not require legacy setup');
-        assert.equal(await page.locator('.hub-primary-nav a').count(), 4);
+        assert.equal(await page.locator('.hub-primary-nav a').count(), 6);
         await page.waitForTimeout(300);
     }
     await page.locator('#upload-form').waitFor();
     await page.screenshot({path: path.join(output, 'empty-upload.png'), fullPage: true});
     await page.goto(base + '/admin/health');
-    await page.locator('#weight-form button[type=submit]:enabled').waitFor();
+    await page.locator('#weight-metrics .compact-metric').first().waitFor();
+    assert.match(await page.locator('#weight-form [name=date]').inputValue(), /^\d{4}-\d{2}-\d{2}$/);
+    assert.equal(await page.locator('#weight-form button[type=submit]').isDisabled(), true);
     await page.locator('#weight-form [name=weightKg]').fill('72.4');
     await page.locator('#weight-form [name=notes]').fill('DEMO first-use measurement');
+    await page.locator('#weight-form button[type=submit]:enabled').waitFor();
     await page.locator('#weight-form button[type=submit]').click();
-    await page.locator('#weight-status').getByText('已保存并核验。').waitFor();
+    await page.locator('#weight-status').getByText(/已保存.*服务器记录/).waitFor();
     for (const width of [390, 320]) {
         await page.setViewportSize({width, height: 844});
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);

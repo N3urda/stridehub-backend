@@ -20,3 +20,42 @@
 .context-prose h3{color:#546477}
 #health-preferences{margin-top:14px}
 #health-preferences summary{cursor:pointer}
+
+/* Collection feedback stays readable before technical provenance is expanded. */
+#health-app .health-range-shortcuts{display:flex;flex-basis:100%;flex-wrap:wrap;gap:8px}
+#health-app .health-range-shortcuts .button{flex-basis:auto;min-height:44px}
+#health-app .hub-button{min-height:44px}
+#health-app .weight-form{background:#f5f8fb;border:1px solid var(--line);padding:18px;border-radius:12px;align-content:start;max-width:none}
+#health-app .weight-form-heading{display:flex;justify-content:space-between;align-items:center;gap:10px;grid-column:1/-1;color:var(--ink)}
+#health-app .weight-form-help,#health-app .weight-form-wide{grid-column:1/-1}
+#health-app .weight-form-help{font-size:13px;line-height:1.65;color:var(--muted)}
+#health-app .weight-form label{font-size:13px;color:var(--ink)}
+#health-app .weight-form input,#health-app select{min-height:44px;font-size:16px}
+#health-app .weight-notice{font-size:13px;line-height:1.65}
+#health-app .health-error{color:var(--error,#a23f35)}
+#health-app .collection-status{font-size:13px;line-height:1.7;margin:14px 0;overflow-wrap:anywhere}
+#health-app .collection-entry{border-top:1px solid var(--line);padding:12px 0;overflow-wrap:anywhere}
+#health-app .collection-entry>summary{cursor:pointer;min-height:44px;line-height:1.7}
+#health-app .collection-summary{display:grid;grid-template-columns:1fr auto;gap:3px 12px;position:relative;padding-right:22px}
+#health-app .collection-summary::after{content:'⌄';position:absolute;right:1px;top:10px;color:var(--muted)}
+#health-app .collection-entry[open]>.collection-summary::after{content:'⌃'}
+#health-app .collection-summary-value{font-size:20px;font-weight:650;color:var(--ink);font-variant-numeric:tabular-nums}
+#health-app .collection-summary-meta{grid-column:1/-1;grid-row:2;color:var(--muted);font-size:13px}
+#health-app .collection-receipt{align-self:center;font-size:12px;color:#236b52;background:#edf6f0;padding:3px 9px;border-radius:6px}
+#health-app .collection-receipt.deleted{color:#665b55;background:#f2efec}
+#health-app .collection-projection-note{padding:12px;border-radius:8px;background:#fff6e8;color:#785020;font-size:13px;line-height:1.7}
+#health-app .collection-facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 20px;margin:18px 0}
+#health-app .collection-facts dt{font-size:12px;color:var(--muted)}
+#health-app .collection-facts dd{margin:4px 0 0;color:var(--ink);font-size:14px;overflow-wrap:anywhere}
+#health-app .collection-entry details{margin:14px 0}
+#health-app .collection-entry details>summary,#health-app .data-day-entry>summary{min-height:44px;align-content:center;cursor:pointer}
+#health-app .collection-device{display:flex;align-items:center;justify-content:space-between;gap:16px;border-top:1px solid var(--line);padding:12px 0;overflow-wrap:anywhere}
+#health-app .collection-device>span{min-width:0}
+#health-app .collection-device>button{flex-shrink:0}
+#health-app .collection-filter{display:grid;gap:6px;max-width:360px;margin:12px 0;font-size:14px}
+#health-app .collection-steps{padding-left:24px;line-height:1.8}
+#health-app .collection-steps li+li{margin-top:8px}
+#health-app summary:focus-visible,#health-app input:focus-visible,#health-app select:focus-visible{outline:3px solid #7b98e8;outline-offset:3px}
+@media(max-width:640px){#health-app .section-title{flex-wrap:wrap;align-items:flex-start}#health-app .collection-facts{grid-template-columns:minmax(0,1fr)}#health-app .weight-form{padding:14px}#health-app .collection-summary{gap:3px 8px}#health-app .collection-receipt{font-size:11px;padding:3px 6px}#health-app .collection-summary-meta{font-size:12px}#health-app .collection-device{flex-wrap:wrap}}
+#health-app .weight-layout{grid-template-columns:minmax(0,1fr) minmax(300px,340px)}
+@media(max-width:1050px){#health-app .weight-layout{grid-template-columns:minmax(0,1fr)}}

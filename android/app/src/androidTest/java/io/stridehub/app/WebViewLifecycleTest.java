@@ -105,6 +105,35 @@ public final class WebViewLifecycleTest extends ActivityInstrumentationTestCase2
             assertEquals(Boolean.TRUE, read(activity, "failedPage"));
             assertEquals(View.VISIBLE, browser.notice.getVisibility());
             assertTrue(browser.status.getText().toString().contains("连接失败"));
+            assertEquals(View.VISIBLE, browser.tabs.getVisibility());
+            assertEquals("采集", ((android.widget.Button)browser.tabs.getChildAt(4)).getText().toString());
+        });
+    }
+
+    public void testSelectedTabTracksLoadedPageAndClearsForMorePages() throws Throwable {
+        MainActivity activity = getActivity();
+        runTestOnUiThread(() -> {
+            BrowserLayout browser = readyBrowser(activity);
+            browser.web.getWebViewClient().onPageFinished(browser.web, "https://lifecycle.invalid/admin/health?from=2026-10-01");
+            assertTrue(browser.tabs.getChildAt(1).isSelected());
+            assertFalse(browser.tabs.getChildAt(0).isSelected());
+            browser.web.getWebViewClient().onPageFinished(browser.web, "https://lifecycle.invalid/admin/nutrition");
+            for(int i=0;i<browser.tabs.getChildCount();i++)assertFalse(browser.tabs.getChildAt(i).isSelected());
+        });
+    }
+
+    public void testRestoredOverviewWithPeriodQueryBecomesReady() throws Throwable {
+        MainActivity activity=getActivity();
+        runTestOnUiThread(()->{
+            BrowserLayout browser=readyBrowser(activity);
+            try {
+                Field stage=MainActivity.class.getDeclaredField("stage");stage.setAccessible(true);
+                for(Object value:stage.getType().getEnumConstants())if("RESTORE".equals(value.toString()))stage.set(activity,value);
+                // The overview synchronizes its range to history before WebView finishes loading.
+                browser.web.getWebViewClient().onPageFinished(browser.web,"https://lifecycle.invalid/admin/insights?days=30");
+                assertEquals("READY",read(activity,"stage").toString());
+                assertTrue(browser.tabs.getChildAt(0).isSelected());
+            }catch(ReflectiveOperationException error){throw new AssertionError(error);}
         });
     }
 

@@ -22,7 +22,7 @@ ROOT = Path.cwd()
 ADB = str(Path(os.environ['ANDROID_HOME']) / 'platform-tools/adb')
 SERIAL = 'emulator-5556'
 PACKAGE = os.environ.get('STRIDEHUB_APK_PACKAGE', 'io.stridehub.app.debug')
-assert PACKAGE in ('io.stridehub.app', 'io.stridehub.app.debug'), 'Only StrideHub packages may be tested'
+assert PACKAGE == 'io.stridehub.app.debug', 'Only the disposable debug package may be tested'
 BASE = 'http://127.0.0.1:8082'
 CREDENTIALS = json.loads((ROOT / 'var/runtime/credentials.json').read_text())
 SHOTS = ROOT / 'var/runtime/android-screenshots'
@@ -113,7 +113,11 @@ def menu(choice):
 
 def scroll_to(value):
     for _ in range(8):
-        found = [node for node in matching(ui(), value) if node.get('bounds') != '[0,0][0,0]' and int(re.findall(r'\d+', node.get('bounds'))[1]) < 2100]
+        found = []
+        for node in matching(ui(), value):
+            x1, y1, x2, y2 = map(int, re.findall(r'\d+', node.get('bounds')))
+            if x2 > x1 and y2 > y1 and y1 < 2100:
+                found.append(node)
         if found:
             return found[-1]
         shell('input swipe 530 1900 530 600 400')
@@ -129,6 +133,17 @@ def seed_demo_athlete():
             connection.execute('INSERT INTO Setting(settingsGroup,name,value) VALUES (?,?,?) ON CONFLICT(settingsGroup,name) DO UPDATE SET value=excluded.value', ('general', name, json.dumps(value)))
 
 
+def verify_disposable_watch_mount():
+    # Uploads use the repository's watch/ path; an existing host test directory
+    # alone does not prove that the backend writes into it.
+    expected = str((ROOT / 'var/runtime/android-e2e-watch').resolve())
+    container = os.environ.get('STRIDEHUB_TEST_CONTAINER', 'stridehub-unified-e2e')
+    result = subprocess.run(['docker', 'inspect', container, '--format', '{{json .Mounts}}'], capture_output=True, text=True, check=False)
+    assert result.returncode == 0, 'Cannot verify the disposable backend container mounts'
+    mounts = json.loads(result.stdout)
+    assert any(m.get('Type') == 'bind' and m.get('Source') == expected and m.get('Destination') == '/var/www/watch' for m in mounts), 'Disposable backend must bind var/runtime/android-e2e-watch to /var/www/watch before running upload acceptance'
+
+
 def api_today():
     request = urllib.request.Request('http://localhost:8082/api/v1/training/today', headers={'Authorization': 'Bearer ' + CREDENTIALS['apiKey']})
     with urllib.request.urlopen(request) as response:
@@ -136,7 +151,7 @@ def api_today():
 
 
 def check_in():
-    tap('今日')
+    menu('今日安排与反馈')
     wait_contains('今日安排')
     # Scroll the actual WebView, then use the Android accessibility input and save button.
     shell('input swipe 530 1900 530 700 400')
@@ -158,6 +173,7 @@ def check_in():
 
 
 def upload_demo_file():
+    verify_disposable_watch_mount()
     watch = ROOT / 'var/runtime/android-e2e-watch'
     assert watch.is_dir(), 'Disposable container must mount private Android watch directory'
     before = {p.name for p in watch.iterdir() if p.is_file()}
@@ -185,20 +201,21 @@ def upload_demo_file():
         tap('Downloads')
     tap(fixture.name)
     wait_contains(fixture.name)
-    tap('Upload files')
+    tap_node(scroll_to('Upload files'))
     wait_contains('Uploaded')
     saved = [p for p in watch.iterdir() if p.is_file() and p.name not in before]
-    assert len(saved) == 1 and saved[0].name.startswith('DEMO-android-upload') and saved[0].read_text() == payload
+    assert len(saved) == 1, 'Expected one new file in the verified isolated watch mount, found ' + str(len(saved))
+    assert saved[0].name.startswith('DEMO-android-upload') and saved[0].read_text() == payload, 'Uploaded fixture name or bytes differ from the selected document'
     shot('native-uploaded-file.png')
     report('real Android document picker content URI uploads exact GPX into isolated watch folder; import daemon is not run')
 
 
 def session_and_recovery():
-    tap('今日')
-    wait_contains('今日安排')
+    tap('总览')
+    wait_contains('我的健康总览')
     restart()
-    wait('今日', timeout=45)
-    wait_contains('今日安排')
+    wait('总览', timeout=45)
+    wait_contains('我的健康总览')
     report('remembered authenticated cookie survives force-stop and app restart without re-entering password')
     adb('reverse', '--remove', 'tcp:8082')
     try:
@@ -207,7 +224,7 @@ def session_and_recovery():
     finally:
         adb('reverse', 'tcp:8082', 'tcp:8082')
     tap('重试')
-    wait_contains('今日安排')
+    wait_contains('我的健康总览')
     report('network disconnect produces native retry and recovers authenticated page when connection returns')
     menu('切换服务器 / 账号')
     tap('继续')
@@ -216,8 +233,8 @@ def session_and_recovery():
     restart()
     wait_contains('登录已过期')
     fill('密码', CREDENTIALS['password'])
-    tap('连接并登录')
-    wait('今日', timeout=45)
+    tap_node(scroll_to('连接并登录'))
+    wait('总览', timeout=45)
     menu('退出登录')
     tap('继续')
     wait_contains('已退出本机登录')
@@ -230,6 +247,7 @@ def main():
     assert os.environ.get('STRIDEHUB_TEST_URL') == 'http://localhost:8082', 'Explicit disposable backend URL required'
     assert (ROOT / 'var/runtime/android-e2e-database/dreeve.db').exists()
     assert 'device' in adb('get-state')
+    verify_disposable_watch_mount()
     personal = ROOT / 'var/runtime/dev-database/dreeve.db'
     fingerprint = hashlib.sha256(personal.read_bytes()).hexdigest()
     seed_demo_athlete()
@@ -240,32 +258,32 @@ def main():
     wait('连接并登录')
     shot('native-connection.png')
     fill('服务地址', 'ftp://localhost:8082')
-    tap('连接并登录')
+    tap_node(scroll_to('连接并登录'))
     wait_contains('服务器地址必须以')
     fill('服务地址', BASE)
-    tap('连接并登录')
+    tap_node(scroll_to('连接并登录'))
     wait_contains('请使用 HTTPS')
     report('native setup rejects non-HTTP(S) URLs and requires explicit HTTP opt-in')
     tap('允许 HTTP（仅可信局域网）')
     fill('用户名', CREDENTIALS['username'])
     fill('密码', 'APK-E2E-deliberately-wrong-password')
-    tap('连接并登录')
+    tap_node(scroll_to('连接并登录'))
     wait_contains('登录未成功')
     assert wait('密码', attribute='content-desc').get('text') == '后端管理员密码'
     report('real Android WebView rejects incorrect password and returns to native setup with a cleared password')
     fill('密码', CREDENTIALS['password'])
-    tap('连接并登录')
-    wait('今日', timeout=45)
-    wait_contains('今日安排')
-    shot('native-today.png')
-    report('real Android WebView submits Java-generated login script and opens authenticated Today')
-    for label, expected in [('课表', '课表与执行反馈'), ('运动', '每一次出发，都有迹可循。')]:
+    tap_node(scroll_to('连接并登录'))
+    wait('总览', timeout=45)
+    wait_contains('我的健康总览')
+    shot('native-overview.png')
+    report('real Android WebView submits Java-generated login script and opens authenticated overview')
+    for label, expected in [('身体', '身体与恢复'), ('运动', '每一次出发，都有迹可循。'), ('计划', '训练、饮食与目标')]:
         tap(label)
         wait_contains(expected)
-    tap('称重')
+    tap('采集')
     wait_contains('身体记录')
     tap('返回 StrideHub')
-    report('native Today, training, running and weighing navigation opens within one app')
+    report('native overview, body, running, plans and collection navigation opens within one app')
     upload_demo_file()
     check_in()
     session_and_recovery()

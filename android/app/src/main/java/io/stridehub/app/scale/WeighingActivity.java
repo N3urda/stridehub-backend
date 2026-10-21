@@ -13,6 +13,8 @@ import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.RippleDrawable;
+import android.content.res.ColorStateList;
 import android.location.LocationManager;
 import android.net.Uri;
 import android.os.Build;
@@ -52,18 +54,22 @@ import java.util.Map;
 import java.util.Collections;
 
 public final class WeighingActivity extends Activity implements ScaleClient.Listener {
-    private static final int PAPER=0xfff6f7f2, INK=0xff203d31, MUTED=0xff758078, GREEN=0xff387a61, SOFT=0xffe8efe7, LINE=0xffe3e8df;
+    private static final int PAPER=0xfff6f7f2, INK=0xff203d31, MUTED=0xff59665d, GREEN=0xff326f57, SOFT=0xffe8efe7, LINE=0xffe3e8df;
     private static final int PERMISSIONS=51, ENABLE_BT=52, EXPORT=53, IMPORT=54;
     private LocalStore store;
     private ScaleClient client;
     private LinearLayout shell, content, nav;
     private ScrollView scroll;
     private TextView statusLabel, liveValue, liveCaption, liveFat, liveBmi, liveSource, pickerStatus;
-    private Button measureButton;
+    private Button measureButton, liveDetail;
+    private AlertDialog manualDialog;
+    private EditText manualWeight, manualFat;
+    private Calendar manualTime;
+    private long lastSavedId;
     private int page=0, days=30, historyLimit=50, weightAverageDays=0;
     private boolean forcePicker=false;
     private Metric selectedMetric=Metric.WEIGHT;
-    private String status="准备好，就站上秤", exportKind="csv";
+    private String status="先连接体脂秤，再赤脚站稳。稳定结果会自动保存。", exportKind="csv";
     private List<Measurement> records=new ArrayList<>();
     private AlertDialog deviceDialog;
     private LinearLayout deviceList;
@@ -75,7 +81,9 @@ public final class WeighingActivity extends Activity implements ScaleClient.List
         if(saved!=null) {int average=saved.getInt("weightAverageDays",0);weightAverageDays=average==7||average==30?average:0;}
         io.stridehub.app.sync.NasSync.initialize(this);
         store=new LocalStore(this); client=new ScaleClient(this,this);
+        if(saved!=null)lastSavedId=saved.getLong("lastSavedId",0);
         buildShell(); render();
+        if(saved!=null&&saved.getBoolean("manualOpen"))showManual(saved);
     }
     private void buildShell() {
         getWindow().setStatusBarColor(PAPER); getWindow().setNavigationBarColor(PAPER);
@@ -85,11 +93,10 @@ public final class WeighingActivity extends Activity implements ScaleClient.List
             if(Build.VERSION.SDK_INT>=35) { android.graphics.Insets system=insets.getInsets(WindowInsets.Type.systemBars()); view.setPadding(system.left,system.top,system.right,system.bottom); }
             return insets;
         });
-        LinearLayout brand=row(); brand.setPadding(dp(24),dp(18),dp(24),dp(12)); brand.setGravity(Gravity.CENTER_VERTICAL);
-        TextView name=text("身体记录",25,INK,true); brand.addView(name,new LinearLayout.LayoutParams(0,-2,1));
-        TextView offline=text("●  本机记录 · NAS 见设置",11,GREEN,false); offline.setPadding(dp(12),dp(7),dp(12),dp(7)); offline.setBackground(shape(SOFT,30)); brand.addView(offline);
-        Button back=button("返回 StrideHub",false); back.setOnClickListener(v->finish());
-        shell.addView(back);
+        LinearLayout brand=row(); brand.setPadding(dp(16),dp(6),dp(16),dp(6)); brand.setGravity(Gravity.CENTER_VERTICAL);
+        Button back=button("返回 StrideHub",false); back.setTextSize(12);back.setOnClickListener(v->finish());
+        brand.addView(back,new LinearLayout.LayoutParams(-2,-2));
+        TextView name=text("身体记录",20,INK,true);name.setGravity(Gravity.END);brand.addView(name,new LinearLayout.LayoutParams(0,-2,1));
         shell.addView(brand);
         scroll=new ScrollView(this); scroll.setFillViewport(true); scroll.setClipToPadding(false);
         content=column(); content.setPadding(dp(24),dp(10),dp(24),dp(24)); scroll.addView(content);
@@ -98,36 +105,39 @@ public final class WeighingActivity extends Activity implements ScaleClient.List
         setContentView(shell);
     }
     private void render() {
-        records=store.all(); content.removeAllViews(); statusLabel=null; measureButton=null; liveValue=null; liveCaption=null; liveFat=null; liveBmi=null; liveSource=null;
+        records=store.all(); content.removeAllViews(); statusLabel=null; measureButton=null; liveValue=null; liveCaption=null; liveFat=null; liveBmi=null; liveSource=null;liveDetail=null;
         if(page==0) renderHome(); else if(page==1) renderTrend(); else if(page==2) renderHistory(); else renderSettings();
         nav.removeAllViews(); String[] titles={"称重","趋势","记录","设置"};
-        for(int i=0;i<titles.length;i++) { final int target=i; Button item=button(titles[i],false); item.setTextColor(page==i?GREEN:MUTED); item.setBackground(shape(page==i?SOFT:PAPER,16)); item.setTypeface(null,page==i?Typeface.BOLD:Typeface.NORMAL); LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(50),1); p.setMargins(dp(2),0,dp(2),0); nav.addView(item,p); item.setOnClickListener(v->{page=target;render();scroll.smoothScrollTo(0,0);}); }
+        for(int i=0;i<titles.length;i++) { final int target=i; Button item=button(titles[i],false); item.setTextColor(page==i?GREEN:MUTED); item.setBackground(interactive(page==i?SOFT:PAPER,16)); item.setTypeface(null,page==i?Typeface.BOLD:Typeface.NORMAL);item.setSelected(page==i);item.setContentDescription(titles[i]+(page==i?"，当前页面":"")); LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,-2,1); p.setMargins(dp(2),0,dp(2),0); nav.addView(item,p); item.setOnClickListener(v->{page=target;render();scroll.scrollTo(0,0);}); }
     }
     private void intro(String title,String subtitle) { content.addView(text(title,29,INK,true)); TextView sub=text(subtitle,13,MUTED,false); sub.setLineSpacing(dp(3),1); add(content,sub,7,22); }
     private void renderHome() {
-        intro("记录身体的日常", "StrideHub  /  留下身体的日常变化");
+        intro("采集身体数据", "离线也能保存；NAS 同步状态会单独显示。");
+        LinearLayout connection=card();
+        connection.addView(text("开始一次记录",17,INK,true));
+        statusLabel=text(status,13,MUTED,false);statusLabel.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);statusLabel.setLineSpacing(dp(3),1);add(connection,statusLabel,8,12);
+        measureButton=button(client.isBusy()?"停止连接":"连接体脂秤",true); connection.addView(measureButton,new LinearLayout.LayoutParams(-1,-2));
+        measureButton.setOnClickListener(v->{if(client.isBusy()){client.stop();status="已停止连接，已保存的记录不受影响";render();}else{forcePicker=false;startMeasurement();}});
+        Button manual=button("手工记录体重",false);add(connection,manual,8,0);manual.setOnClickListener(v->showManual());
+        if(store.device()!=null){Button change=button("选择另一台秤",false);add(connection,change,8,0);change.setOnClickListener(v->{forcePicker=true;startMeasurement();});}
+        add(content,connection,0,16);
         LinearLayout hero=card(); hero.setPadding(dp(24),dp(23),dp(24),dp(23)); hero.setBackground(shape(0xffe8efe6,24));
         Measurement latest=records.isEmpty()?null:records.get(0);
-        liveCaption=text(latest==null?"你的第一条记录，从这里开始":"最近一次  ·  "+formatTime(latest.measuredAt),12,MUTED,false); hero.addView(liveCaption);
+        for(Measurement record:records)if(record.id==lastSavedId){latest=record;break;}
+        final Measurement displayed=latest;
+        liveCaption=text(latest==null?"还没有已保存的记录":(latest.id==lastSavedId?"刚保存":"最近一次")+"  ·  "+formatTime(latest.measuredAt),12,MUTED,false); hero.addView(liveCaption);
         LinearLayout weight=row(); weight.setGravity(Gravity.BOTTOM);
-        liveValue=text(latest==null?"—":format(latest.weightKg),66,INK,true); weight.addView(liveValue);
+        liveValue=text(latest==null?"—":format(latest.weightKg),52,INK,true); weight.addView(liveValue);
         TextView unit=text("kg",20,MUTED,false); unit.setPadding(dp(9),0,0,dp(13)); weight.addView(unit); add(hero,weight,10,16);
         View line=new View(this); line.setBackgroundColor(0xffd4dfd0); hero.addView(line,new LinearLayout.LayoutParams(-1,dp(1)));
         LinearLayout metrics=row();
         LinearLayout fatMetric=metric("体脂率",latest==null||latest.bodyFatPercent==null?"—":format(latest.bodyFatPercent)+" %");liveFat=(TextView)fatMetric.getChildAt(1);
         LinearLayout bmiMetric=metric("BMI",latest==null||latest.bmi==null?"—":format(latest.bmi));liveBmi=(TextView)bmiMetric.getChildAt(1);
         metrics.addView(fatMetric,new LinearLayout.LayoutParams(0,-2,1));metrics.addView(bmiMetric,new LinearLayout.LayoutParams(0,-2,1));add(hero,metrics,19,0);
-        liveSource=text(latest==null?"暂无已保存的测量":sourceLabel(latest)+"  ·  已保存到本机",11,MUTED,false);add(hero,liveSource,15,0);
-        if(latest!=null){Button details=button("查看全部身体指标  ›",false);add(hero,details,15,0);details.setOnClickListener(v->showDetail(latest));}
+        liveSource=text(latest==null?"连接体脂秤，或手工填写第一条体重。":sourceLabel(latest)+" · 已保存到本机\n"+io.stridehub.app.sync.NasSync.rowStatus(store,latest.id),12,MUTED,false);liveSource.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);add(hero,liveSource,15,0);
+        if(latest!=null){liveDetail=button("查看这次记录的身体指标",false);add(hero,liveDetail,12,0);liveDetail.setOnClickListener(v->showDetail(displayed));}
         content.addView(hero);
-        LinearLayout connection=card();
-        TextView title=text("与身体，保持连接",17,INK,true); connection.addView(title);
-        statusLabel=text(status,13,MUTED,false); statusLabel.setLineSpacing(dp(3),1); add(connection,statusLabel,8,15);
-        measureButton=button(client.isBusy()?"停止连接":"连接体脂秤",true); connection.addView(measureButton,new LinearLayout.LayoutParams(-1,dp(52)));
-        measureButton.setOnClickListener(v->{if(client.isBusy()){client.stop();status="已停止连接";render();}else{forcePicker=false;startMeasurement();}});
-        if(store.device()!=null) { Button change=button("选择另一台秤",false); add(connection,change,5,0); change.setOnClickListener(v->{forcePicker=true;startMeasurement();}); }
-        add(content,connection,16,0);
-        Button manual=button("＋  手工记录",false); add(content,manual,11,0); manual.setOnClickListener(v->showManual());
+        Button sync=button("查看同步与备份",false);add(content,sync,12,0);sync.setOnClickListener(v->{page=3;render();scroll.scrollTo(0,0);});
         add(content,text("赤脚站稳，等待结果。体脂缺失时只保存体重。\n本机估算可能与原 App 不同，数据仅用于日常记录。",12,MUTED,false),16,0);
     }
     private LinearLayout metric(String title,String value) { LinearLayout box=column(); box.addView(text(title,12,MUTED,false)); add(box,text(value,25,INK,true),7,0); return box; }
@@ -216,12 +226,13 @@ public final class WeighingActivity extends Activity implements ScaleClient.List
         String day="";
         for(int i=0;i<Math.min(historyLimit,records.size());i++) { Measurement m=records.get(i); if(!m.localDay.equals(day)) { day=m.localDay; add(content,text(day,12,MUTED,true),23,10); }
             LinearLayout r=card(); r.setPadding(dp(17),dp(15),dp(17),dp(15)); LinearLayout top=row(); TextView weight=text(format(m.weightKg)+" kg",23,INK,true); top.addView(weight,new LinearLayout.LayoutParams(0,-2,1)); TextView body=text(m.bodyFatPercent==null?"体脂 —":format(m.bodyFatPercent)+" %",16,m.bodyFatPercent==null?MUTED:GREEN,true); top.addView(body); r.addView(top);
-            add(r,text(new SimpleDateFormat("HH:mm",Locale.CHINA).format(m.measuredAt)+"  ·  "+sourceLabel(m)+"   ›",12,MUTED,false),7,0); r.setClickable(true); r.setFocusable(true); r.setContentDescription(formatTime(m.measuredAt)+"，体重 "+format(m.weightKg)+" 千克，"+(m.bodyFatPercent==null?"体脂未知":"体脂率 "+format(m.bodyFatPercent)+"%，")+"查看详情"); r.setOnClickListener(v->showDetail(m)); add(content,r,0,9);
+            add(r,text(new SimpleDateFormat("HH:mm",Locale.CHINA).format(m.measuredAt)+"  ·  "+sourceLabel(m)+"   ›",12,MUTED,false),7,0);add(r,text("本机已保存 · "+io.stridehub.app.sync.NasSync.rowStatus(store,m.id),12,MUTED,false),6,0);r.setBackground(interactive(Color.WHITE,22)); r.setClickable(true); r.setFocusable(true); r.setContentDescription(formatTime(m.measuredAt)+"，体重 "+format(m.weightKg)+" 千克，"+(m.bodyFatPercent==null?"体脂未知":"体脂率 "+format(m.bodyFatPercent)+"%，")+"本机已保存，"+io.stridehub.app.sync.NasSync.rowStatus(store,m.id)+"，查看详情"); r.setOnClickListener(v->showDetail(m)); add(content,r,0,9);
         }
         if(historyLimit<records.size()) { Button more=button("继续查看更早记录",false); content.addView(more); more.setOnClickListener(v->{int y=scroll.getScrollY();historyLimit+=50;render();scroll.post(()->scroll.scrollTo(0,y));}); }
     }
     private void renderSettings() {
-        content.addView(text(io.stridehub.app.sync.NasSync.status(this),13,MUTED,false));
+        intro("同步与设置", "本机记录与 NAS 副本分别保留，可随时导出备份。");
+        LinearLayout syncStatus=card();syncStatus.addView(text("NAS 同步",18,INK,true));add(syncStatus,text(io.stridehub.app.sync.NasSync.status(this),13,MUTED,false),10,0);add(content,syncStatus,0,12);
         Button pairNas=button("配对 NAS 并上传本机历史",false);content.addView(pairNas);
         pairNas.setOnClickListener(v->{try {
             String destination=io.stridehub.app.sync.NasSync.server(this).baseUrl();
@@ -235,7 +246,7 @@ public final class WeighingActivity extends Activity implements ScaleClient.List
         Button disconnectNas=button("断开 NAS（保留 NAS 已上传副本）",false);content.addView(disconnectNas);disconnectNas.setOnClickListener(v->{io.stridehub.app.sync.NasSync.disconnect(this);render();});
         content.addView(text("同步错误或设备撤销时，请检查 NAS 后断开并重新配对；日记录冲突请在 NAS 检查手工日记录。删除本机记录会取消待同步，已上传 NAS 副本需在 NAS 管理端删除。",12,MUTED,false));
 
-        intro("只属于你", "称重可离线使用；当前记录保存在此手机");
+        add(content,text("个人资料与本机数据",20,INK,true),24,16);
         Profile p=store.profile(); LinearLayout profile=card(); profile.addView(text("个人资料",18,INK,true));
         add(profile,text(p==null?"连接前先填写身高、出生日期与性别。\n这些资料用于体脂估算；配对 NAS 后会随测量快照上传。":p.heightCm+" cm  ·  "+(p.male?"男":"女")+"  ·  "+p.ageAt(System.currentTimeMillis())+" 岁\n出生日期  "+p.birthDate,14,MUTED,false),12,14);
         Button edit=button(p==null?"填写个人资料":"编辑个人资料",false); profile.addView(edit); edit.setOnClickListener(v->showProfile(null)); content.addView(profile);
@@ -280,29 +291,45 @@ public final class WeighingActivity extends Activity implements ScaleClient.List
         }));dialog.show();
     }
     private void showManual() {
+        showManual(null);
+    }
+    private void showManual(Bundle draft) {
         LinearLayout form=column();form.setPadding(dp(24),dp(8),dp(24),dp(12));
-        EditText weight=field(form,"体重（kg）","例如 65.4",InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL);
-        add(form,text("体脂率（% · 选填）",13,INK,true),14,5); EditText bodyFat=new EditText(this); bodyFat.setTextColor(INK);bodyFat.setTextSize(16);bodyFat.setHint("未知时留空");bodyFat.setSingleLine(true);bodyFat.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL);form.addView(bodyFat,new LinearLayout.LayoutParams(-1,dp(54)));
+        add(form,text("保存到本机。已配对 NAS 时会加入同步队列；体脂率未知可留空。",13,MUTED,false),0,16);
+        EditText weight=field(form,"体重（kg）","例如 65.4",InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL);manualWeight=weight;
+        LinearLayout fatField=column();add(form,fatField,14,0);EditText bodyFat=field(fatField,"体脂率（% · 选填）","未知时留空",InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL);manualFat=bodyFat;
         add(form,text("测量时间",13,INK,true),14,6);Calendar selected=Calendar.getInstance();selected.set(Calendar.SECOND,0);selected.set(Calendar.MILLISECOND,0);
+        manualTime=selected;
+        if(draft!=null){weight.setText(draft.getString("manualWeight",""));bodyFat.setText(draft.getString("manualFat",""));selected.setTimeInMillis(draft.getLong("manualTime",selected.getTimeInMillis()));}
         Button date=button(new SimpleDateFormat("yyyy-MM-dd",Locale.CHINA).format(selected.getTime()),false);
         Button time=button(new SimpleDateFormat("HH:mm",Locale.CHINA).format(selected.getTime()),false);
         form.addView(date,new LinearLayout.LayoutParams(-1,dp(48)));form.addView(time,new LinearLayout.LayoutParams(-1,dp(48)));
         date.setOnClickListener(v->{DatePickerDialog picker=new DatePickerDialog(this,(view,y,m,d)->{selected.set(y,m,d);date.setText(new SimpleDateFormat("yyyy-MM-dd",Locale.CHINA).format(selected.getTime()));},selected.get(Calendar.YEAR),selected.get(Calendar.MONTH),selected.get(Calendar.DAY_OF_MONTH));picker.getDatePicker().setMaxDate(System.currentTimeMillis());picker.show();});
         time.setOnClickListener(v->new TimePickerDialog(this,(view,h,m)->{selected.set(Calendar.HOUR_OF_DAY,h);selected.set(Calendar.MINUTE,m);time.setText(new SimpleDateFormat("HH:mm",Locale.CHINA).format(selected.getTime()));},selected.get(Calendar.HOUR_OF_DAY),selected.get(Calendar.MINUTE),true).show());
-        TextView error=text("",13,0xffae4f40,false);add(form,error,9,0);
+        TextView error=text("",13,0xff9b4033,false);error.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);add(form,error,9,0);
         ScrollView wrapper=new ScrollView(this);wrapper.addView(form);
-        AlertDialog dialog=new AlertDialog.Builder(this).setTitle("手工记录").setView(wrapper).setNegativeButton("取消",null).setPositiveButton("保存记录",null).create();
+        AlertDialog dialog=new AlertDialog.Builder(this).setTitle("手工记录").setView(wrapper).setNegativeButton("取消",null).setPositiveButton("保存到本机",null).create();manualDialog=dialog;
+        dialog.setOnDismissListener(d->{if(manualDialog==dialog){manualDialog=null;manualWeight=null;manualFat=null;manualTime=null;}});
         dialog.setOnShowListener(d->dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{
+            weight.setError(null);bodyFat.setError(null);error.setText("");
             try {
-                if(selected.getTimeInMillis()>System.currentTimeMillis()){error.setText("测量时间不能晚于现在");return;}
+                if(selected.getTimeInMillis()>System.currentTimeMillis()){error.setText("测量时间不能晚于现在，请调整日期或时间");time.requestFocus();wrapper.smoothScrollTo(0,time.getBottom());return;}
                 String w=weight.getText().toString().trim(),f=bodyFat.getText().toString().trim();
-                if(w.isEmpty()){error.setText("请输入体重");return;}
-                Measurement m=Measurement.create(store.profile(),selected.getTimeInMillis(),Double.parseDouble(w),f.isEmpty()?null:Double.valueOf(f),0,"手工录入",null,null);
-                store.save(m);dialog.dismiss();render();toast("记录已保存");
+                double kg;
+                try{kg=Double.parseDouble(w);}catch(NumberFormatException invalid){fieldError(weight,error,"请输入有效的体重，例如 65.4");return;}
+                if(!Double.isFinite(kg)||kg<2||kg>300){fieldError(weight,error,"体重应在 2–300 千克之间");return;}
+                Double fat=null;
+                if(!f.isEmpty()){
+                    try{fat=Double.valueOf(f);}catch(NumberFormatException invalid){fieldError(bodyFat,error,"请输入有效的体脂率，未知时请留空");return;}
+                    if(!Double.isFinite(fat)||fat<1||fat>75){fieldError(bodyFat,error,"体脂率应在 1–75% 之间，未知时请留空");return;}
+                }
+                Measurement m=Measurement.create(store.profile(),selected.getTimeInMillis(),kg,fat,0,"手工录入",null,null);
+                store.save(m);lastSavedId=m.id;status="已保存 "+format(m.weightKg)+" kg · "+formatTime(m.measuredAt);dialog.dismiss();render();toast("已保存到本机 · "+io.stridehub.app.sync.NasSync.rowStatus(store,m.id));
             } catch(IllegalArgumentException e){error.setText(e instanceof NumberFormatException?"请输入有效的数字":e.getMessage());}
             catch(Exception e){error.setText("保存失败，请检查设备存储空间后重试");}
         }));dialog.show();
     }
+    private void fieldError(EditText input,TextView summary,String message){input.setError(message);input.requestFocus();summary.setText(message);}
     private void showDetail(Measurement m) {
         LinearLayout body=column();body.setPadding(dp(22),dp(6),dp(22),dp(20));
         add(body,text(formatTime(m.measuredAt)+"  ·  "+sourceLabel(m),12,MUTED,false),0,14);
@@ -366,8 +393,9 @@ public final class WeighingActivity extends Activity implements ScaleClient.List
         LinearLayout box=column();box.setPadding(dp(24),dp(10),dp(24),dp(16));
         pickerStatus=text("请踩亮体脂秤，靠近手机。扫描最多持续 20 秒。",13,MUTED,false);box.addView(pickerStatus);
         deviceList=column();add(box,deviceList,12,0);ScrollView wrapper=new ScrollView(this);wrapper.addView(box);
-        deviceDialog=new AlertDialog.Builder(this).setTitle("选择你的体脂秤").setView(wrapper).setNegativeButton("取消",(d,w)->{client.stop();status="已取消连接";render();}).create();
+        deviceDialog=new AlertDialog.Builder(this).setTitle("选择你的体脂秤").setView(wrapper).setNeutralButton("重新扫描",null).setNegativeButton("取消",(d,w)->{client.stop();status="已取消连接";render();}).create();
         deviceDialog.setOnCancelListener(d->{client.stop();status="已取消连接";render();});deviceDialog.show();
+        deviceDialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener(v->{forcePicker=true;startMeasurement();});
     }
     @Override public void onDeviceFound(ScaleClient.Device device) {
         found.put(device.address,device);
@@ -385,14 +413,14 @@ public final class WeighingActivity extends Activity implements ScaleClient.List
         if(measureButton!=null)measureButton.setText(client.isBusy()?"停止连接":"连接体脂秤");
     }
     @Override public void onLiveWeight(double weightKg) {
-        if(liveValue!=null){liveValue.setText(format(weightKg));liveCaption.setText("实时读数 · 站稳后自动保存");if(liveFat!=null)liveFat.setText("—");if(liveBmi!=null)liveBmi.setText("—");if(liveSource!=null)liveSource.setText("等待稳定结果 · 尚未保存");}
+        if(liveValue!=null){liveValue.setText(format(weightKg));liveCaption.setText("实时读数 · 站稳后自动保存");if(liveFat!=null)liveFat.setText("—");if(liveBmi!=null)liveBmi.setText("—");if(liveSource!=null)liveSource.setText("等待稳定结果 · 尚未保存");if(liveDetail!=null)liveDetail.setVisibility(View.GONE);}
     }
     @Override public void onMeasurement(Measurement measurement) {
         try {store.save(measurement);}
         catch(Exception e){client.stop();render();onError("记录保存失败，请检查设备存储空间后重试");return;}
         client.confirmSaved();
         if(measurement.deviceAddress!=null)store.rememberDevice(measurement.deviceAddress);
-        status="测量完成，已保存到本机";
+        lastSavedId=measurement.id;status="测量完成，已保存到本机";
         if(deviceDialog!=null&&deviceDialog.isShowing())deviceDialog.dismiss();
         deviceList=null;pickerStatus=null;render();toast("已保存 "+format(measurement.weightKg)+" kg");
     }
@@ -451,16 +479,17 @@ public final class WeighingActivity extends Activity implements ScaleClient.List
         if(status.contains("寻找")||status.contains("扫描")||status.contains("连接中"))status="连接已暂停，返回后可重新连接";
     }
     @Override protected void onDestroy(){client.stop();store.close();super.onDestroy();}
-    @Override protected void onSaveInstanceState(Bundle out){super.onSaveInstanceState(out);out.putInt("page",page);out.putInt("days",days);out.putString("metric",selectedMetric.name());out.putInt("weightAverageDays",weightAverageDays);out.putBoolean("forcePicker",forcePicker);out.putString("exportKind",exportKind);}
+    @Override protected void onSaveInstanceState(Bundle out){super.onSaveInstanceState(out);out.putInt("page",page);out.putInt("days",days);out.putString("metric",selectedMetric.name());out.putInt("weightAverageDays",weightAverageDays);out.putBoolean("forcePicker",forcePicker);out.putString("exportKind",exportKind);out.putLong("lastSavedId",lastSavedId);if(manualDialog!=null&&manualDialog.isShowing()){out.putBoolean("manualOpen",true);out.putString("manualWeight",manualWeight.getText().toString());out.putString("manualFat",manualFat.getText().toString());out.putLong("manualTime",manualTime.getTimeInMillis());}}
     private LinearLayout column(){LinearLayout v=new LinearLayout(this);v.setOrientation(LinearLayout.VERTICAL);return v;}
     private LinearLayout row(){LinearLayout v=new LinearLayout(this);v.setOrientation(LinearLayout.HORIZONTAL);return v;}
     private TextView text(String value,float size,int color,boolean bold){TextView v=new TextView(this);v.setText(value);v.setTextSize(size);v.setTextColor(color);v.setIncludeFontPadding(false);v.setLineSpacing(dp(3),1);if(bold)v.setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL));return v;}
-    private Button button(String label,boolean primary){Button b=new Button(this);b.setText(label);b.setTextSize(14);b.setAllCaps(false);b.setMinHeight(dp(48));b.setMinimumHeight(dp(48));b.setPadding(dp(12),dp(7),dp(12),dp(7));b.setTextColor(primary?Color.WHITE:GREEN);b.setBackground(shape(primary?GREEN:SOFT,14));b.setStateListAnimator(null);return b;}
-    private Button choice(String title,boolean selected,Runnable action){Button b=button(title,false);b.setTextColor(selected?Color.WHITE:MUTED);b.setBackground(shape(selected?GREEN:PAPER,14));b.setOnClickListener(v->action.run());return b;}
+    private Button button(String label,boolean primary){Button b=new Button(this);b.setText(label);b.setTextSize(14);b.setAllCaps(false);b.setMinWidth(0);b.setMinimumWidth(0);b.setMinHeight(dp(48));b.setMinimumHeight(dp(48));b.setPadding(dp(12),dp(7),dp(12),dp(7));b.setTextColor(primary?Color.WHITE:GREEN);b.setBackground(interactive(primary?GREEN:SOFT,14));b.setStateListAnimator(null);return b;}
+    private Button choice(String title,boolean selected,Runnable action){Button b=button(title,false);b.setTextColor(selected?Color.WHITE:MUTED);b.setBackground(interactive(selected?GREEN:PAPER,14));b.setSelected(selected);b.setOnClickListener(v->action.run());return b;}
     private LinearLayout card(){LinearLayout v=column();v.setPadding(dp(20),dp(20),dp(20),dp(20));v.setBackground(shape(Color.WHITE,22));return v;}
     private GradientDrawable shape(int color,float radius){GradientDrawable d=new GradientDrawable();d.setColor(color);d.setCornerRadius(dp(radius));return d;}
+    private RippleDrawable interactive(int color,float radius){return new RippleDrawable(ColorStateList.valueOf(0x33326f57),shape(color,radius),shape(Color.WHITE,radius));}
     private void add(LinearLayout parent,View child,int top,int bottom){LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2);p.setMargins(0,dp(top),0,dp(bottom));parent.addView(child,p);}
-    private EditText field(LinearLayout parent,String label,String hint,int input){parent.addView(text(label,13,INK,true));EditText edit=new EditText(this);edit.setTextColor(INK);edit.setTextSize(16);edit.setHint(hint);edit.setSingleLine(true);edit.setInputType(input);add(parent,edit,5,0);edit.getLayoutParams().height=dp(54);return edit;}
+    private EditText field(LinearLayout parent,String label,String hint,int input){TextView caption=text(label,13,INK,true);parent.addView(caption);EditText edit=new EditText(this);edit.setId(View.generateViewId());caption.setLabelFor(edit.getId());edit.setContentDescription(label);edit.setTextColor(INK);edit.setTextSize(16);edit.setHint(hint);edit.setSingleLine(true);edit.setInputType(input);edit.setMinHeight(dp(54));add(parent,edit,5,0);return edit;}
     private String sourceLabel(Measurement m){if(m.source==null)return "未知来源";if("manual".equals(m.source))return "手工录入";return m.source;}
     private String format(double value){return String.format(Locale.CHINA,"%.1f",value);}
     private String formatTime(long when){return new SimpleDateFormat("yyyy-MM-dd HH:mm",Locale.CHINA).format(when);}

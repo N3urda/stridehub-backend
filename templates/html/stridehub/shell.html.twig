@@ -13,7 +13,7 @@
     <link rel="stylesheet" href="{{ relativeUrl(asset('css/stridehub-shell.css'))|e('html_attr') }}">
     {% block head_scripts %}{% endblock %}
 </head>
-<body class="stridehub-app {% block body_class %}{% endblock %}">
+<body class="stridehub-app{{ 'StrideHubAndroid' in app.request.headers.get('User-Agent', '') ? ' hub-native-app' : '' }} {% block body_class %}{% endblock %}">
 <a class="hub-skip-link" href="#hub-main">跳到页面内容</a>
 <div class="sh-shell">
     {% include 'html/stridehub/navigation.html.twig' %}

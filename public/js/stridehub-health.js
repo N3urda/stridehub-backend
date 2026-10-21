@@ -7,7 +7,7 @@
     const range = $('#health-range');
     const fields = ['measuredAt', 'systolic', 'diastolic', 'pulse', 'arm', 'posture', 'notes'];
     const labels = {unknown: '未记录', left: '左臂', right: '右臂', seated: '坐姿', standing: '站姿', lying: '卧姿'};
-    const state = {records: [], sleeps: [], timezone: 'Asia/Shanghai', id: null, version: 0, dirty: false, busy: false, blocked: false, refresh: 0, shown: 20, sleepShown: 20};
+    const state = {records: [], sleeps: [], sleepRange: null, timezone: 'Asia/Shanghai', id: null, version: 0, dirty: false, busy: false, blocked: false, refresh: 0, shown: 20, sleepShown: 20};
     const node = (tag, cls, text) => { const el = document.createElement(tag); if (cls) el.className = cls; if (text !== undefined) el.textContent = String(text); return el; };
     const button = (label, handler, cls = 'button small') => { const el = node('button', cls, label); el.type = 'button'; el.addEventListener('click', handler); return el; };
     const deviceZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -31,20 +31,22 @@
         catch { const error = new Error(method === 'GET' ? '网络连接失败，请重试。' : '连接中断，操作结果尚未确定。请读取最新记录后核对。'); error.uncertain = method !== 'GET'; throw error; }
         let data;
         try { data = response.status === 204 ? null : await response.json(); }
-        catch { const error = new Error('登录可能已过期。请在另一个标签页重新登录；当前草稿仍保留。'); error.uncertain = method !== 'GET'; throw error; }
+        catch { const loginRequired = response.status === 401 || response.redirected; const error = new Error(loginRequired ? '登录可能已过期。请在另一个标签页重新登录；当前草稿仍保留。' : method === 'GET' ? '暂时无法读取服务器结果，请稍后刷新重试。' : '尚未取得有效回执，保存结果待核对。请先读取最新记录；输入仍保留。'); error.uncertain = method !== 'GET'; throw error; }
         if (!response.ok) { const error = new Error(response.status === 403 ? '页面校验已过期。请保留草稿，在另一个标签页重新登录后再试。' : data.message || [data.lastError, data.nextAction].filter(Boolean).join(' ') || `请求失败（${response.status}）`); error.status = response.status; error.uncertain = method !== 'GET' && response.status >= 500; throw error; }
         return data;
     }
     function updateEditor() {
         for (const field of form.elements) field.disabled = state.busy;
         form.querySelector('[type=submit]').disabled = state.busy || state.blocked || !state.dirty;
+        form.querySelector('[type=submit]').textContent = state.busy ? '正在核对…' : '保存血压';
+        form.setAttribute('aria-busy', String(state.busy));
         $('#pressure-review').hidden = !state.blocked;
         $('#pressure-save-state').textContent = state.dirty ? '草稿 · 尚未保存' : state.version ? '已保存' : '新记录';
         $('#pressure-new').disabled = state.busy;
     }
     function resetEditor(record = null) {
         state.id = record?.id || null; state.version = record?.version || 0; state.dirty = false; state.blocked = false;
-        form.reset();
+        form.reset(); form.elements.systolic.setCustomValidity('');
         for (const name of fields) form.elements[name].value = name === 'measuredAt' ? localInput(record?.measuredAt || new Date()) : record?.[name] ?? (['arm', 'posture'].includes(name) ? 'unknown' : '');
         output('#pressure-form-status', ''); updateEditor();
     }
@@ -56,7 +58,7 @@
     async function save(event) {
         event.preventDefault(); if (state.busy || state.blocked || !state.dirty) return;
         const payload = values();
-        if (payload.systolic <= payload.diastolic) { output('#pressure-form-status', '收缩压应高于舒张压，请核对输入。', true); return; }
+        if (payload.systolic <= payload.diastolic) { output('#pressure-form-status', '收缩压应高于舒张压，请核对输入。', true); form.elements.systolic.setCustomValidity('收缩压应高于舒张压'); form.elements.systolic.reportValidity(); return; }
         state.id ||= newId(); state.busy = true; updateEditor(); output('#pressure-form-status', '正在保存并核对…');
         let acknowledged = false;
         try {
@@ -142,11 +144,12 @@
         const chart = $('#sleep-chart');
         if (!measured.length) chart.replaceChildren(node('p', 'health-empty', '这段时间暂无可用睡眠时长。可以扩大日期范围，或完成 Zepp 同步后重试。'));
         else {
-            const sorted = [...measured].sort((a,b) => a.date.localeCompare(b.date)); const from = Date.parse(range.elements.from.value), to = Date.parse(range.elements.to.value);
+            const shownRange = state.sleepRange || {from: range.elements.from.value, to: range.elements.to.value};
+            const sorted = [...measured].sort((a,b) => a.date.localeCompare(b.date)); const from = Date.parse(shownRange.from), to = Date.parse(shownRange.to);
             const {svg, y, left, right} = chartFrame(chart, '睡眠时长趋势，纵轴为小时；空缺日期保持空白。', Math.max(1, Math.ceil(Math.max(...measured.map(r => r.totalMinutes / 60)))));
             const width = Math.max(2, Math.min(32, (right - left) * .8 / Math.max(1, (to - from) / 86400000 + 1)));
             for (const record of sorted) { const x = from === to ? (left + right) / 2 : left + 5 + (Date.parse(record.date) - from) / (to - from) * (right - left - 10); const bar = svgNode('rect', {x: x - width/2, y: y(record.totalMinutes / 60), width, height: 194 - y(record.totalMinutes / 60), rx: 2, class: 'sleep-total'}); bar.append(svgNode('title', {}, `${record.date} ${minutes(record.totalMinutes)}`)); svg.append(bar); }
-            svg.append(svgNode('text', {x: left, y: 220}, range.elements.from.value.slice(5)), svgNode('text', {x: right, y: 220, 'text-anchor': 'end'}, range.elements.to.value.slice(5)), svgNode('text', {x: 46, y: 18}, '小时'));
+            svg.append(svgNode('text', {x: left, y: 220}, shownRange.from.slice(5)), svgNode('text', {x: right, y: 220, 'text-anchor': 'end'}, shownRange.to.slice(5)), svgNode('text', {x: 46, y: 18}, '小时'));
         }
         for (const record of records.slice(0, state.sleepShown)) {
             const row = node('article', 'health-record'); const content = node('div', 'health-record-content');
@@ -165,19 +168,27 @@
     }
     function query() { return '?from=' + range.elements.from.value + '&to=' + range.elements.to.value; }
     async function refresh() {
+        if (!range.reportValidity()) return;
+        if (range.elements.from.value > range.elements.to.value) { output('#health-status', '开始日期不能晚于结束日期。', true); return; }
+        const requestedRange = {from: range.elements.from.value, to: range.elements.to.value};
         const run = ++state.refresh; $('#health-refresh').disabled = true;
         const results = await Promise.allSettled([request('/blood-pressure' + query()), request('/sleep' + query()), request('/sleep/status')]);
         if (run !== state.refresh) return;
         const errors = [];
         if (results[0].status === 'fulfilled') { state.records = results[0].value.records; renderPressure(); output('#pressure-status', ''); } else { errors.push('血压：' + results[0].reason.message); output('#pressure-status', '读取失败；当前图表可能仍为上次结果。' + results[0].reason.message, true); }
-        if (results[1].status === 'fulfilled') { state.sleeps = results[1].value.records; renderSleep(); } else errors.push('睡眠：' + results[1].reason.message);
+        if (results[1].status === 'fulfilled') { state.sleeps = results[1].value.records; state.sleepRange = requestedRange; renderSleep(); output('#sleep-record-status', ''); }
+        else { const previous = state.sleepRange ? ` 当前仍显示 ${state.sleepRange.from} 至 ${state.sleepRange.to} 的上次结果。` : ''; output('#sleep-record-status', '睡眠记录读取失败。' + previous + ' 请点击“刷新记录”重试。', true); errors.push('睡眠：' + results[1].reason.message); }
         if (results[2].status === 'fulfilled') renderSync(results[2].value); else { output('#sleep-status', '无法读取同步状态，请刷新重试。', true); errors.push(results[2].reason.message); }
         output('#health-status', errors.join(' ') || '', errors.length > 0); $('#health-refresh').disabled = false;
     }
-    form.addEventListener('input', () => { state.dirty = true; updateEditor(); }); form.addEventListener('change', () => { state.dirty = true; updateEditor(); }); form.addEventListener('submit', save);
+    form.addEventListener('input', () => { state.dirty = true; form.elements.systolic.setCustomValidity(''); updateEditor(); }); form.addEventListener('change', () => { state.dirty = true; form.elements.systolic.setCustomValidity(''); updateEditor(); }); form.addEventListener('submit', save);
     $('#pressure-new').addEventListener('click', () => edit(null)); $('#pressure-cancel').addEventListener('click', () => { if (mayDiscard()) { resetEditor(); $('#pressure-editor').open = false; } }); $('#pressure-review').addEventListener('click', review);
     $('#health-refresh').addEventListener('click', refresh);
     range.addEventListener('submit', event => { event.preventDefault(); if (range.elements.from.value > range.elements.to.value) { output('#health-status', '开始日期不能晚于结束日期。', true); return; } state.shown = 20; state.sleepShown = 20; refresh(); });
+    for (const shortcut of range.querySelectorAll('[data-health-days]')) shortcut.addEventListener('click', () => {
+        const today = dateKey(new Date()), before = new Date(today + 'T12:00:00Z'); before.setUTCDate(before.getUTCDate() - Number(shortcut.dataset.healthDays) + 1);
+        range.elements.from.value = before.toISOString().slice(0, 10); range.elements.to.value = today; range.requestSubmit();
+    });
     $('#sleep-sync').addEventListener('click', async () => { $('#sleep-sync').disabled = true; output('#sleep-status', '正在同步最近 90 天的睡眠，请稍候…'); try { await request('/sleep/sync', 'POST', {days: 90}); await refresh(); } catch (error) { output('#sleep-status', error.message + ' 已有睡眠记录仍保留。', true); $('#sleep-sync').disabled = false; } });
     window.addEventListener('beforeunload', event => { if (state.dirty || state.busy) { event.preventDefault(); event.returnValue = ''; } });
     async function start() {
@@ -186,6 +197,7 @@
         catch { output('#health-status', '无法读取跑步时区，暂按 Asia/Shanghai 显示。', true); }
         const today = dateKey(new Date()); const before = new Date(today + 'T12:00:00Z'); before.setUTCDate(before.getUTCDate() - 89); range.elements.to.value = today; range.elements.from.value = before.toISOString().slice(0,10);
         $('#health-timezone').textContent = `血压日期与具体时刻按 ${state.timezone} 显示；睡眠按设备当地醒来日期筛选。默认查看最近 90 天。`;
+        app.dispatchEvent(new Event('health-range-ready'));
         await refresh();
     }
     let resizeTimer; window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { pressureChart(state.records); renderSleep(); }, 150); });

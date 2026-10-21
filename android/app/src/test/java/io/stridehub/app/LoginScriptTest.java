@@ -16,7 +16,7 @@ public final class LoginScriptTest {
         ServerAddress address = ServerAddress.parse("https://runner.example/stridehub", false);
         String script = LoginScript.build(address, "user\";attack();", "password\n</script>", false);
         check(script.contains("https://runner.example/stridehub/admin/login"));
-        check(script.contains("https://runner.example/stridehub/admin/training/today"));
+        check(script.contains("https://runner.example/stridehub/admin/insights"));
         check(script.contains("user\\\";attack();"));
         check(script.contains("password\\n\\u003c/script\\u003e"));
         check(!script.contains("password\n</script>"));

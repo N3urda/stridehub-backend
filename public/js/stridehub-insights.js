@@ -1,13 +1,38 @@
 (() => {
     'use strict';
     const app = document.getElementById('insights-app'); if (!app) return;
-    const {node, svg, request, dateInZone, shiftDay, num, minutes, time, status, metric, bars, stages, calendar} = window.StrideHubData;
+    const {node, request, dateInZone, shiftDay, num, minutes, time, status, metric, bars, stages, calendar} = window.StrideHubData;
     const $ = id => document.getElementById(id), base = app.dataset.base.replace(/\/$/, '');
-    const state = {days: 30, generation: 0, zone: 'Asia/Shanghai', today: '', from: '', syncing: false, sleepRecords: [], dailyRecords: []};
+    const initialDays = Number(new URL(location.href).searchParams.get('days'));
+    const state = {days: [7, 30, 90].includes(initialDays) ? initialDays : 30, generation: 0, zone: '', today: '', from: '', syncing: false, syncStatus: null, sleepRecords: [], dailyRecords: [], sources: {}};
+    const groups = {
+        sleep: ['overview-sleep-chart'], daily: ['activity-metrics', 'vital-metrics', 'steps-chart'],
+        workouts: ['running-metrics', 'recent-activities'], workspace: ['overview-data-strip'], plans: ['overview-plans'],
+        collection: ['overview-collection'], sync: ['sync-description']
+    };
+    function updateSyncButton() {
+        const data = state.syncStatus;
+        $('overview-sync').disabled = state.syncing || !data?.configured || ['syncing', 'auth_required', 'not_configured'].includes(data?.state);
+        $('overview-sync').textContent = state.syncing || data?.state === 'syncing' ? '正在从 Zepp 同步…' : data?.state === 'auth_required' ? '请先重新连接 Zepp' : '同步 Zepp 数据';
+    }
+    function resetSection(key, failed = false) {
+        state.sources[key] = failed ? 'error' : 'loading';
+        const message = failed ? '暂时无法读取，请点击“刷新数据”重试。' : '正在读取记录…';
+        for (const id of groups[key]) { $(id).replaceChildren(node('p', 'empty-note', message)); $(id).setAttribute('aria-busy', String(!failed)); }
+        if (key === 'sleep') {
+            state.sleepRecords = [];
+            $('latest-sleep-date').textContent = failed ? '睡眠读取失败' : '正在读取睡眠';
+            $('latest-sleep-duration').textContent = '—'; $('latest-sleep-window').textContent = failed ? '暂时无法读取；已有记录仍保存在服务器。' : '读取后显示最近一晚的测量日期';
+            $('sleep-stage-bar').replaceChildren(); $('sleep-stage-legend').replaceChildren(); $('sleep-average').textContent = failed ? '读取失败' : '正在读取';
+        }
+        if (key === 'daily') { state.dailyRecords = []; $('activity-source').textContent = 'Zepp'; $('activity-caption').textContent = message; $('vitals-caption').textContent = message; }
+        if (key === 'workouts') $('running-caption').textContent = message;
+        if (key === 'sync') { state.syncStatus = null; $('sync-top-status').textContent = failed ? '连接状态读取失败' : '正在检查同步状态'; $('sync-top-status').classList.toggle('needs-attention', failed); $('sync-sources').replaceChildren(); updateSyncButton(); }
+        renderCoverage();
+    }
     const api = route => request(base + route);
     const newest = (rows, predicate = () => true) => rows.filter(predicate).sort((a, b) => String(b.date || b.measuredAt).localeCompare(String(a.date || a.measuredAt)))[0];
     const errors = new Map();
-    function sectionFailure(id, message) { $(id).replaceChildren(node('p', 'empty-note', message)); }
     function renderSleep(records) {
         state.sleepRecords = records; renderCoverage();
         const sleep = newest(records); const duration = $('latest-sleep-duration'); duration.replaceChildren();
@@ -24,9 +49,9 @@
     }
     function renderDaily(records) {
         state.dailyRecords = records; renderCoverage();
-        const active = newest(records, r => r.activity?.steps != null), target = $('activity-metrics'); target.replaceChildren();
+        const active = newest(records, r => r.activity?.steps != null), calories = newest(records, r => r.activity?.caloriesKcal != null), target = $('activity-metrics'); target.replaceChildren();
         metric(target, '步数', num(active?.activity?.steps), '步', active?.date || '尚未同步');
-        metric(target, '活动热量', num(active?.activity?.caloriesKcal), 'kcal', active ? '设备记录' : '未提供');
+        metric(target, '活动热量', num(calories?.activity?.caloriesKcal), 'kcal', calories?.date || '未提供');
         $('activity-source').textContent = active?.date || 'Zepp';
         bars($('steps-chart'), calendar(state.from, state.today, records, 'steps', r => r.activity?.steps), 'steps', {color: '#66b9a6', unit: ' 步', label: '每天步数，空缺表示未提供'});
         $('activity-caption').textContent = active ? `最近记录 ${active.date}，不等同于今天的实时步数。` : '同步后显示手表记录的步数和活动热量。';
@@ -41,9 +66,9 @@
     function renderCoverage() {
         const records = state.dailyRecords, sleeps = state.sleepRecords;
         const days = new Set([...records.map(r => r.date), ...sleeps.map(r => r.date)]);
-        $('data-day-count').textContent = `${days.size} 天已存记录`;
+        $('data-day-count').textContent = ['sleep', 'daily'].some(k => state.sources[k] !== 'loaded') ? '来源尚未读全' : `${days.size} 天已存记录`;
         const names = {sleep: '睡眠', activity: '日常活动', heartRate: '心率', oxygen: '血氧', stress: '压力', body: '身体成分'};
-        $('data-coverage').replaceChildren(...Object.entries(names).map(([key, label]) => { const dates = new Set(records.filter(r => r.coverage?.[key] === 'available').map(r => r.date)); if (key === 'sleep') sleeps.forEach(r => dates.add(r.date)); return node('div', 'coverage-item' + (dates.size ? '' : ' missing'), `${label} · ${dates.size ? dates.size + ' 天' : '未提供'}`); }));
+        $('data-coverage').replaceChildren(...Object.entries(names).map(([key, label]) => { const dates = new Set(records.filter(r => r.coverage?.[key] === 'available').map(r => r.date)); if (key === 'sleep') sleeps.forEach(r => dates.add(r.date)); const source = state.sources[key === 'sleep' ? 'sleep' : 'daily']; const detail = source === 'loaded' ? (dates.size ? dates.size + ' 天' : '未提供') : source === 'error' ? '读取失败' : '读取中'; return node('div', 'coverage-item' + (dates.size ? '' : ' missing'), `${label} · ${detail}`); }));
     }
     function renderRunning(data) {
         const s = data.summary; $('running-metrics').replaceChildren();
@@ -63,18 +88,18 @@
         const strip = $('overview-data-strip'); strip.replaceChildren();
         const latest = data.weight.records[0], goal = data.weight.goals.find(g => g.status === 'active' && g.startDate <= data.today && g.endDate >= data.today), day = data.nutrition.days.find(d => d.date === data.today);
         for (const [label, value, unit, detail, href] of [
-            ['最近体重', num(latest?.weightKg, 2), 'kg', latest?.date || '所选范围暂无记录', '/weight'],
+            ['期间最近体重', num(latest?.weightKg, 2), 'kg', latest?.date || '所选范围暂无记录', '/weight'],
             ['减重目标', num(goal?.targetWeightKg, 2), 'kg', goal ? goal.startDate + ' → ' + goal.endDate : '尚未设置当前目标', '/weight'],
             ['今日已记录摄入', num(day?.actualLogged.energyKcal), 'kcal', `${day?.mealCount || 0} 餐 · 目标 ${num(day?.targets.energyKcal)}`, '/nutrition'],
             ['期间已完成训练', num(data.sessions.filter(s => s.status === 'completed' && s.type !== 'rest').length), '次', `${data.sessions.filter(s => s.type !== 'rest' && !['cancelled', 'skipped'].includes(s.status)).length} 次计划`, '/plans']
-        ]) { const card = node('section', 'hub-surface'); metric(card, label, value, unit, detail); const link = node('a', '', '查看明细'); link.href = base + href; card.append(link); strip.append(card); }
+        ]) { const card = node('section', 'hub-surface'); metric(card, label, value, unit, detail); const link = node('a', '', label === '今日已记录摄入' ? '查看今日饮食' : label === '减重目标' ? '查看目标' : '查看期间明细'); link.href = base + href + '?' + new URLSearchParams({from: state.from, to: state.today, ...(href === '/nutrition' ? {date: state.today} : {})}); card.append(link); strip.append(card); }
     }
     function renderPlans(data) {
         const next = data.sessions.filter(s => !['cancelled', 'completed', 'skipped'].includes(s.status)).sort((a, b) => Date.parse(a.startAt) - Date.parse(b.startAt))[0];
         const meal = data.nutrition.plans.filter(p => p.status === 'active').sort((a, b) => a.date.localeCompare(b.date))[0];
         const goal = data.weight.goals.find(g => g.status === 'active' && g.startDate <= state.today && g.endDate >= state.today);
         const rows = [];
-        if (next) rows.push({title: next.title, date: dateInZone(new Date(next.startAt), state.zone).slice(5), text: `${next.durationMinutes} 分钟 · 训练课表`, href: '/plans'});
+        if (next) { const date = dateInZone(new Date(next.startAt), state.zone); rows.push({title: next.title, date: date === state.today ? '今天' : date.slice(5), text: `${next.durationMinutes} 分钟 · 训练课表`, href: '/plans?' + new URLSearchParams({from: date, to: date, category: 'training'})}); }
         if (meal) rows.push({title: '饮食目标与餐食', date: meal.date.slice(5), text: `${num(meal.targets.energyKcal)} kcal · 蛋白质 ${num(meal.targets.proteinGrams, 1)} g`, href: '/nutrition?' + new URLSearchParams({from: data.from, to: data.to, date: meal.date})});
         if (goal) rows.push({title: goal.title, date: '进行中', text: `减重目标 ${num(goal.startWeightKg, 2)} → ${num(goal.targetWeightKg, 2)} kg`, href: '/weight'});
         const lifestyle = data.healthPlans.find(p => p.status === 'active' && (!p.endDate || p.endDate >= state.today) && p.startDate <= state.today);
@@ -84,43 +109,66 @@
         for (const row of rows) { const el = node('a', 'plan-row'), text = node('div'); el.href = base + row.href; text.append(node('strong', '', row.title), node('p', '', row.text)); el.append(node('span', 'plan-time', row.date), text); $('overview-plans').append(el); }
     }
     function renderSync(data) {
+        state.syncStatus = data;
         const descriptions = {syncing: '正在同步 Zepp，当前展示上次已保存的记录。', partial: '部分来源已同步，部分指标暂时无法读取。', no_data: '本次未返回有效数据，已有历史记录仍保留。', not_configured: '尚未连接 Zepp。请在服务端连接已有账号授权。', auth_required: 'Zepp 授权已过期，需要重新连接账号。', error: '本次同步失败，历史数据仍然保留。', empty: '已连接，但这段时间未返回数据。'};
         $('sync-top-status').textContent = data.state === 'syncing' ? 'Zepp 正在同步' : data.state === 'partial' ? 'Zepp 部分同步 · 部分指标缺失' : data.state === 'error' ? 'Zepp 同步失败 · 历史记录保留' : data.state === 'auth_required' ? 'Zepp 需要重新连接' : !data.configured ? 'Zepp 尚未连接' : data.lastSuccessAt ? '已同步 ' + time(data.lastSuccessAt, state.zone) : '等待首次同步';
         $('sync-top-status').classList.toggle('needs-attention', ['partial', 'error', 'auth_required', 'not_configured'].includes(data.state));
         const sourceLabels = {band: '睡眠、活动与心率', blood_oxygen: '血氧', all_day_stress: '压力', PaiHealthInfo: 'PAI', spo2: '血氧', stress: '压力', pai: 'PAI', readiness: '恢复状态', body: '身体成分'};
         $('sync-sources').replaceChildren(...Object.entries(data.sources || {}).map(([key, source]) => node('p', 'small subtle', `${sourceLabels[key] || key}：${source.message || ({success:'已读取', no_data:'未返回记录', auth_required:'Zepp 未允许访问', unavailable:'当前来源未提供'}[source.state]) || source.state}`)));
         $('sync-description').textContent = [descriptions[data.state] || (data.lastSuccessAt ? '最近成功同步 ' + time(data.lastSuccessAt, state.zone) : '已连接，等待首次同步。'), data.nextAction].filter(Boolean).join(' ');
-        $('overview-sync').disabled = !data.configured || state.syncing || data.state === 'syncing';
+        updateSyncButton();
+    }
+    function selectPeriod() {
+        document.querySelectorAll('[data-days]').forEach(b => { const selected = Number(b.dataset.days) === state.days; b.classList.toggle('selected', selected); b.setAttribute('aria-pressed', String(selected)); });
+        const url = new URL(location.href); url.searchParams.set('days', state.days); history.replaceState(null, '', url);
     }
     async function load() {
-        const generation = ++state.generation; errors.clear(); state.sleepRecords = []; state.dailyRecords = []; $('overview-refresh').disabled = true; status($('overview-status'), '正在读取记录…');
-        try { const today = await api('/training/api/today'); if (generation !== state.generation) return; state.zone = today.timezone; state.today = today.date; }
-        catch (e) { if (generation !== state.generation) return; errors.set('时区', e.message); state.today = dateInZone(new Date(), state.zone); }
-        state.from = shiftDay(state.today, 1 - state.days);
+        const generation = ++state.generation; errors.clear(); $('overview-refresh').disabled = true;
+        Object.keys(groups).forEach(key => resetSection(key));
+        status($('overview-status'), '正在读取记录…');
+        try {
+            const today = await api('/training/api/today'); if (generation !== state.generation) return;
+            state.zone = today.timezone; state.today = today.date;
+        } catch (e) {
+            if (generation !== state.generation) return;
+            Object.keys(groups).forEach(key => resetSection(key, true));
+            $('overview-range').textContent = '日期与时区暂时无法读取'; $('overview-refresh').disabled = false;
+            status($('overview-status'), '暂时无法确认你的记录日期，请刷新后重试。' + e.message, true); return;
+        }
+        state.from = shiftDay(state.today, 1 - state.days); selectPeriod();
         $('overview-date').textContent = new Intl.DateTimeFormat('zh-CN', {timeZone: 'UTC', month: 'long', day: 'numeric', weekday: 'long'}).format(new Date(state.today + 'T12:00:00Z'));
         $('overview-range').textContent = `${state.from} 至 ${state.today} · ${state.zone}`;
         const query = `?from=${state.from}&to=${state.today}`;
         const jobs = [
-            ['手机采集', api('/health/api/collected/weight' + query + '&limit=1'), data => { const row = data.records[0], link = node('a', '', row ? '查看逐次采集与每日趋势差异' : '连接手机并核对首次上传'); link.href = base + '/health#collection-history'; $('overview-collection').replaceChildren(node('span', '', row ? `最近采集 ${row.capture.localDate}，${num(row.capture.weightKg, 2)} kg${row.deleted ? '（已删除）' : ''}。服务器最近写入 ${time(row.updatedAt, state.zone)}。 ` : '此范围没有手机采集记录。 '), link); }, 'overview-collection'],
-            ['睡眠', api('/health/api/sleep' + query), renderSleep, 'overview-sleep-chart'],
-            ['Zepp 日记录', api('/health/api/zepp/days' + query), data => renderDaily(data.records), 'activity-metrics'],
-            ['运动', api('/health/api/workouts' + query), renderRunning, 'running-metrics'],
-            ['目标与饮食', api('/health/api/workspace' + query), renderDataStrip, 'overview-data-strip'],
-            ['连接状态', api('/health/api/zepp/status'), renderSync, 'sync-description'],
-            ['计划', api(`/health/api/workspace?from=${state.today}&to=${shiftDay(state.today, 6)}`), renderPlans, 'overview-plans']
+            ['collection', '手机采集', api('/health/api/collected/weight' + query + '&limit=1'), data => {
+                const row = data.records[0], link = node('a', '', row ? '查看采集记录' : '查看手机连接与采集说明'); link.href = base + '/health#' + (row ? 'collection-history' : 'collection-devices');
+                $('overview-collection').replaceChildren(node('span', '', row ? `最近手机采集 · ${row.capture.localDate} · ${num(row.capture.weightKg, 2)} kg${row.deleted ? '（已删除）' : ' · 服务器已收到'}。 ` : '所选期间暂无手机采集记录，也可以使用上方快捷入口手动记录。 '), link);
+            }],
+            ['sleep', '睡眠', api('/health/api/sleep' + query), data => renderSleep(data.records)],
+            ['daily', '手表日记录', api('/health/api/zepp/days' + query), data => renderDaily(data.records)],
+            ['workouts', '运动', api('/health/api/workouts' + query), renderRunning],
+            ['workspace', '目标与饮食', api('/health/api/workspace' + query), renderDataStrip],
+            ['sync', '连接状态', api('/health/api/zepp/status'), renderSync],
+            ['plans', '计划', api(`/health/api/workspace?from=${state.today}&to=${shiftDay(state.today, 6)}`), renderPlans]
         ];
-        await Promise.all(jobs.map(async ([label, promise, render, id]) => { try { const data = await promise; if (generation === state.generation) render(label === '睡眠' ? data.records : data); } catch (e) { if (generation === state.generation) { errors.set(label, e.message); sectionFailure(id, '暂时无法读取。请刷新后重试。'); if (label === '睡眠') { $('latest-sleep-date').textContent = '睡眠读取失败'; $('latest-sleep-duration').textContent = '—'; $('latest-sleep-window').textContent = e.message; } } } }));
+        await Promise.all(jobs.map(async ([key, label, promise, render]) => {
+            try {
+                const data = await promise; if (generation !== state.generation) return;
+                state.sources[key] = 'loaded'; render(data); renderCoverage(); groups[key].forEach(id => $(id).setAttribute('aria-busy', 'false'));
+            } catch (e) { if (generation === state.generation) { errors.set(label, e.message); resetSection(key, true); } }
+        }));
         if (generation !== state.generation) return;
         $('overview-refresh').disabled = false;
-        status($('overview-status'), errors.size ? [...errors].map(([key, value]) => key + '：' + value).join('\n') : '', !!errors.size);
+        status($('overview-status'), errors.size ? `${[...errors.keys()].join('、')}暂时无法读取。其他已读取记录可继续查看，请点击“刷新数据”重试。` : '', !!errors.size);
     }
-    document.querySelectorAll('[data-days]').forEach(button => button.addEventListener('click', () => { state.days = Number(button.dataset.days); document.querySelectorAll('[data-days]').forEach(b => { b.classList.toggle('selected', b === button); b.setAttribute('aria-pressed', String(b === button)); }); load(); }));
+    selectPeriod();
+    document.querySelectorAll('[data-days]').forEach(button => button.addEventListener('click', () => { state.days = Number(button.dataset.days); selectPeriod(); load(); }));
     $('overview-refresh').addEventListener('click', load);
     $('overview-sync').addEventListener('click', async () => {
-        if (state.syncing) return; state.syncing = true; $('overview-sync').disabled = true; $('overview-sync').textContent = '正在从 Zepp 同步…'; status($('overview-status'), '正在读取云端记录，完成后会刷新本页。');
+        if ($('overview-sync').disabled || state.syncing) return; state.syncing = true; $('overview-sync').disabled = true; $('overview-sync').textContent = '正在从 Zepp 同步…'; status($('overview-status'), '正在读取云端记录，完成后会刷新本页。');
         try { const results = await Promise.allSettled(['/health/api/zepp/sync', '/health/api/zepp/workouts/sync'].map(path => request(base + path, {method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRF-Token': app.dataset.csrf}, body: JSON.stringify({days: state.days})}))); await load(); const failed = results.filter(r => r.status === 'rejected'); if (failed.length) status($('overview-status'), failed.map(r => r.reason.message).join(' ') + ' 其他已同步记录仍保留。', true); }
         catch (e) { status($('overview-status'), e.message + ' 历史记录仍保留；刷新可核对最新状态。', true); }
-        finally { state.syncing = false; $('overview-sync').disabled = false; $('overview-sync').textContent = '同步 Zepp 数据'; }
+        finally { state.syncing = false; updateSyncButton(); }
     });
     load();
 })();

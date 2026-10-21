@@ -4,6 +4,8 @@ import android.app.Activity;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.RippleDrawable;
+import android.content.res.ColorStateList;
 import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
@@ -44,7 +46,14 @@ final class ConnectionScreen {
         title.setTypeface(null, Typeface.BOLD);
         add(body, title, 20);
         add(body, text(activity, "把训练和身体状态放在一起", 16, INK), 4);
-        add(body, text(activity, "连接你的服务，继续今天的安排。", 14, Color.DKGRAY), 8);
+        add(body, text(activity, "登录查看身体与训练；没有网络也能采集体重。", 14, Color.DKGRAY), 8);
+        Button weighing = new Button(activity);
+        weighing.setText("离线称重与本机记录");
+        weighing.setTextColor(GREEN);
+        weighing.setMinHeight(dp(activity, 48));
+        weighing.setBackground(interactive(Color.rgb(228, 237, 208), dp(activity, 14)));
+        weighing.setOnClickListener(v -> activity.startActivity(new android.content.Intent(activity, io.stridehub.app.scale.WeighingActivity.class)));
+        add(body, weighing, 16);
 
         LinearLayout card = new LinearLayout(activity);
         card.setOrientation(LinearLayout.VERTICAL);
@@ -83,16 +92,33 @@ final class ConnectionScreen {
         connect.setTextColor(Color.WHITE);
         connect.setTextSize(16);
         connect.setAllCaps(false);
-        connect.setBackground(rounded(GREEN, dp(activity, 14)));
+        connect.setBackground(interactive(GREEN, dp(activity, 14)));
         LinearLayout.LayoutParams buttonParams = new LinearLayout.LayoutParams(-1, dp(activity, 52));
         buttonParams.topMargin = dp(activity, 18);
         card.addView(connect, buttonParams);
         Runnable submit = () -> {
+            address.setError(null);
+            account.setError(null);
+            password.setError(null);
             try {
                 ServerAddress.parse(address.getText().toString(), allow.isChecked());
-                if (account.getText().toString().trim().isEmpty() || password.length() == 0) {
-                    throw new IllegalArgumentException("请填写用户名和密码。");
-                }
+            } catch (IllegalArgumentException error) {
+                address.setError(error.getMessage());
+                address.requestFocus();
+                status.setText(error.getMessage());
+                status.setVisibility(View.VISIBLE);
+                return;
+            }
+            if (account.getText().toString().trim().isEmpty() || password.length() == 0) {
+                EditText invalid = account.getText().toString().trim().isEmpty() ? account : password;
+                String error = invalid == account ? "请输入用户名" : "请输入密码";
+                invalid.setError(error);
+                invalid.requestFocus();
+                status.setText(error);
+                status.setVisibility(View.VISIBLE);
+                return;
+            }
+            try {
                 String secret = password.getText().toString();
                 password.setText("");
                 listener.connect(address.getText().toString(), account.getText().toString().trim(), secret, allow.isChecked(), stay.isChecked());
@@ -109,10 +135,6 @@ final class ConnectionScreen {
         });
         add(body, text(activity, "使用和网页版相同的账号。密码不会保存在 APK 中。", 13, Color.DKGRAY), 20);
         add(body, text(activity, "手机上的 localhost 指手机本身。连接电脑时，请使用手机可访问的域名或电脑局域网 IP。", 13, Color.DKGRAY), 8);
-        Button weighing = new Button(activity);
-        weighing.setText("离线称重与本机记录");
-        weighing.setOnClickListener(v -> activity.startActivity(new android.content.Intent(activity, io.stridehub.app.scale.WeighingActivity.class)));
-        add(body, weighing, 16);
         return scroll;
     }
 
@@ -150,6 +172,10 @@ final class ConnectionScreen {
         background.setColor(color);
         background.setCornerRadius(radius);
         return background;
+    }
+
+    static RippleDrawable interactive(int color, int radius) {
+        return new RippleDrawable(ColorStateList.valueOf(0x33215e4b), rounded(color, radius), rounded(Color.WHITE, radius));
     }
 
     static int dp(Activity activity, int size) {

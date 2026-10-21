@@ -66,7 +66,7 @@ async function realLogin(password, remember) {
     assert.ok(payload.get('_username') === credentials.username, 'Username submitted exactly');
     assert.ok(payload.get('_password') === password, 'Password submitted exactly');
     assert.equal(Boolean(payload.get('_remember_me')), remember);
-    assert.equal(payload.get('_target_path'), base + '/admin/training/today');
+    assert.equal(payload.get('_target_path'), base + '/admin/insights');
     for (const request of requests) {
         assert.ok(!request.url().includes(encodeURIComponent(password)), 'Credentials must not enter request URLs');
     }
@@ -124,25 +124,25 @@ async function syntheticChecks() {
     await page.goto(fixtureBase + '/stridehub/admin/login');
     await page.evaluate(() => document.querySelector('form').addEventListener('submit', event => event.preventDefault()));
     assert.equal((await page.evaluate(script(fixtureBase + '/stridehub/', 'demo-runner', 'demo-pass'))).status, 'submitted');
-    assert.equal(await page.locator('[name="_target_path"]').inputValue(), fixtureBase + '/stridehub/admin/training/today');
+    assert.equal(await page.locator('[name="_target_path"]').inputValue(), fixtureBase + '/stridehub/admin/insights');
     assert.equal(postCount, 0);
-    report('synthetic installation path: login and today target retain configured server subdirectory');
+    report('synthetic installation path: login and overview target retain configured server subdirectory');
     await context.close();
 }
 
 (async () => {
     browser = await chromium.launch({headless: true, executablePath: process.env.CHROMIUM_EXECUTABLE || undefined});
     const valid = await realLogin(credentials.password, true);
-    await valid.page.waitForURL(base + '/admin/training/today');
-    await valid.page.locator('#today-date').waitFor();
+    await valid.page.waitForURL(url => url.origin === base && url.pathname === '/admin/insights');
+    await valid.page.locator('#insights-app').waitFor();
     const today = await valid.page.evaluate(async () => ({status: (await fetch('/admin/training/api/today')).status}));
     assert.equal(today.status, 200);
     const storage = await valid.page.evaluate(() => JSON.stringify({local: {...localStorage}, session: {...sessionStorage}}));
     assert.ok(!storage.includes(credentials.password), 'Login must not copy password into Web Storage');
     assert.ok(!storage.includes(credentials.apiKey), 'Web session must not expose the API key');
     assert.ok(!JSON.stringify(await valid.context.cookies()).includes(credentials.password), 'Cookie is an authenticated session, not a stored password');
-    await valid.page.screenshot({path: path.join(screenshotDir, 'browser-today.png'), fullPage: true});
-    report('real backend: Java login script uses CSRF, authenticated cookies and today redirect with no password in Web Storage');
+    await valid.page.screenshot({path: path.join(screenshotDir, 'browser-overview.png'), fullPage: true});
+    report('real backend: Java login script uses CSRF, authenticated cookies and overview redirect with no password in Web Storage');
     await valid.context.close();
     const invalid = await realLogin('ANDROID-E2E-deliberately-incorrect-password', false);
     await invalid.page.locator('.border-red-200').waitFor();

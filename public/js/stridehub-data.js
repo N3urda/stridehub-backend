@@ -8,7 +8,12 @@
         catch { throw new Error('连接中断，请检查网络后刷新。'); }
         if (res.status === 204 && !res.redirected) return {};
         const data = await res.json().catch(() => null);
-        if (!res.ok || !data || res.redirected) { const e = new Error(res.status === 401 || res.redirected || !data ? '登录已过期，请重新登录后再试。' : data.message || [data.lastError, data.nextAction].filter(Boolean).join(' ') || `暂时无法读取（${res.status}），请稍后重试。`); e.status = res.status; throw e; }
+        if (!res.ok || !data || res.redirected) {
+            const message = res.status === 401 || res.redirected ? '登录已过期，请重新登录后再试。'
+                : data?.message || [data?.lastError, data?.nextAction].filter(Boolean).join(' ')
+                    || (res.status === 403 ? '当前操作未获授权，请刷新页面后重试。' : `服务暂时无法返回记录（${res.status}），请稍后重试。`);
+            const e = new Error(message); e.status = res.status; throw e;
+        }
         return data;
     }
     const dateInZone = (date, zone) => new Intl.DateTimeFormat('en-CA', {timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit'}).format(date);

@@ -174,7 +174,7 @@ public final class NasSync {
     private static String label(String state){
         switch(state){
             case "pending":return "待同步";
-            case "synced":return "已同步";
+            case "synced":return "NAS 已确认";
             case "sending":return "发送中，NAS 可能已收到";
             case "cancelled_inflight":return "本机已删除，发送中回执未确认";
             case "deleted_local_received":return "本机已删除，NAS 已收到，请在 NAS 删除副本";
@@ -185,10 +185,14 @@ public final class NasSync {
         }
     }
     public static String rowStatus(LocalStore store,long id){
-        try(Cursor row=store.getReadableDatabase().rawQuery("SELECT status,detail FROM sync_queue WHERE measurement_id=?",new String[]{
+        try(Cursor row=store.getReadableDatabase().rawQuery("SELECT status,detail,binding FROM sync_queue WHERE measurement_id=?",new String[]{
             ""+id}
         )){
-            return row.moveToFirst()?label(row.getString(0))+" · "+(row.isNull(1)?"":row.getString(1)):"仅本机";
+            if(!row.moveToFirst())return "仅本机 · 未加入 NAS 同步";
+            String state=row.getString(0);
+            if("pending".equals(state)&&app!=null&&!row.getString(2).equals(binding(app)))return "同步已暂停 · 请返回原账号配对";
+            String detail=row.isNull(1)?"":row.getString(1);
+            return label(state)+(detail.isEmpty()?"":" · "+detail);
         }
     }
     public static String status(Context c){

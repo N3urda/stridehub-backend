@@ -16,7 +16,7 @@ public final class LoginScript {
             + "const username = " + jsonString(username) + ";\n"
             + "const password = " + jsonString(password) + ";\n"
             + "const remember = " + remember + ";\n"
-            + "const targetUrl = " + jsonString(address.route("/admin/training/today")) + ";\n"
+            + "const targetUrl = " + jsonString(address.route("/admin/insights")) + ";\n"
             + "let target = fields('_target_path');\n"
             + "let remembered = fields('_remember_me');\n"
             + "if (target.length > 1 || remembered.length > 1 || (target.length && !valid(target[0], 'hidden')) "

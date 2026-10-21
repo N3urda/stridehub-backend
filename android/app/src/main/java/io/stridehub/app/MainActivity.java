@@ -76,7 +76,7 @@ public final class MainActivity extends Activity {
                 server = ServerAddress.parse(address, allowHttp);
                 stage = Stage.RESTORE;
                 openBrowser();
-                browser.web.loadUrl(server.route("/admin/training/today"));
+                browser.web.loadUrl(server.route(NavigationSection.HOME));
                 return;
             } catch (IllegalArgumentException ignored) { /* Return to editable connection form. */ }
         }
@@ -121,7 +121,7 @@ public final class MainActivity extends Activity {
             }
             @Override public void menu(View anchor) { showMenu(anchor); }
             @Override public void retry() {
-                if (browser != null) browser.web.loadUrl(retryUrl == null ? server.route("/admin/training/today") : retryUrl);
+                if (browser != null) browser.web.loadUrl(retryUrl == null ? server.route(NavigationSection.HOME) : retryUrl);
             }
         });
         browser.tabs.setVisibility(stage == Stage.READY ? View.VISIBLE : View.GONE);
@@ -138,7 +138,7 @@ public final class MainActivity extends Activity {
         settings.setSupportMultipleWindows(true);
         settings.setJavaScriptCanOpenWindowsAutomatically(false);
         settings.setMediaPlaybackRequiresUserGesture(true);
-        settings.setUserAgentString(settings.getUserAgentString() + " StrideHub/" + "0.2.0" + "");
+        settings.setUserAgentString(settings.getUserAgentString() + " StrideHub/0.2.0 StrideHubAndroid");
         web.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS);
         CookieManager.getInstance().setAcceptCookie(true);
         CookieManager.getInstance().setAcceptThirdPartyCookies(web, false);
@@ -204,8 +204,8 @@ public final class MainActivity extends Activity {
                 return;
             }
             if (stage == Stage.SUBMITTED || stage == Stage.RESTORE || stage == Stage.LOGIN) {
-                if (!server.isRouteUrl(url, "/admin/training/today")) {
-                    view.loadUrl(server.route("/admin/training/today"));
+                if (!NavigationSection.isHome(server, url)) {
+                    view.loadUrl(server.route(NavigationSection.HOME));
                     return;
                 }
                 stage = Stage.READY;
@@ -215,11 +215,12 @@ public final class MainActivity extends Activity {
                 view.clearHistory();
                 browser.tabs.setVisibility(View.VISIBLE);
             }
+            if (stage == Stage.READY) browser.select(url);
         }
 
         @Override public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
             if (browser == null || view != browser.web) return;
-            if (request.isForMainFrame()) fail("连接失败，请检查服务是否启动、手机网络和 URL。");
+            if (request.isForMainFrame()) fail("连接失败，请检查手机网络和服务器。可重试，或打开「采集」离线记录体重。");
         }
 
         @Override public void onReceivedHttpError(WebView view, WebResourceRequest request, WebResourceResponse response) {
@@ -283,7 +284,9 @@ public final class MainActivity extends Activity {
         if (stage == Stage.READY) {
             menu.getMenu().add("刷新页面").setOnMenuItemClickListener(item -> { browser.web.reload(); return true; });
             menu.getMenu().add("文件导入").setOnMenuItemClickListener(item -> { browser.web.loadUrl(server.route("/admin/upload")); return true; });
-            menu.getMenu().add("身体与健康").setOnMenuItemClickListener(item -> { browser.web.loadUrl(server.route("/admin/health")); return true; });
+            menu.getMenu().add("饮食记录").setOnMenuItemClickListener(item -> { browser.web.loadUrl(server.route("/admin/nutrition")); return true; });
+            menu.getMenu().add("减重目标").setOnMenuItemClickListener(item -> { browser.web.loadUrl(server.route("/admin/weight")); return true; });
+            menu.getMenu().add("今日安排与反馈").setOnMenuItemClickListener(item -> { browser.web.loadUrl(server.route("/admin/training/today")); return true; });
             menu.getMenu().add("运动记录管理").setOnMenuItemClickListener(item -> { browser.web.loadUrl(server.route("/admin/activities")); return true; });
         }
         menu.getMenu().add("切换服务器 / 账号").setOnMenuItemClickListener(item -> { leave(false); return true; });

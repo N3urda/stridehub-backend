@@ -2,6 +2,7 @@ package io.stridehub.app;
 
 import android.app.Activity;
 import android.graphics.Color;
+import android.graphics.Typeface;
 import android.view.Gravity;
 import android.view.View;
 import android.webkit.WebView;
@@ -24,8 +25,12 @@ final class BrowserLayout {
     final TextView status;
     final LinearLayout notice;
     final LinearLayout tabs;
+    private final ServerAddress server;
+    private final Activity activity;
 
     BrowserLayout(Activity activity, ServerAddress server, Actions actions) {
+        this.server = server;
+        this.activity = activity;
         root = new LinearLayout(activity);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(ConnectionScreen.PAPER);
@@ -62,15 +67,32 @@ final class BrowserLayout {
         web.setBackgroundColor(ConnectionScreen.PAPER);
         root.addView(web, new LinearLayout.LayoutParams(-1, 0, 1));
         tabs = new LinearLayout(activity);
-        String[] names = {"今日", "课表", "运动", "称重"};
-        String[] paths = {"/admin/training/today", "/admin/training", "/admin/running", "native:weight"};
+        tabs.setPadding(ConnectionScreen.dp(activity, 6), ConnectionScreen.dp(activity, 6), ConnectionScreen.dp(activity, 6), ConnectionScreen.dp(activity, 6));
+        String[] names = NavigationSection.LABELS;
+        String[] paths = NavigationSection.PATHS;
         for (int i = 0; i < names.length; i++) {
             Button tab = button(activity, names[i]);
             String path = paths[i];
             tab.setOnClickListener(v -> actions.navigate(path));
-            tabs.addView(tab, new LinearLayout.LayoutParams(0, ConnectionScreen.dp(activity, 54), 1));
+            tab.setPadding(0, ConnectionScreen.dp(activity, 10), 0, ConnectionScreen.dp(activity, 10));
+            tab.setMinHeight(ConnectionScreen.dp(activity, 52));
+            tabs.addView(tab, new LinearLayout.LayoutParams(0, -2, 1));
         }
         root.addView(tabs);
+    }
+
+    void select(String url) {
+        int selected = NavigationSection.selected(server, url);
+        for (int i = 0; i < tabs.getChildCount(); i++) {
+            Button tab = (Button) tabs.getChildAt(i);
+            boolean active = selected == i;
+            tab.setSelected(active);
+            tab.setTypeface(null, active ? Typeface.BOLD : Typeface.NORMAL);
+            tab.setTextColor(active ? Color.WHITE : ConnectionScreen.GREEN);
+            tab.setBackground(ConnectionScreen.interactive(active ? ConnectionScreen.GREEN : Color.TRANSPARENT,
+                    ConnectionScreen.dp(activity, 12)));
+            tab.setContentDescription(NavigationSection.LABELS[i] + (active ? "，当前页面" : ""));
+        }
     }
 
     void error(String message) {
@@ -85,7 +107,7 @@ final class BrowserLayout {
         button.setAllCaps(false);
         button.setTextSize(14);
         button.setTextColor(ConnectionScreen.GREEN);
-        button.setBackgroundColor(Color.TRANSPARENT);
+        button.setBackground(ConnectionScreen.interactive(Color.TRANSPARENT, ConnectionScreen.dp(activity, 12)));
         button.setMinWidth(0);
         button.setMinimumWidth(0);
         return button;
