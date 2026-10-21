@@ -22,8 +22,8 @@ final readonly class ZeppDataApiRequestHandler
     {
     }
 
-    #[Route('/api/v1/health/zepp/{path}', name: 'api_v1_health_zepp', requirements: ['path' => 'status|sync|days(?:/[^/]+)?|raw/[a-f0-9]{64}'], priority: 45)]
-    #[Route('/admin/health/api/zepp/{path}', name: 'admin_health_zepp', requirements: ['path' => 'status|sync|days(?:/[^/]+)?|raw/[a-f0-9]{64}'], priority: 45)]
+    #[Route('/api/v1/health/zepp/{path}', name: 'api_v1_health_zepp', requirements: ['path' => 'status|sync|sources|days(?:/[^/]+)?|raw/[a-f0-9]{64}'], priority: 45)]
+    #[Route('/admin/health/api/zepp/{path}', name: 'admin_health_zepp', requirements: ['path' => 'status|sync|sources|days(?:/[^/]+)?|raw/[a-f0-9]{64}'], priority: 45)]
     public function handle(Request $request, string $path): Response
     {
         try {
@@ -36,6 +36,14 @@ final readonly class ZeppDataApiRequestHandler
             }
             if ('status' === $path) {
                 return new JsonResponse($this->zepp->status());
+            }
+            if ('sources' === $path) {
+                $limit = filter_var($request->query->get('limit', '100'), FILTER_VALIDATE_INT);
+                if (false === $limit) {
+                    throw new TrainingError('limit 必须是整数。');
+                }
+
+                return new JsonResponse($this->zepp->sources($request->query->get('kind'), $request->query->get('after'), $limit));
             }
             if ('days' === $path) {
                 return new JsonResponse(['records' => $this->zepp->list($request->query->get('from'), $request->query->get('to'))]);

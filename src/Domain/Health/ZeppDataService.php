@@ -47,6 +47,22 @@ final readonly class ZeppDataService
         return $this->repository->find('zepp-raw', $id) ?? throw new TrainingError('原始数据不存在。', 404);
     }
 
+    /** Searchable metadata makes even undated provider records discoverable without dumping private payloads.
+     * @return array{records:list<array<string,mixed>>,next:?string}
+     */
+    public function sources(?string $kind = null, ?string $after = null, int $limit = 100): array
+    {
+        if ($limit < 1 || $limit > 200 || (null !== $after && !preg_match('/^[a-f0-9]{64}$/D', $after))) {
+            throw new TrainingError('分页参数无效；limit 必须为 1 到 200。');
+        }
+        $rows = array_values(array_filter($this->repository->list('zepp-raw'), static fn (array $row): bool => (null === $kind || $kind === $row['kind']) && (null === $after || strcmp($row['id'], $after) > 0)));
+        usort($rows, static fn (array $a, array $b): int => strcmp($a['id'], $b['id']));
+        $page = array_slice($rows, 0, $limit);
+        $metadata = array_map(static fn (array $row): array => ['id' => $row['id'], 'kind' => $row['kind'], 'fetchedAt' => $row['fetchedAt'], 'sourceDate' => $row['sourceDate'] ?? null], $page);
+
+        return ['records' => $metadata, 'next' => count($rows) > $limit ? $page[$limit - 1]['id'] : null];
+    }
+
     /** @return array<string,mixed> */
     public function status(): array
     {
@@ -77,6 +93,7 @@ final readonly class ZeppDataService
             throw new TrainingError('正在同步 Zepp 数据，请稍后刷新。', 409);
         }
         try {
+            $deadline = microtime(true) + 600; // Complete before the shared 15-minute lease expires.
             $now = $this->clock->getCurrentDateTimeImmutable();
             $profile = $this->repository->find('profile', 'default');
             $timezone = $profile['timezone'] ?? 'Asia/Shanghai';
@@ -178,18 +195,23 @@ final readonly class ZeppDataService
                     $records[$date]['fieldSources']['sleepStages'] = $sleep['rawRecordIds'];
                     $records[$date]['rawRecordIds'] = [...$records[$date]['rawRecordIds'], ...$sleep['rawRecordIds']];
                 }
-                foreach (ZeppDataClient::EVENTS as $type) {
+                foreach ([...ZeppDataClient::EVENTS, ...array_keys(ZeppDataClient::EXTENDED_EVENTS), ...ZeppDataClient::EXTRA_SOURCES] as $type) {
                     try {
                         $count = 0;
                         for ($cursor = $from; $cursor < $until; $cursor = $end) {
                             $end = min($cursor->modify('+7 days'), $until);
-                            foreach ($this->client->events($credentials, $type, $cursor, $end, $timezone) as $event) {
+                            foreach ($this->client->events($credentials, $type, $cursor, $end, $timezone, $deadline) as $event) {
                                 if (!is_array($event)) {
                                     continue;
                                 }
                                 $id = $this->rawId($account, $type, $event);
                                 $raw[$id] = ['source' => 'zepp', 'kind' => $type, 'payload' => $event];
-                                $this->applyEvent($records, $event, $type, $id, $zone);
+                                $datedEvent = $event;
+                                // Watch statistics use dayId instead of an event timestamp.
+                                if (in_array($type, ['sport_load', 'vo2_max'], true) && is_string($event['dayId'] ?? null) && ZeppDataParser::validDate($event['dayId'])) {
+                                    $datedEvent['timestamp'] = new \DateTimeImmutable($event['dayId'], $zone)->getTimestamp() * 1000;
+                                }
+                                $this->applyEvent($records, $datedEvent, $type, $id, $zone);
                                 ++$count;
                             }
                         }
@@ -198,7 +220,16 @@ final readonly class ZeppDataService
                         $state['sources'][$type] = ['state' => $error->state, 'message' => $error->getMessage(), 'nextAction' => $error->nextAction];
                     }
                 }
-                $state['sources']['body'] = ['state' => 'unavailable', 'message' => '当前已验证的 Zepp 接口不提供体重和体脂；请使用体重记录。'];
+                try {
+                    $healthProfile = $this->client->healthProfile($credentials);
+                    if ([] !== $healthProfile) {
+                        $id = $this->rawId($account, 'health_profile', $healthProfile);
+                        $raw[$id] = ['source' => 'zepp', 'kind' => 'health_profile', 'payload' => $healthProfile];
+                    }
+                    $state['sources']['health_profile'] = ['state' => [] === $healthProfile ? 'no_data' : 'success', 'recordCount' => [] === $healthProfile ? 0 : 1];
+                } catch (ZeppSyncError $error) {
+                    $state['sources']['health_profile'] = ['state' => $error->state, 'message' => $error->getMessage(), 'nextAction' => $error->nextAction];
+                }
                 $this->repository->transactional(function () use ($raw, $records, $account, $now, $from, $today, $sleepClaim, &$state): void {
                     $newRaw = 0;
                     $sleepCounts = ['imported' => 0, 'updated' => 0, 'unchanged' => 0];

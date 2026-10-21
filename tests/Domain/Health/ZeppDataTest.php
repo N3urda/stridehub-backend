@@ -132,8 +132,11 @@ final class ZeppDataTest extends TestCase
             new Response(200, [], json_encode(['items' => $oxygen])),
             new Response(200, [], json_encode(['items' => [['timestamp' => $at, 'totalPai' => '45']]])),
             new Response(200, [], json_encode(['items' => [['timestamp' => (string) $at, 'rdnsScore' => '72']]])),
+            ...array_fill(0, 16, new Response(200, [], '{"items":[]}')),
+            new Response(200, [], '{"code":1,"data":{}}'),
         ]);
-        self::assertSame('success', $service->sync(2)['state']);
+        $synced = $service->sync(2);
+        self::assertSame('success', $synced['state'], json_encode($synced['sources']));
         $day = $service->day('2026-09-30');
         self::assertSame(98, $day['oxygen']['averagePercent']);
         self::assertSame(1, $day['oxygen']['sampleCount']);
@@ -206,8 +209,8 @@ final class ZeppDataTest extends TestCase
         $partial = ['date_time' => '2026-09-30', 'summary' => ['tz' => 28800, 'pai' => ['restHr' => 62], 'stp' => ['ttl' => 4300]]];
         $wakeDay = ['date_time' => '2026-09-29', 'summary' => ['tz' => 28800, 'stp' => ['ttl' => 4000]]];
         [$service] = $this->service([
-            new Response(200, [], json_encode(['code' => 1, 'data' => [$row]])), ...array_fill(0, 4, new Response(403)),
-            new Response(200, [], json_encode(['code' => 1, 'data' => [$partial, $wakeDay]])), ...array_fill(0, 4, new Response(403)),
+            new Response(200, [], json_encode(['code' => 1, 'data' => [$row]])), ...array_fill(0, 21, new Response(403)),
+            new Response(200, [], json_encode(['code' => 1, 'data' => [$partial, $wakeDay]])), ...array_fill(0, 21, new Response(403)),
         ]);
         $service->sync(2);
         $before = $service->day('2026-09-30');
@@ -232,7 +235,7 @@ final class ZeppDataTest extends TestCase
         unset($summary['stp']);
         $heart['summary'] = $summary;
         $steps = ['date_time' => '2026-09-30', 'summary' => ['tz' => 28800, 'stp' => ['ttl' => 5000, 'dis' => 3500]]];
-        [$service] = $this->service([new Response(200, [], json_encode(['code' => 1, 'data' => [$steps, $heart]])), ...array_fill(0, 4, new Response(403))]);
+        [$service] = $this->service([new Response(200, [], json_encode(['code' => 1, 'data' => [$steps, $heart]])), ...array_fill(0, 21, new Response(403))]);
         $service->sync(2);
         $day = $service->day('2026-09-30');
         self::assertSame(5000, $day['activity']['steps']);
@@ -255,7 +258,7 @@ final class ZeppDataTest extends TestCase
 
             return self::bandResponse();
         };
-        [$service, $repository] = $this->service([$interleaved, ...array_fill(0, 4, new Response(403))]);
+        [$service, $repository] = $this->service([$interleaved, ...array_fill(0, 21, new Response(403))]);
         // Ten minutes after the detailed claim, the old five-minute timeout must not win.
         $legacy = new SleepService($repository, new ZeppCredentials(KernelProjectDir::fromString($this->directory)), new ZeppSleepClient(new Client(['handler' => HandlerStack::create(new MockHandler([]))])), new ZeppSleepParser(), new ReminderTestClock('2026-09-30T08:10:00Z'), new LockFactory(new InMemoryStore()));
         $service->sync(2);
@@ -280,15 +283,82 @@ final class ZeppDataTest extends TestCase
         [$service] = $this->service([
             self::bandResponse(), new Response(200, [], json_encode(['items' => [['timestamp' => $at, 'avgStress' => 20, 'maxStress' => 40, 'data' => json_encode([['time' => $at, 'value' => 20]])]]])),
             new Response(200, [], json_encode(['items' => [['timestamp' => $at, 'extra' => ['spo2' => 98], 'unmapped' => 'preserved']]])),
-            new Response(200, [], '{"items":[]}'), new Response(200, [], '{"items":[]}'),
+            ...array_fill(0, 18, new Response(200, [], '{"items":[]}')),
+            new Response(200, [], '{"code":1,"data":{}}'),
         ]);
-        self::assertSame('success', $service->sync(2)['state']);
+        $synced = $service->sync(2);
+        self::assertSame('success', $synced['state'], json_encode($synced['sources']));
         $day = $service->day('2026-09-30');
         self::assertSame(20, $day['stress']['average']);
         self::assertSame(98, $day['oxygen']['averagePercent']);
         self::assertSame('available', $day['coverage']['oxygen']);
         self::assertCount(3, $day['rawRecordIds']);
-        self::assertSame('unavailable', $service->status()['sources']['body']['state']);
+        self::assertSame('no_data', $service->status()['sources']['weight']['state']);
+    }
+
+    public function testExtendedSourcesArePreservedDiscoverableAndIdempotent(): void
+    {
+        $event = ['timestamp' => strtotime('2026-09-30T12:00:00+08:00') * 1000, 'value' => ['samples' => [['hrv' => 42, 'unknown' => 'kept']]]];
+        $statistics = ['dayId' => '2026-09-30', 'vo2_max_run' => 40.5];
+        $weight = ['weight' => 65, 'unknownDateField' => 'kept'];
+        $batch = [self::bandResponse(), ...array_fill(0, 5, new Response(200, [], '{"items":[]}')),
+            ...array_fill(0, 11, new Response(200, [], json_encode(['items' => [$event]]))),
+            ...array_fill(0, 2, new Response(200, [], json_encode(['items' => [$statistics]]))),
+            new Response(200, [], json_encode(['items' => [$weight]])),
+            new Response(200, [], '{"items":[]}'),
+            new Response(200, [], '{"code":1,"data":{"height":170,"config":"secret","nick_name":"private"}}')];
+        [$service] = $this->service([...$batch, ...$batch]);
+        $synced = $service->sync(2);
+        self::assertSame('success', $synced['state'], json_encode($synced['sources']));
+        self::assertCount(14, $service->day('2026-09-30')['rawRecordIds']);
+        $page = $service->sources(null, null, 2);
+        self::assertCount(2, $page['records']);
+        self::assertNotNull($page['next']);
+        self::assertArrayNotHasKey('payload', $page['records'][0]);
+        $next = $service->sources(null, $page['next'], 200);
+        self::assertCount(14, $next['records']);
+        self::assertNull($next['next']);
+        $raw = $service->sources('weight')['records'];
+        self::assertCount(1, $raw);
+        self::assertSame($weight, $service->raw($raw[0]['id'])['payload']);
+        $profile = $service->sources('health_profile')['records'][0];
+        self::assertSame(['height' => 170], $service->raw($profile['id'])['payload']);
+        self::assertSame(16, $service->status()['rawRecordCount']);
+        self::assertSame(2, $service->sync(2)['unchanged']);
+        self::assertSame(16, $service->status()['rawRecordCount']);
+    }
+
+    public function testExpiredSyncBudgetDoesNotStartAnotherProviderRequest(): void
+    {
+        $client = new ZeppDataClient(new Client(['handler' => HandlerStack::create(new MockHandler([]))]));
+        $credentials = new ZeppCredentials(KernelProjectDir::fromString($this->directory))->read();
+        $from = new \DateTimeImmutable('2026-09-29T00:00:00+08:00');
+        $this->expectException(ZeppSyncError::class);
+        $this->expectExceptionMessage('Zepp 本次同步达到时间上限。');
+        $client->events($credentials, 'hrv_rmssd', $from, $from->modify('+1 day'), 'Asia/Shanghai', microtime(true) - 1);
+    }
+
+    public function testFullEventPagesSplitDaysWithoutSilentlyDroppingRecords(): void
+    {
+        $history = [];
+        $stack = HandlerStack::create(new MockHandler([
+            new Response(200, [], json_encode(['items' => array_fill(0, 1000, ['timestamp' => 1])])),
+            new Response(200, [], '{"items":[{"timestamp":2}]}'),
+            new Response(200, [], '{"items":[{"timestamp":3}]}'),
+            new Response(200, [], json_encode(['items' => array_fill(0, 1000, ['timestamp' => 1])])),
+        ]));
+        $stack->push(Middleware::history($history));
+        $client = new ZeppDataClient(new Client(['handler' => $stack]));
+        $credentials = new ZeppCredentials(KernelProjectDir::fromString($this->directory))->read();
+        $from = new \DateTimeImmutable('2026-09-29T00:00:00+08:00');
+        self::assertSame([['timestamp' => 2], ['timestamp' => 3]], $client->events($credentials, 'hrv_rmssd', $from, $from->modify('+2 days'), 'Asia/Shanghai'));
+        self::assertSame('/v2/users/me/events', $history[0]['request']->getUri()->getPath());
+        parse_str($history[1]['request']->getUri()->getQuery(), $left);
+        parse_str($history[2]['request']->getUri()->getQuery(), $right);
+        self::assertSame((int) $left['to'] + 1, (int) $right['from']);
+        self::assertSame('HRVRMSSD', $left['eventType']);
+        $this->expectException(ZeppSyncError::class);
+        $client->events($credentials, 'hrv_rmssd', $from, $from->modify('+1 day'), 'Asia/Shanghai');
     }
 
     /** @param list<Response|callable> $responses
@@ -296,6 +366,7 @@ final class ZeppDataTest extends TestCase
      */
     private function service(array $responses, ?string $databasePath = null): array
     {
+        $responses = array_map(static fn ($response) => $response instanceof Response ? new Response($response->getStatusCode(), $response->getHeaders(), (string) $response->getBody()) : $response, $responses);
         $clock = new ReminderTestClock('2026-09-30T08:00:00Z');
         $connection = DriverManager::getConnection(null === $databasePath ? ['driver' => 'pdo_sqlite', 'memory' => true] : ['driver' => 'pdo_sqlite', 'path' => $databasePath]);
         $connection->executeStatement('CREATE TABLE TrainingRecord (kind TEXT NOT NULL, id TEXT NOT NULL, payload TEXT NOT NULL, version INTEGER NOT NULL, updatedAt TEXT NOT NULL, naturalKey TEXT DEFAULT NULL, PRIMARY KEY(kind,id), UNIQUE(kind,naturalKey))');
@@ -307,7 +378,7 @@ final class ZeppDataTest extends TestCase
     /** @return list<Response> */
     private static function responses(): array
     {
-        return [self::bandResponse(), ...array_fill(0, 4, new Response(403, [], 'PROVIDER SECRET'))];
+        return [self::bandResponse(), ...array_fill(0, 21, new Response(403, [], 'PROVIDER SECRET'))];
     }
 
     private static function bandResponse(): Response

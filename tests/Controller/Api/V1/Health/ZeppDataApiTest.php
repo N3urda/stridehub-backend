@@ -18,7 +18,7 @@ final class ZeppDataApiTest extends AdminWebTestCase
     {
         $token = (string) Token::generate();
         $_SERVER['DREEVE_API_KEY'] = $_ENV['DREEVE_API_KEY'] = $token;
-        foreach (['status', 'days', 'days/2026-10-19', 'raw/'.str_repeat('a', 64), 'sync'] as $path) {
+        foreach (['status', 'sources', 'days', 'days/2026-10-19', 'raw/'.str_repeat('a', 64), 'sync'] as $path) {
             $this->client->request('GET', '/api/v1/health/zepp/'.$path);
             self::assertResponseStatusCodeSame(401);
             self::assertResponseHeaderSame('Cache-Control', 'no-store, private');
@@ -27,6 +27,11 @@ final class ZeppDataApiTest extends AdminWebTestCase
         $this->client->request('GET', '/api/v1/health/zepp/days', server: $server);
         self::assertResponseIsSuccessful();
         self::assertSame(['records' => []], json_decode($this->client->getResponse()->getContent(), true));
+        $this->client->request('GET', '/api/v1/health/zepp/sources', server: $server);
+        self::assertResponseIsSuccessful();
+        self::assertSame(['records' => [], 'next' => null], json_decode($this->client->getResponse()->getContent(), true));
+        $this->client->request('GET', '/api/v1/health/zepp/sources?limit=201', server: $server);
+        self::assertResponseStatusCodeSame(422);
         $this->client->request('GET', '/api/v1/health/zepp/days?from=2026-02-30', server: $server);
         self::assertResponseStatusCodeSame(422);
         $this->client->request('GET', '/api/v1/health/zepp/days/2026-10-19', server: $server);

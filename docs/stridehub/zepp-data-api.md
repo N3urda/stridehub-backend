@@ -11,6 +11,7 @@ All routes require the existing Bearer API key under `/api/v1/health/zepp`, or a
 | GET `/status` | Configuration, last attempt/success, counts, date range and separate source statuses. |
 | GET `/days?from=YYYY-MM-DD&to=YYYY-MM-DD` | `{records: [...]}` ordered newest first. Compact daily measurements; no minute arrays or raw payloads. |
 | GET `/days/YYYY-MM-DD` | One daily record, with `samples`, `sleepStages` and `activityStages`. |
+| GET `/sources?kind=hrv_rmssd&limit=100&after=<id>` | Paginated source metadata (`records`, `next`), including records without a verified calendar date. `limit` 1–200; payloads are excluded. |
 | GET `/raw/{id}` | A referenced immutable original source record, decoded summary if available and fetch time. This may contain sensitive device identifiers; request only when needed. |
 | POST `/sync` | JSON `{ "days": 30 }`, range 1–90. Returns synchronization status; partial success is HTTP 200 with `state: partial`. |
 
@@ -33,7 +34,7 @@ Each record includes `date`, `sourceDate`, `source: zepp`, `timeZone`, `lastSync
 | `heartRate` | `restingBpm`, `averageBpm`, `minBpm`, `maxBpm`, `sampleCount`. Average/min/max describe observed minute readings, not a complete day or medical interpretation. Resting HR is only a source-provided resting metric. |
 | `oxygen` | `averagePercent`, `minPercent`, `sampleCount`, calculated from returned spot readings. |
 | `stress` | `average`, `max`, `sampleCount`; source summary and returned point count. |
-| `body` | `weightKg`, `bodyFatPercent`; currently null because the verified APIs do not provide them. Use the separate weight history API. |
+| `body` | `weightKg`, `bodyFatPercent`; remain null until a measured record and its units are verified. The weight endpoint and health-profile snapshot are stored separately as source records and never overwrite manual weight history. |
 
 Day detail adds `samples.heartRate: [{at, bpm}]`, `samples.oxygen: [{at, percent}]`, and `samples.stress: [{at, value}]`. Heart rate is decoded only for the verified 1,440-byte, one-reading-per-minute format with a known source offset. Zero, 254, 255 and invalid values are excluded; gaps remain gaps. Unknown binary formats are retained in raw data for future decoding. Sleep/activity stage arrays preserve the upstream `start`, `stop`, `mode` schema; mode codes are device/protocol dependent and must not be guessed or presented as verified sleep labels.
 
@@ -43,6 +44,31 @@ Daily activity and heart rate use the source's calendar date. Sleep can belong t
 
 The authenticated regional `band_data.json?query_type=detail` endpoint has been verified against this connection. It returns daily activity, sleep summaries/stages when present, minute heart rate and original binary activity data. The original provider summary and binary fields are persisted, including fields not yet interpreted.
 
-The global events endpoint is queried separately for `all_day_stress`, `blood_oxygen`, `PaiHealthInfo` and `readiness`. The current connection returned HTTP 403 for these four sources during live validation. This is displayed as source-specific `auth_required`, with overall `partial` status; it does not mean the successfully verified band data failed. PAI/readiness and oxygen ODI/OSA event shapes are retained raw if returned; they are not mislabeled as measurements that the parser has not verified. No body-composition endpoint or detailed stage-code mapping is claimed as supported.
+The regional events endpoint now uses the verified events account identity. Pressure, blood oxygen, PAI and readiness succeeded in live NAS verification; the earlier HTTP 403 was caused by using the legacy band identity.
+
+### Expanded sources (2026-10-21)
+
+The same hourly sync now also reads these independent sources, using seven-day windows and retaining every returned item as a content-addressed original record:
+
+| Source kind | Provider data |
+| --- | --- |
+| `single_stress` | Spot stress events |
+| `body_battery`, `charge_stress`, `charge_insights` | Charge samples, associated stress and change explanations |
+| `hrv_sdnn`, `hrv_rmssd` | Distinct SDNN and RMSSD streams; never merged or assumed interchangeable |
+| `daily_health` | Daily summaries and goals, including fields the old band interface omits |
+| `respiratory_rate` | Respiratory rate records |
+| `sport_load`, `vo2_max` | Native Zepp training load and aerobic fitness estimates, not StrideHub recalculations |
+| `heart_rate` | Additional native heart-rate records |
+| `second_heart_rate_files` | File index and coverage only; the underlying file download protocol is not verified |
+| `weight`, `blood_pressure`, `emotion`, `lactate_threshold` | Queried independently; empty responses are `no_data`, not synthetic measurements or proof of device support |
+| `health_profile` | Numeric age, gender, height, weight and goal fields from the current Zepp profile; excludes account config, contact details and names. It is a snapshot, not a dated body measurement. |
+
+The original readiness payload already includes additional scores/baselines and may contain skin-temperature fields; they remain intact rather than being guessed into absolute body temperature. New streams are available through daily `rawRecordIds` where their dates are verified and through `/sources` for all records. Source payloads preserve nested samples and unknown fields. This does not add separate dashboard cards or automatic normalization for every new metric.
+
+`/sources` is a metadata index: follow each `id` with `/raw/{id}` only when needed. Filtering by `kind` avoids dumping unrelated health information. Provider corrections remain separate immutable versions. `fetchedAt` is ingestion time, not measurement time. Health-profile snapshots and undated streams must not be treated as today's readings.
+
+Full provider pages trigger smaller calendar-day requests. A full single-day page reports a source error rather than silently claiming completeness. Network and authorization failures remain source-specific and preserve saved data. The 1–90 day API limit remains; this is not a promise of complete lifetime history.
+
+Public protocol evidence and unresolved download/availability limits are documented in [the research report](zepp-data-research.md).
 
 Protocol references: [band-detail parser](https://github.com/weddle/zepp-cloud-sdk/blob/main/src/zepp_cloud/parsers/band_detail.py), [events resource](https://github.com/weddle/zepp-cloud-sdk/blob/main/src/zepp_cloud/resources/events.py), and [original event extraction implementation](https://github.com/bentasker/zepp_to_influxdb/blob/main/app/mifit_to_influxdb.py). These describe an unofficial cloud interface, so source-specific errors and original payload retention are part of the data contract.
