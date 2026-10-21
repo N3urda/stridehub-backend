@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Infrastructure\Mcp;
 
 use App\Domain\Health\BloodPressureService;
+use App\Domain\Health\DailyCollectionReadModel;
 use App\Domain\Health\HealthContextService;
 use App\Domain\Health\HealthDataService;
 use App\Domain\Health\HealthWorkspace;
@@ -37,6 +38,7 @@ final readonly class McpWorkspace
         private ZeppWorkoutService $zepp,
         private RunningDetails $running,
         private Clock $clock,
+        private DailyCollectionReadModel $collection,
     ) {
     }
 
@@ -104,6 +106,8 @@ final readonly class McpWorkspace
     {
         $w = $this->workspace->read($args['from'] ?? null, $args['to'] ?? null);
         $records = match ($args['topic']) {
+            'weight_captures' => $this->collection->captures($w['from'], $w['to']),
+            'zepp_summaries' => $this->collection->summaries($w['from'], $w['to']),
             'training' => $w['sessions'], 'workouts' => $w['workouts']['records'], 'meals' => $w['nutrition']['meals'],
             'meal_plans' => $w['nutrition']['plans'], 'weight' => $w['weight']['records'], 'weight_goals' => $w['weight']['goals'],
             'measurements' => $w['measurements'], 'blood_pressure' => $w['bloodPressure'], 'sleep' => $w['sleep'],

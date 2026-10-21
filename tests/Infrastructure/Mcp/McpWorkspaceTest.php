@@ -18,6 +18,25 @@ final class McpWorkspaceTest extends AdminWebTestCase
         return false;
     }
 
+    public function testCollectedTopicsPreserveSnapshotAndExcludeProviderSecrets(): void
+    {
+        $repo = $this->getContainer()->get(TrainingRepository::class);
+        foreach (['one', 'two'] as $id) {
+            $repo->save('zepp-raw', $id, ['kind' => 'hrv_rmssd', 'sourceDate' => '2026-01-10', 'payload' => ['deviceId' => 'secret-device', 'value' => ['samples' => [['hrv' => 35]]]]], 0);
+        }
+        $args = ['topic' => 'zepp_summaries', 'from' => '2026-01-01', 'to' => '2026-01-31', 'limit' => 1];
+        $page = $this->call('get_history', $args);
+        self::assertTrue($page['ok']);
+        self::assertSame(2, $page['data']['total']);
+        self::assertCount(1, $page['data']['records']);
+        self::assertStringNotContainsString('secret-device', json_encode($page));
+        self::assertSame('conflict', $this->call('get_history', [...$args, 'offset' => 1])['error']['code']);
+        self::assertTrue($this->call('get_history', [...$args, 'offset' => 1, 'snapshot' => $page['data']['snapshot']])['ok']);
+        $captures = $this->call('get_history', [...$args, 'topic' => 'weight_captures']);
+        self::assertTrue($captures['ok']);
+        self::assertSame([], $captures['data']['records']);
+    }
+
     public function testPlanIsAtomicAndRetryReturnsItsOriginalReceipt(): void
     {
         $args = ['requestId' => 'week-one', 'reason' => '用户要求的演示计划',

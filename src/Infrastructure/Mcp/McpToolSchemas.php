@@ -51,8 +51,8 @@ final readonly class McpToolSchemas
         return [
             'get_overview' => $this->definition('身体与计划概况', '先调用本工具。精简读取身体状态、运动表现、饮食、减重目标、未来训练与缺失数据。不会同步设备或生成计划。', true,
                 self::object(['days' => ['type' => 'integer', 'minimum' => 1, 'maximum' => 90, 'default' => 14]])),
-            'get_history' => $this->definition('查询记录与计划明细', '按主题和日期读取完整记录、ID、version；更新前先读。默认最近 30 天，最多 366 天；reports/constraints/weight_goals 不按日期过滤。分页必须携带首次返回的 from/to/snapshot，变动时会要求重读。', true,
-                self::object(['topic' => ['enum' => ['training', 'workouts', 'meals', 'meal_plans', 'weight', 'weight_goals', 'measurements', 'blood_pressure', 'sleep', 'daily_activity', 'check_ins', 'reports', 'constraints']],
+            'get_history' => $this->definition('查询记录与计划明细', '按主题和日期读取完整记录、ID、version；更新前先读。默认最近 30 天，最多 366 天；reports/constraints/weight_goals 不按日期过滤。weight_captures 保留逐次测量和删除标记；zepp_summaries 为有界来源摘要，未定日期快照仍返回 date=null，不含原始编码或设备凭据。分页必须携带首次返回的 from/to/snapshot，变动时会要求重读。', true,
+                self::object(['topic' => ['enum' => ['training', 'workouts', 'meals', 'meal_plans', 'weight', 'weight_goals', 'measurements', 'blood_pressure', 'sleep', 'daily_activity', 'weight_captures', 'zepp_summaries', 'check_ins', 'reports', 'constraints']],
                     'from' => $date, 'to' => $date, 'offset' => ['type' => 'integer', 'minimum' => 0, 'default' => 0],
                     'limit' => ['type' => 'integer', 'minimum' => 1, 'maximum' => 50, 'default' => 20], 'snapshot' => ['type' => 'string', 'pattern' => '^[a-f0-9]{64}$'],
                 ], ['topic'])),

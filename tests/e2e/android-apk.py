@@ -167,7 +167,7 @@ def upload_demo_file():
     adb('push', str(fixture), '/sdcard/Download/' + fixture.name)
     tap('更多')
     tap('文件导入')
-    wait('Dreeve | Admin panel')
+    wait('Upload activity files')
     # API35 WebView sometimes omits the old admin page's main content from its
     # accessibility tree until the document picker returns. This coordinate was
     # visually verified inside its browse target on this fixed 1080x2400 Pixel7.
@@ -259,7 +259,7 @@ def main():
     wait_contains('今日安排')
     shot('native-today.png')
     report('real Android WebView submits Java-generated login script and opens authenticated Today')
-    for label, expected in [('课表', '为下一次出发，做好准备。'), ('运动', '每一次出发，都有迹可循。')]:
+    for label, expected in [('课表', '课表与执行反馈'), ('运动', '每一次出发，都有迹可循。')]:
         tap(label)
         wait_contains(expected)
     tap('称重')

@@ -56,6 +56,7 @@
         if (focus) $('#panel-' + name)?.scrollIntoView({block: 'start', behavior: 'instant'});
     }
     $$('[data-tab-target]').forEach(node => node.addEventListener('click', event => { event.preventDefault(); selectTab(node.dataset.tabTarget); }));
+    if (location.hash === '#profile') selectTab('profile', true);
     function formStatus(kind, message, error = false) { const node = $('.form-status', forms[kind]); node.replaceChildren(); node.className = `form-status full ${error ? 'error' : 'success'}`; if (message) node.append(document.createTextNode(message)); }
     function markDirty(kind) { forms[kind]._revision = (forms[kind]._revision || 0) + 1; forms[kind]._dirty = true; const status = $('#' + kind + '-save-state'); status.textContent = '有未保存的修改'; status.classList.add('dirty'); if (kind === 'checkin') renderToday(); }
     function markSaved(kind, record) { const form = forms[kind]; form._record = record; form._dirty = false; const node = $('#' + kind + '-save-state'); node.textContent = record?.version ? `已保存 · 版本 ${record.version}` : '尚未保存'; node.classList.remove('dirty'); }

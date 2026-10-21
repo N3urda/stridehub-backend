@@ -101,6 +101,7 @@
         $('overview-range').textContent = `${state.from} 至 ${state.today} · ${state.zone}`;
         const query = `?from=${state.from}&to=${state.today}`;
         const jobs = [
+            ['手机采集', api('/health/api/collected/weight' + query + '&limit=1'), data => { const row = data.records[0], link = node('a', '', row ? '查看逐次采集与每日趋势差异' : '连接手机并核对首次上传'); link.href = base + '/health#collection-history'; $('overview-collection').replaceChildren(node('span', '', row ? `最近采集 ${row.capture.localDate}，${num(row.capture.weightKg, 2)} kg${row.deleted ? '（已删除）' : ''}。服务器最近写入 ${time(row.updatedAt, state.zone)}。 ` : '此范围没有手机采集记录。 '), link); }, 'overview-collection'],
             ['睡眠', api('/health/api/sleep' + query), renderSleep, 'overview-sleep-chart'],
             ['Zepp 日记录', api('/health/api/zepp/days' + query), data => renderDaily(data.records), 'activity-metrics'],
             ['运动', api('/health/api/workouts' + query), renderRunning, 'running-metrics'],
