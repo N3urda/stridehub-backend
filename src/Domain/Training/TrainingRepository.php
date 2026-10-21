@@ -118,6 +118,12 @@ final readonly class TrainingRepository
     private function hydrate(array $row): array
     {
         $payload = json_decode($row['payload'], true, 512, JSON_THROW_ON_ERROR);
+        if ('collection-weight' === $row['kind']) {
+            // Collection snapshots preserve JSON object/list identity at every depth.
+            $object = json_decode($row['payload'], false, 512, JSON_THROW_ON_ERROR);
+            $payload['capture']['profile'] = $object->capture->profile;
+            $payload['capture']['derived'] = $object->capture->derived;
+        }
         if ('sessions' === $row['kind']) {
             $payload = $this->normalizeSession($payload);
         }

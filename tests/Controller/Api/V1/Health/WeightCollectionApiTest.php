@@ -104,6 +104,52 @@ final class WeightCollectionApiTest extends AdminWebTestCase
         self::assertResponseStatusCodeSame(409);
     }
 
+    public function testSnapshotJsonIdentitySurvivesStorageAndReplay(): void
+    {
+        $d = $this->pair();
+        $p = $this->capture();
+        $p['profile'] = (object) ['empty' => (object) [], 'list' => [], 'numericKeys' => (object) ['0' => 'a']];
+        $p['derived']['values'] = (object) [];
+        $url = '/device/v1/weight/'.$p['measurementId'];
+        $this->call('PUT', $url, $p, $d['token']);
+        self::assertResponseIsSuccessful();
+        $this->call('GET', $url, token: $d['token']);
+        $json = json_decode($this->client->getResponse()->getContent());
+        self::assertInstanceOf(\stdClass::class, $json->measurement->capture->profile->empty);
+        self::assertSame([], $json->measurement->capture->profile->list);
+        self::assertInstanceOf(\stdClass::class, $json->measurement->capture->profile->numericKeys);
+        self::assertInstanceOf(\stdClass::class, $json->measurement->capture->derived->values);
+        self::assertTrue($this->call('PUT', $url, $p, $d['token'])['replayed']);
+        $p['profile']->empty = [];
+        $this->call('PUT', $url, $p, $d['token']);
+        self::assertResponseStatusCodeSame(409);
+    }
+
+    public function testManualDailyDeletionIsProtectedButCollectionDeletionReleasesOwnership(): void
+    {
+        $d = $this->pair();
+        $p = $this->capture();
+        $url = '/device/v1/weight/'.$p['measurementId'];
+        $this->call('PUT', $url, $p, $d['token']);
+        $daily = $this->call('GET', '/admin/health/api/weight');
+        $this->call('DELETE', '/admin/health/api/weight/2026-10-21?version='.$daily['version'], csrf: $d['csrf']);
+        self::assertResponseStatusCodeSame(204);
+        $r = $this->call('PUT', $url, $p, $d['token']);
+        self::assertSame('manual_conflict', $r['projection']['status']);
+        $next = $this->capture('b0000000-0000-4000-8000-000000000002');
+        $r = $this->call('PUT', '/device/v1/weight/'.$next['measurementId'], $next, $d['token']);
+        self::assertSame('manual_conflict', $r['projection']['status']);
+        self::assertSame([], $this->call('GET', '/admin/health/api/weight?from=2026-10-21&to=2026-10-21')['records']);
+
+        $p['localDate'] = '2026-10-22';
+        $p['measurementId'] = 'c0000000-0000-4000-8000-000000000003';
+        $this->call('PUT', '/device/v1/weight/'.$p['measurementId'], $p, $d['token']);
+        $this->call('DELETE', '/admin/health/api/collection/weight/'.$p['measurementId'].'?deviceId='.$d['deviceId'], csrf: $d['csrf']);
+        $p['measurementId'] = 'd0000000-0000-4000-8000-000000000004';
+        $r = $this->call('PUT', '/device/v1/weight/'.$p['measurementId'], $p, $d['token']);
+        self::assertSame('projected', $r['projection']['status']);
+    }
+
     public function testAuthorizationCsrfValidationAndRevocation(): void
     {
         $d = $this->pair();

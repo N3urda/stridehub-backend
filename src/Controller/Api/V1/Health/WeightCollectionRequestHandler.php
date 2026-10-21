@@ -111,7 +111,7 @@ final readonly class WeightCollectionRequestHandler
                 throw new \JsonException();
             }
 
-            return json_decode($raw, true, 16, JSON_THROW_ON_ERROR);
+            return get_object_vars($object);
         } catch (\JsonException) {
             throw new TrainingError('Valid JSON object required.');
         }

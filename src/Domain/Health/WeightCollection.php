@@ -116,12 +116,13 @@ final readonly class WeightCollection
         $current = $list['records'][0] ?? null;
         $owner = $this->records->find('collection-projection', $date);
         $owned = null !== $owner && null !== $current && $current == $owner['daily'];
-        if (null !== $current && !$owned) {
+        if ((null !== $current && !$owned) || (null === $current && null !== $owner && null !== $owner['daily'])) {
             return ['status' => 'manual_conflict', 'measurementId' => $latest['measurementId'] ?? null];
         }
         if (null === $latest) {
             if ($owned) {
                 $this->daily->delete($date, $list['version']);
+                $this->records->save('collection-projection', $date, ['daily' => null], $owner['version']);
             }
 
             return ['status' => 'unchanged', 'measurementId' => null];
@@ -168,11 +169,11 @@ final readonly class WeightCollection
             $out[$field] = (float) $v;
         }
         foreach (['profile', 'derived'] as $f) {
-            if (!isset($p[$f]) || !is_array($p[$f])) {
+            if (!isset($p[$f]) || !$p[$f] instanceof \stdClass) {
                 throw new TrainingError($f.' must be object.');
             }
         }
-        if (!is_string($p['derived']['algorithmVersion'] ?? null) || '' === trim($p['derived']['algorithmVersion']) || !is_array($p['derived']['values'] ?? null)) {
+        if (!is_string($p['derived']->algorithmVersion ?? null) || '' === trim($p['derived']->algorithmVersion) || !($p['derived']->values ?? null) instanceof \stdClass) {
             throw new TrainingError('derived requires algorithmVersion and values.');
         }
         $out['profile'] = $this->canonical($p['profile']);
@@ -181,18 +182,19 @@ final readonly class WeightCollection
         return $out;
     }
 
-    /** @param array<array-key, mixed> $value
-     * @return array<array-key, mixed>
-     */
-    private function canonical(array $value): array
+    private function canonical(mixed $value): mixed
     {
-        if (!array_is_list($value)) {
-            ksort($value);
-        }
-        foreach ($value as &$v) {
-            if (is_array($v)) {
-                $v = $this->canonical($v);
+        if ($value instanceof \stdClass) {
+            $properties = get_object_vars($value);
+            ksort($properties);
+            foreach ($properties as &$property) {
+                $property = $this->canonical($property);
             }
+
+            return (object) $properties;
+        }
+        if (is_array($value)) {
+            return array_map($this->canonical(...), $value);
         }
 
         return $value;
