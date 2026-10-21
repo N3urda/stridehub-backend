@@ -138,7 +138,7 @@ public final class MainActivity extends Activity {
         settings.setSupportMultipleWindows(true);
         settings.setJavaScriptCanOpenWindowsAutomatically(false);
         settings.setMediaPlaybackRequiresUserGesture(true);
-        settings.setUserAgentString(settings.getUserAgentString() + " StrideHub/0.1.0");
+        settings.setUserAgentString(settings.getUserAgentString() + " StrideHub/" + "0.2.0" + "");
         web.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS);
         CookieManager.getInstance().setAcceptCookie(true);
         CookieManager.getInstance().setAcceptThirdPartyCookies(web, false);
@@ -186,6 +186,7 @@ public final class MainActivity extends Activity {
             browser.progress.setVisibility(View.INVISIBLE);
             CookieManager.getInstance().flush();
             if (server.isLoginUrl(url)) {
+                io.stridehub.app.sync.NasSync.disconnect(MainActivity.this);
                 if (stage == Stage.LOGIN && pendingPassword != null) {
                     String script = LoginScript.build(server, username, pendingPassword, remember);
                     pendingPassword = null;

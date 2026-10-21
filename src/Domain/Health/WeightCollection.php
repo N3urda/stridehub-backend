@@ -15,14 +15,18 @@ final readonly class WeightCollection
     }
 
     /** @return array<string, mixed> */
-    public function pair(string $name): array
+    public function pair(string $name, ?string $deviceId = null): array
     {
         if ('' === trim($name) || mb_strlen($name) > 100) {
             throw new TrainingError('name must contain 1..100 characters.');
         }
-        $id = bin2hex(random_bytes(16));
+        if (null !== $deviceId && !preg_match('/^[a-f0-9]{32}$/D', $deviceId)) {
+            throw new TrainingError('deviceId must contain 32 lowercase hexadecimal characters.');
+        }
+        $id = $deviceId ?? bin2hex(random_bytes(16));
+        $existing = $this->records->find('collection-devices', $id);
         $token = 'shdevice_'.bin2hex(random_bytes(32));
-        $this->records->save('collection-devices', $id, ['name' => trim($name), 'tokenHash' => hash('sha256', $token), 'revoked' => false], 0);
+        $this->records->save('collection-devices', $id, ['name' => trim($name), 'tokenHash' => hash('sha256', $token), 'revoked' => false], $existing['version'] ?? 0);
 
         return ['deviceId' => $id, 'name' => trim($name), 'token' => $token];
     }

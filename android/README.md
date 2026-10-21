@@ -71,3 +71,14 @@ WebView 边界参考 [Android 官方 URI 校验说明](https://developer.android
 旧 TinyYumi 的私有数据库属于另一包名，不能直接继承。请在旧 App 设置中导出全部 CSV，再在本 App 的称重 → 设置 → 导入旧 TinyYumi 记录选择文件。导入最多 8 MB，整批事务保存，同一导出记录重放不重复添加，已删除的导入记录不会因重放复活。保留测量时间、当时日期、资料快照以及支持算法版本的历史估算；不支持的算法版本整批拒绝，原文件仍可保留。CSV 原本不包含原始蓝牙报文，因此不能从 CSV 恢复报文。导入不会自动覆盖当前个人资料或设备绑定。
 
 核对总条数、日期、体重和历史详情后再停用旧 App；尚未完成 NAS 同步前，不应卸载唯一保存数据的 App。来源修订见 `TINYYUMI-ORIGIN.md`。原有六组纯 Java 称重测试已纳入 Gradle JUnit，另有 CSV 格式测试及模拟器事务/去重/离线入口回归。
+
+
+### Native NAS weighing sync
+
+Weighing → Settings uses the existing StrideHub connection and HTTP opt-in. Log in to the intended account in StrideHub, then explicitly confirm pairing and upload of local stable measurements/imports. Live BLE readings are never uploaded. Device credentials use Android Keystore AES/GCM; browser Cookie+CSRF is used only for pairing and is never stored by sync. Redirects are not followed and TLS uses the platform trust store.
+
+Each measurement has a durable UUID and captured timestamp/offset. A SQLite transaction freezes the canonical payload and binding before retry. Jobs require network, persist across reboot, process at most ten records per run, and retry uncertain/transient failures with backoff. A successful receipt must identify the expected device/measurement and be nondeleted. A manual daily-entry conflict or validation/tombstone rejection remains visible for NAS review. No automatic overwrite or resurrection occurs.
+
+Disconnect/logout/server switch disables native credentials and cancels scheduling. Queues and nonsecret per-server/login device identities remain visible. Explicit pairing to the original exact destination/login rotates the same device token and resumes its pending/revoked rows; synced or conflict/error rows are not reset. New server/accounts cannot adopt old rows. Delete local cancels unsent work; an already received NAS copy must be deleted separately from NAS administration. Export remains available for retained local history.
+
+Verification: source `var/runtime/android-toolchain/env.sh` from repository root, run `android/gradlew` in `android/` for `assembleDebug assembleDebugAndroidTest testDebugUnitTest lintDebug`. If Google's UTP dependency cannot download, install the built debug/test APKs only on `emulator-5556` and use `am instrument -w io.stridehub.app.debug.test/android.test.InstrumentationTestRunner`. Use a clean debug test application state for the full suite; never clear a user's release application or use a personal device.

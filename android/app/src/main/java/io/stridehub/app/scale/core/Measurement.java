@@ -7,6 +7,7 @@ import java.time.ZoneId;
 public final class Measurement {
     public long id;
     public long measuredAt;
+    public String capturedTime;
     public String localDay;
     public double weightKg;
     public Double bodyFatPercent;
@@ -29,6 +30,7 @@ public final class Measurement {
         if (when <= 0) throw new IllegalArgumentException("测量时间无效");
         Measurement value = new Measurement();
         value.measuredAt = when;
+        value.capturedTime = Instant.ofEpochMilli(when).atZone(ZoneId.systemDefault()).toOffsetDateTime().toString();
         value.localDay = Instant.ofEpochMilli(when).atZone(ZoneId.systemDefault()).toLocalDate().toString();
         value.weightKg = weight;
         value.bodyFatPercent = fat;

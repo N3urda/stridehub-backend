@@ -22,8 +22,9 @@ import java.time.ZoneId;
 
 public final class LocalStore extends SQLiteOpenHelper {
     private final SharedPreferences preferences;
+    private boolean importing;
     public LocalStore(Context context) {
-        super(context,"tinyyumi.db",null,3);
+        super(context,"tinyyumi.db",null,5);
         preferences=context.getSharedPreferences("local_profile",Context.MODE_PRIVATE);
     }
     @Override public void onCreate(SQLiteDatabase db) {
@@ -31,6 +32,7 @@ public final class LocalStore extends SQLiteOpenHelper {
         db.execSQL("CREATE INDEX measurement_time ON measurements(measured_at DESC,id DESC)");
         createDerivations(db);
         createImports(db);
+        createSync(db);
     }
     private void createDerivations(SQLiteDatabase db) {
         db.execSQL("CREATE TABLE IF NOT EXISTS measurement_derivations (measurement_id INTEGER NOT NULL, algorithm_version INTEGER NOT NULL, calculated_at INTEGER NOT NULL, profile_snapshot TEXT, metrics_json TEXT NOT NULL, PRIMARY KEY(measurement_id,algorithm_version))");
@@ -38,6 +40,23 @@ public final class LocalStore extends SQLiteOpenHelper {
     @Override public void onUpgrade(SQLiteDatabase db,int oldVersion,int newVersion) {
         if(oldVersion<2)createDerivations(db);
         if(oldVersion<3)createImports(db);
+        if(oldVersion<4)createSync(db);
+        else if(oldVersion<5){db.execSQL("ALTER TABLE sync_queue ADD COLUMN server TEXT NOT NULL DEFAULT ''");backfillIdentity(db);}
+    }
+    private void createSync(SQLiteDatabase db) {
+        db.execSQL("ALTER TABLE measurements ADD COLUMN upload_uuid TEXT");
+        db.execSQL("ALTER TABLE measurements ADD COLUMN captured_time TEXT");
+        db.execSQL("CREATE TABLE sync_queue (measurement_id INTEGER PRIMARY KEY, uuid TEXT NOT NULL, binding TEXT NOT NULL, server TEXT NOT NULL, payload TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', detail TEXT)");
+        backfillIdentity(db);
+    }
+    private void backfillIdentity(SQLiteDatabase db) {
+        try(Cursor rows=db.rawQuery("SELECT id,measured_at FROM measurements WHERE upload_uuid IS NULL",null)) {
+            while(rows.moveToNext()) {
+                ContentValues values=new ContentValues();values.put("upload_uuid",java.util.UUID.randomUUID().toString());
+                values.put("captured_time",java.time.Instant.ofEpochMilli(rows.getLong(1)).atOffset(java.time.ZoneOffset.UTC).toString());
+                db.update("measurements",values,"id=?",new String[]{Long.toString(rows.getLong(0))});
+            }
+        }
     }
     private void createImports(SQLiteDatabase db) {
         db.execSQL("CREATE TABLE legacy_imports (fingerprint TEXT PRIMARY KEY, measurement_id INTEGER NOT NULL, original_row TEXT NOT NULL)");
@@ -47,6 +66,7 @@ public final class LocalStore extends SQLiteOpenHelper {
         List<List<String>> rows=io.stridehub.app.scale.core.LegacyCsv.parse(csv);
         SQLiteDatabase db=getWritableDatabase();int inserted=0;db.beginTransaction();
         try {
+            importing=true;
             for(int i=1;i<rows.size();i++) {
                 List<String> row=rows.get(i);
                 String original=new org.json.JSONArray(row).toString();
@@ -54,6 +74,7 @@ public final class LocalStore extends SQLiteOpenHelper {
                 StringBuilder key=new StringBuilder();for(byte b:hash)key.append(String.format(java.util.Locale.ROOT,"%02x",b&255));
                 try(Cursor c=db.rawQuery("SELECT 1 FROM legacy_imports WHERE fingerprint=?",new String[]{key.toString()})){if(c.moveToFirst())continue;}
                 Measurement m=io.stridehub.app.scale.core.LegacyCsv.measurement(row);
+                m.capturedTime=java.time.Instant.ofEpochMilli(m.measuredAt).atOffset(java.time.ZoneOffset.UTC).toString();
                 // The original export row retains all historical derived values and metadata.
                 // Retain historical estimates, calculation time and profile exactly.
                 io.stridehub.app.scale.core.LegacyCsv.restoreDerived(m,rows.get(0),row);
@@ -61,11 +82,15 @@ public final class LocalStore extends SQLiteOpenHelper {
                 ContentValues values=new ContentValues();values.put("fingerprint",key.toString());values.put("measurement_id",m.id);values.put("original_row",original);
                 db.insertOrThrow("legacy_imports",null,values);inserted++;
             }
+            io.stridehub.app.sync.NasSync.enqueueIfBound(this);
             db.setTransactionSuccessful();return inserted;
-        } finally {db.endTransaction();}
+        } finally {importing=false;db.endTransaction();}
     }
     public synchronized void save(Measurement m) {
+        SQLiteDatabase transaction=getWritableDatabase();transaction.beginTransaction();try {
         ContentValues values=new ContentValues();
+        values.put("upload_uuid",java.util.UUID.randomUUID().toString());
+        values.put("captured_time",m.capturedTime==null?java.time.Instant.ofEpochMilli(m.measuredAt).atOffset(java.time.ZoneOffset.UTC).toString():m.capturedTime);
         values.put("measured_at",m.measuredAt);values.put("local_day",m.localDay);values.put("weight",m.weightKg);
         values.put("fat",m.bodyFatPercent);values.put("impedance",m.impedance);values.put("bmi",m.bmi);
         values.put("source",m.source);values.put("device_address",m.deviceAddress);
@@ -73,6 +98,9 @@ public final class LocalStore extends SQLiteOpenHelper {
         m.id=getWritableDatabase().insertOrThrow("measurements",null,values);
         // Raw capture is durable first. A failed derivation never discards it or prevents the BLE ACK.
         ensureDerived(m);
+        if(!importing)io.stridehub.app.sync.NasSync.enqueueIfBound(this);
+        transaction.setTransactionSuccessful();
+        }finally{transaction.endTransaction();}
     }
     public synchronized List<Measurement> all() {
         List<Measurement> result=new ArrayList<>();
@@ -157,7 +185,7 @@ public final class LocalStore extends SQLiteOpenHelper {
     public synchronized void delete(long id) {
         SQLiteDatabase db=getWritableDatabase();db.beginTransaction();
         try {
-            String[] args={Long.toString(id)};db.delete("measurement_derivations","measurement_id=?",args);
+            String[] args={Long.toString(id)};db.delete("sync_queue","measurement_id=?",args);db.delete("measurement_derivations","measurement_id=?",args);
             db.delete("measurements","id=?",args);db.setTransactionSuccessful();
         }finally{db.endTransaction();}
     }

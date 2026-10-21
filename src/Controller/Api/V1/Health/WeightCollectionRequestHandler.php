@@ -50,7 +50,11 @@ final readonly class WeightCollectionRequestHandler
                         throw new TrainingError('name required.');
                     }
 
-                    return new JsonResponse($this->collection->pair($body['name']), 201, ['Cache-Control' => 'no-store']);
+                    if (isset($body['deviceId']) && !is_string($body['deviceId'])) {
+                        throw new TrainingError('deviceId must be a string.');
+                    }
+
+                    return new JsonResponse($this->collection->pair($body['name'], $body['deviceId'] ?? null), 201, ['Cache-Control' => 'no-store']);
                 }
             }
             if (!$deviceRoute && str_starts_with($path, 'devices/') && 'DELETE' === $method) {

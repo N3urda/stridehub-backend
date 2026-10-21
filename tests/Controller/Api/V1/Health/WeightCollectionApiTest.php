@@ -35,6 +35,41 @@ final class WeightCollectionApiTest extends AdminWebTestCase
         return ['measurementId' => $id, 'measuredAt' => $at, 'localDate' => '2026-10-21', 'weightKg' => $kg, 'profile' => ['heightCm' => 175], 'derived' => ['algorithmVersion' => 'v1', 'values' => ['bmi' => 24.55]]];
     }
 
+    public function testClientCandidateMakesUncertainPairRetrySafe(): void
+    {
+        $d = $this->pair();
+        $body = ['name' => 'Stable candidate', 'deviceId' => str_repeat('a', 32)];
+        $first = $this->call('POST', '/admin/health/api/collection/devices', $body, csrf: $d['csrf']);
+        $second = $this->call('POST', '/admin/health/api/collection/devices', $body, csrf: $d['csrf']);
+        self::assertSame($first['deviceId'], $second['deviceId']);
+        self::assertCount(2, $this->call('GET', '/admin/health/api/collection/devices')['devices']);
+        $this->call('GET', '/device/v1/weight', token: $first['token']);
+        self::assertResponseStatusCodeSame(401);
+        $this->call('GET', '/device/v1/weight', token: $second['token']);
+        self::assertResponseIsSuccessful();
+        $this->call('POST', '/admin/health/api/collection/devices', [...$body, 'deviceId' => '../invalid'], csrf: $d['csrf']);
+        self::assertResponseStatusCodeSame(422);
+    }
+
+    public function testSameDeviceCredentialRotationRetainsReplayAndTombstones(): void
+    {
+        $d = $this->pair();
+        $p = $this->capture();
+        $url = '/device/v1/weight/'.$p['measurementId'];
+        $this->call('PUT', $url, $p, $d['token']);
+        $this->call('DELETE', '/admin/health/api/collection/devices/'.$d['deviceId'], csrf: $d['csrf']);
+        $renewed = $this->call('POST', '/admin/health/api/collection/devices', ['name' => 'Recovered phone', 'deviceId' => $d['deviceId']], csrf: $d['csrf']);
+        self::assertSame($d['deviceId'], $renewed['deviceId']);
+        self::assertNotSame($d['token'], $renewed['token']);
+        $this->call('GET', $url, token: $d['token']);
+        self::assertResponseStatusCodeSame(401);
+        self::assertTrue($this->call('PUT', $url, $p, $renewed['token'])['replayed']);
+        $this->call('DELETE', '/admin/health/api/collection/weight/'.$p['measurementId'].'?deviceId='.$d['deviceId'], csrf: $d['csrf']);
+        $again = $this->call('POST', '/admin/health/api/collection/devices', ['name' => 'Recovered phone', 'deviceId' => $d['deviceId']], csrf: $d['csrf']);
+        $this->call('PUT', $url, $p, $again['token']);
+        self::assertResponseStatusCodeSame(409);
+    }
+
     public function testCaptureReplayIsolationOrderingDeletionAndDailyProjection(): void
     {
         $d = $this->pair();

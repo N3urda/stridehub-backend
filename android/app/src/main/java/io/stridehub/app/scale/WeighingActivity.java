@@ -73,6 +73,7 @@ public final class WeighingActivity extends Activity implements ScaleClient.List
         super.onCreate(saved);
         if(saved!=null) { page=saved.getInt("page"); days=saved.getInt("days",30); try{selectedMetric=Metric.valueOf(saved.getString("metric","WEIGHT"));}catch(IllegalArgumentException ignored){} forcePicker=saved.getBoolean("forcePicker"); exportKind=saved.getString("exportKind","csv"); }
         if(saved!=null) {int average=saved.getInt("weightAverageDays",0);weightAverageDays=average==7||average==30?average:0;}
+        io.stridehub.app.sync.NasSync.initialize(this);
         store=new LocalStore(this); client=new ScaleClient(this,this);
         buildShell(); render();
     }
@@ -86,7 +87,7 @@ public final class WeighingActivity extends Activity implements ScaleClient.List
         });
         LinearLayout brand=row(); brand.setPadding(dp(24),dp(18),dp(24),dp(12)); brand.setGravity(Gravity.CENTER_VERTICAL);
         TextView name=text("身体记录",25,INK,true); brand.addView(name,new LinearLayout.LayoutParams(0,-2,1));
-        TextView offline=text("●  离线 · 仅本机",11,GREEN,false); offline.setPadding(dp(12),dp(7),dp(12),dp(7)); offline.setBackground(shape(SOFT,30)); brand.addView(offline);
+        TextView offline=text("●  本机记录 · NAS 见设置",11,GREEN,false); offline.setPadding(dp(12),dp(7),dp(12),dp(7)); offline.setBackground(shape(SOFT,30)); brand.addView(offline);
         Button back=button("返回 StrideHub",false); back.setOnClickListener(v->finish());
         shell.addView(back);
         shell.addView(brand);
@@ -220,9 +221,23 @@ public final class WeighingActivity extends Activity implements ScaleClient.List
         if(historyLimit<records.size()) { Button more=button("继续查看更早记录",false); content.addView(more); more.setOnClickListener(v->{int y=scroll.getScrollY();historyLimit+=50;render();scroll.post(()->scroll.scrollTo(0,y));}); }
     }
     private void renderSettings() {
+        content.addView(text(io.stridehub.app.sync.NasSync.status(this),13,MUTED,false));
+        Button pairNas=button("配对 NAS 并上传本机历史",false);content.addView(pairNas);
+        pairNas.setOnClickListener(v->{try {
+            String destination=io.stridehub.app.sync.NasSync.server(this).baseUrl();
+            new AlertDialog.Builder(this).setTitle("上传到 NAS？").setMessage("目的地："+destination+"\n将上传未绑定的全部本机稳定测量及导入历史到当前网页登录账号。同服务器及同登录名会更新原设备凭据并恢复待同步；其他绑定的记录不会自动转移。请确认网页登录账号正确。")
+            .setNegativeButton("取消",null).setPositiveButton("确认配对并上传",(d,w)->{
+                String cookie=android.webkit.CookieManager.getInstance().getCookie(io.stridehub.app.sync.NasSync.server(this).route("/admin/health/api/collection/csrf"));
+                io.stridehub.app.sync.NasSync.pair(this,cookie,message->runOnUiThread(()->{if(!isFinishing()&&!isDestroyed()){toast(message);render();}}));
+            }).show();
+        }catch(Exception e){toast("请返回 StrideHub 设置服务器并登录");}});
+        Button syncNas=button("同步 / 网络恢复后重试",false);content.addView(syncNas);syncNas.setOnClickListener(v->io.stridehub.app.sync.NasSync.sync(this,message->runOnUiThread(()->{if(!isFinishing()&&!isDestroyed()){toast(message);render();}})));
+        Button disconnectNas=button("断开 NAS（保留 NAS 已上传副本）",false);content.addView(disconnectNas);disconnectNas.setOnClickListener(v->{io.stridehub.app.sync.NasSync.disconnect(this);render();});
+        content.addView(text("同步错误或设备撤销时，请检查 NAS 后断开并重新配对；日记录冲突请在 NAS 检查手工日记录。删除本机记录会取消待同步，已上传 NAS 副本需在 NAS 管理端删除。",12,MUTED,false));
+
         intro("只属于你", "称重可离线使用；当前记录保存在此手机");
         Profile p=store.profile(); LinearLayout profile=card(); profile.addView(text("个人资料",18,INK,true));
-        add(profile,text(p==null?"连接前先填写身高、出生日期与性别。\n这些资料用于体脂估算，不会上传。":p.heightCm+" cm  ·  "+(p.male?"男":"女")+"  ·  "+p.ageAt(System.currentTimeMillis())+" 岁\n出生日期  "+p.birthDate,14,MUTED,false),12,14);
+        add(profile,text(p==null?"连接前先填写身高、出生日期与性别。\n这些资料用于体脂估算；配对 NAS 后会随测量快照上传。":p.heightCm+" cm  ·  "+(p.male?"男":"女")+"  ·  "+p.ageAt(System.currentTimeMillis())+" 岁\n出生日期  "+p.birthDate,14,MUTED,false),12,14);
         Button edit=button(p==null?"填写个人资料":"编辑个人资料",false); profile.addView(edit); edit.setOnClickListener(v->showProfile(null)); content.addView(profile);
         LinearLayout data=card(); data.addView(text("数据与备份",18,INK,true)); add(data,text("已保存 "+records.size()+" 次测量。卸载应用会删除本机数据，请按需导出 CSV 留存。",13,MUTED,false),10,12);
         Button migration=button("导入旧 TinyYumi 记录",false); data.addView(migration);
@@ -241,7 +256,7 @@ public final class WeighingActivity extends Activity implements ScaleClient.List
     }
     private void showProfile(Runnable afterSave) {
         Profile previous=store.profile(); LinearLayout form=column(); form.setPadding(dp(24),dp(10),dp(24),dp(12));
-        add(form,text("体脂估算需要这些资料。资料仅保存在本机，当前支持 18–80 岁成人。",13,MUTED,false),0,16);
+        add(form,text("体脂估算需要这些资料。称重可离线使用；配对 NAS 后，资料会随测量快照上传，当前支持 18–80 岁成人。",13,MUTED,false),0,16);
         EditText height=field(form,"身高（厘米）","80–250",InputType.TYPE_CLASS_NUMBER); if(previous!=null) height.setText(Integer.toString(previous.heightCm));
         add(form,text("出生日期",13,INK,true),15,4);
         final String[] birth={previous==null?null:previous.birthDate}; Button birthday=button(birth[0]==null?"选择出生日期":birth[0],false); form.addView(birthday,new LinearLayout.LayoutParams(-1,dp(48)));
@@ -313,7 +328,7 @@ public final class WeighingActivity extends Activity implements ScaleClient.List
         else add(body,text("身体指标暂未计算，原始测量已保存。",12,MUTED,false),0,8);
         add(body,text("阻抗  "+(m.impedance>0?m.impedance+" Ω":"—")+"\n原始值及当时资料会保留，修改个人资料不会重写这次测量。",12,MUTED,false),0,4);
         ScrollView wrapper=new ScrollView(this);wrapper.addView(body);
-        new AlertDialog.Builder(this).setTitle("身体指标详情").setView(wrapper).setPositiveButton("关闭",null).setNeutralButton("删除记录",(d,w)->new AlertDialog.Builder(this).setTitle("删除这次测量？").setMessage(formatTime(m.measuredAt)+" · "+format(m.weightKg)+" kg\n删除后无法恢复。").setNegativeButton("保留",null).setPositiveButton("删除",(confirm,which)->{store.delete(m.id);render();toast("记录已删除");}).show()).show();
+        new AlertDialog.Builder(this).setTitle("身体指标详情 · "+io.stridehub.app.sync.NasSync.rowStatus(store,m.id)).setView(wrapper).setPositiveButton("关闭",null).setNeutralButton("删除记录",(d,w)->new AlertDialog.Builder(this).setTitle("删除这次测量？").setMessage(formatTime(m.measuredAt)+" · "+format(m.weightKg)+" kg\n删除后无法恢复。待同步将取消；已上传的 NAS 副本会保留，需在 NAS 管理端删除。").setNegativeButton("保留",null).setPositiveButton("删除",(confirm,which)->{store.delete(m.id);render();toast("记录已删除");}).show()).show();
     }
     private void addMetricDetail(LinearLayout parent,Measurement m,Metric metric) {
         Double value=TrendChart.valueFor(m,metric);LinearLayout entry=column();entry.setPadding(0,dp(11),0,dp(11));
@@ -396,12 +411,14 @@ public final class WeighingActivity extends Activity implements ScaleClient.List
         super.onActivityResult(requestCode,resultCode,data);
         if(requestCode==ENABLE_BT){if(resultCode==RESULT_OK)startMeasurement();else{status="蓝牙未开启";render();}return;}
         if(requestCode==IMPORT && resultCode==RESULT_OK && data!=null && data.getData()!=null) {
-            try(java.io.InputStream input=getContentResolver().openInputStream(data.getData())) {
+            final android.net.Uri importUri=data.getData();
+            final android.content.Context appContext=getApplicationContext();
+            new Thread(()->{try(LocalStore importStore=new LocalStore(appContext);java.io.InputStream input=appContext.getContentResolver().openInputStream(importUri)) {
                 if(input==null)throw new java.io.IOException();
                 java.io.ByteArrayOutputStream buffer=new java.io.ByteArrayOutputStream();byte[] chunk=new byte[8192];int count;
                 while((count=input.read(chunk))!=-1){if(buffer.size()+count>8*1024*1024)throw new java.io.IOException("too large");buffer.write(chunk,0,count);}
-                int imported=store.importCsv(buffer.toString("UTF-8"));render();showMessage("导入完成","新增 "+imported+" 条；本机共有 "+store.all().size()+" 条。请核对日期与体重，旧 App 暂时保留。");
-            }catch(Exception e){showMessage("未导入记录","文件不完整、格式不支持或超过 8 MB。请从旧 TinyYumi 重新导出 CSV；本机数据未修改。");}
+                int imported=importStore.importCsv(buffer.toString("UTF-8"));runOnUiThread(()->{if(!isFinishing()&&!isDestroyed()){render();showMessage("导入完成","新增 "+imported+" 条。请核对日期与体重，旧 App 暂时保留。");}});
+            }catch(Exception e){runOnUiThread(()->{if(!isFinishing()&&!isDestroyed())showMessage("未导入记录","文件不完整、格式不支持或超过 8 MB。请从旧 TinyYumi 重新导出 CSV；本机数据未修改。");});}},"history-import").start();
             return;
         }
         if(requestCode!=EXPORT||resultCode!=RESULT_OK||data==null||data.getData()==null)return;
