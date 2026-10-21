@@ -71,7 +71,15 @@ final readonly class ZeppDataApiRequestHandler
             if (property_exists($body, 'days') && !is_int($body->days)) {
                 throw new TrainingError('days 必须是整数。');
             }
-            $status = $this->zepp->sync($body->days ?? 30);
+            // The importer bounds cloud work to ten minutes, while the web worker's
+            // default 120-second limit is too short for a 90-day multi-source backfill.
+            $previousLimit = (int) ini_get('max_execution_time');
+            set_time_limit(660);
+            try {
+                $status = $this->zepp->sync($body->days ?? 30);
+            } finally {
+                set_time_limit($previousLimit);
+            }
 
             return new JsonResponse($status, in_array($status['state'], ['not_configured', 'auth_required', 'error'], true) ? 503 : 200);
         } catch (TrainingError $error) {
