@@ -115,7 +115,9 @@ public final class MainActivity extends Activity {
     private void openBrowser() {
         browser = new BrowserLayout(this, server, new BrowserLayout.Actions() {
             @Override public void navigate(String path) {
-                if (stage == Stage.READY) browser.web.loadUrl(server.route(path));
+                if ("native:weight".equals(path)) {
+                    startActivity(new Intent(MainActivity.this, io.stridehub.app.scale.WeighingActivity.class));
+                } else if (stage == Stage.READY) browser.web.loadUrl(server.route(path));
             }
             @Override public void menu(View anchor) { showMenu(anchor); }
             @Override public void retry() {
@@ -279,6 +281,8 @@ public final class MainActivity extends Activity {
         PopupMenu menu = new PopupMenu(this, anchor);
         if (stage == Stage.READY) {
             menu.getMenu().add("刷新页面").setOnMenuItemClickListener(item -> { browser.web.reload(); return true; });
+            menu.getMenu().add("文件导入").setOnMenuItemClickListener(item -> { browser.web.loadUrl(server.route("/admin/upload")); return true; });
+            menu.getMenu().add("身体与健康").setOnMenuItemClickListener(item -> { browser.web.loadUrl(server.route("/admin/health")); return true; });
             menu.getMenu().add("运动记录管理").setOnMenuItemClickListener(item -> { browser.web.loadUrl(server.route("/admin/activities")); return true; });
         }
         menu.getMenu().add("切换服务器 / 账号").setOnMenuItemClickListener(item -> { leave(false); return true; });

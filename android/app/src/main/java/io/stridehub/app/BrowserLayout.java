@@ -62,8 +62,8 @@ final class BrowserLayout {
         web.setBackgroundColor(ConnectionScreen.PAPER);
         root.addView(web, new LinearLayout.LayoutParams(-1, 0, 1));
         tabs = new LinearLayout(activity);
-        String[] names = {"今日", "课表", "运动", "导入"};
-        String[] paths = {"/admin/training/today", "/admin/training", "/admin/running", "/admin/upload"};
+        String[] names = {"今日", "课表", "运动", "称重"};
+        String[] paths = {"/admin/training/today", "/admin/training", "/admin/running", "native:weight"};
         for (int i = 0; i < names.length; i++) {
             Button tab = button(activity, names[i]);
             String path = paths[i];

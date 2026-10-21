@@ -109,6 +109,10 @@ final class ConnectionScreen {
         });
         add(body, text(activity, "使用和网页版相同的账号。密码不会保存在 APK 中。", 13, Color.DKGRAY), 20);
         add(body, text(activity, "手机上的 localhost 指手机本身。连接电脑时，请使用手机可访问的域名或电脑局域网 IP。", 13, Color.DKGRAY), 8);
+        Button weighing = new Button(activity);
+        weighing.setText("离线称重与本机记录");
+        weighing.setOnClickListener(v -> activity.startActivity(new android.content.Intent(activity, io.stridehub.app.scale.WeighingActivity.class)));
+        add(body, weighing, 16);
         return scroll;
     }
 

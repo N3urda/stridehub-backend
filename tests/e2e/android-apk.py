@@ -165,7 +165,8 @@ def upload_demo_file():
     payload = '<?xml version="1.0"?><gpx version="1.1" creator="StrideHub DEMO acceptance" xmlns="http://www.topografix.com/GPX/1/1"><trk><name>DEMO Android file picker</name><trkseg><trkpt lat="31.2304" lon="121.4737"><time>2026-09-29T00:00:00Z</time></trkpt><trkpt lat="31.2314" lon="121.4747"><time>2026-09-29T00:05:00Z</time></trkpt></trkseg></trk></gpx>'
     fixture.write_text(payload)
     adb('push', str(fixture), '/sdcard/Download/' + fixture.name)
-    tap('导入')
+    tap('更多')
+    tap('文件导入')
     wait('Dreeve | Admin panel')
     # API35 WebView sometimes omits the old admin page's main content from its
     # accessibility tree until the document picker returns. This coordinate was
@@ -258,10 +259,13 @@ def main():
     wait_contains('今日安排')
     shot('native-today.png')
     report('real Android WebView submits Java-generated login script and opens authenticated Today')
-    for label, expected in [('课表', '为下一次出发，做好准备。'), ('运动', '每一次出发，都有迹可循。'), ('导入', 'Dreeve | Admin panel')]:
+    for label, expected in [('课表', '为下一次出发，做好准备。'), ('运动', '每一次出发，都有迹可循。')]:
         tap(label)
         wait_contains(expected)
-    report('native Today, training, running and upload navigation tabs open server pages')
+    tap('称重')
+    wait_contains('身体记录')
+    tap('返回 StrideHub')
+    report('native Today, training, running and weighing navigation opens within one app')
     upload_demo_file()
     check_in()
     session_and_recovery()
