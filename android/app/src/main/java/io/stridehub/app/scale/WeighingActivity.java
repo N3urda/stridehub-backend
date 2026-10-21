@@ -328,7 +328,7 @@ public final class WeighingActivity extends Activity implements ScaleClient.List
         else add(body,text("身体指标暂未计算，原始测量已保存。",12,MUTED,false),0,8);
         add(body,text("阻抗  "+(m.impedance>0?m.impedance+" Ω":"—")+"\n原始值及当时资料会保留，修改个人资料不会重写这次测量。",12,MUTED,false),0,4);
         ScrollView wrapper=new ScrollView(this);wrapper.addView(body);
-        new AlertDialog.Builder(this).setTitle("身体指标详情 · "+io.stridehub.app.sync.NasSync.rowStatus(store,m.id)).setView(wrapper).setPositiveButton("关闭",null).setNeutralButton("删除记录",(d,w)->new AlertDialog.Builder(this).setTitle("删除这次测量？").setMessage(formatTime(m.measuredAt)+" · "+format(m.weightKg)+" kg\n删除后无法恢复。待同步将取消；已上传的 NAS 副本会保留，需在 NAS 管理端删除。").setNegativeButton("保留",null).setPositiveButton("删除",(confirm,which)->{store.delete(m.id);render();toast("记录已删除");}).show()).show();
+        new AlertDialog.Builder(this).setTitle("身体指标详情 · "+io.stridehub.app.sync.NasSync.rowStatus(store,m.id)).setView(wrapper).setPositiveButton("关闭",null).setNeutralButton("删除记录",(d,w)->new AlertDialog.Builder(this).setTitle("删除这次测量？").setMessage(formatTime(m.measuredAt)+" · "+format(m.weightKg)+" kg\n删除后无法恢复。待同步将取消；发送中的记录可能已到达 NAS，请在 NAS 检查。已上传的 NAS 副本会保留，需在 NAS 管理端删除。").setNegativeButton("保留",null).setPositiveButton("删除",(confirm,which)->{store.delete(m.id);render();toast("记录已删除");}).show()).show();
     }
     private void addMetricDetail(LinearLayout parent,Measurement m,Metric metric) {
         Double value=TrendChart.valueFor(m,metric);LinearLayout entry=column();entry.setPadding(0,dp(11),0,dp(11));

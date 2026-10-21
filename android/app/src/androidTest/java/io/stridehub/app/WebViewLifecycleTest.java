@@ -28,6 +28,29 @@ public final class WebViewLifecycleTest extends ActivityInstrumentationTestCase2
         setActivityInitialTouchMode(true);
     }
 
+    public void testConfirmedLogoutImmediatelyDeactivatesNativeSync() throws Throwable { assertLeaveDisconnects(true); }
+    public void testConfirmedServerSwitchImmediatelyDeactivatesNativeSync() throws Throwable { assertLeaveDisconnects(false); }
+    private void assertLeaveDisconnects(boolean logout) throws Throwable {
+        MainActivity activity=getActivity();
+        runTestOnUiThread(()->{
+            try {
+                activity.getSharedPreferences("connection",0).edit().putString("server","https://nas.example").putString("username","alice").commit();
+                activity.getSharedPreferences("nas_sync",0).edit().putString("server","https://nas.example").putString("username","alice").putString("binding","old-device").putString("token","fixture").putString("attempt","pending-pair").commit();
+                io.stridehub.app.sync.NasSync.schedule(activity);
+                Method leave=MainActivity.class.getDeclaredMethod("leave",boolean.class);leave.setAccessible(true);
+                android.app.AlertDialog dialog=(android.app.AlertDialog)leave.invoke(activity,logout);
+                dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE).performClick();
+            }catch(ReflectiveOperationException e){throw new AssertionError(e);}
+        });
+        getInstrumentation().waitForIdleSync();
+        runTestOnUiThread(()->{
+                assertEquals("",io.stridehub.app.sync.NasSync.binding(activity));
+                assertFalse(activity.getSharedPreferences("nas_sync",0).contains("attempt"));
+                assertFalse(activity.getSharedPreferences("nas_sync",0).contains("token"));
+                assertNull(((android.app.job.JobScheduler)activity.getSystemService(Context.JOB_SCHEDULER_SERVICE)).getPendingJob(7341));
+        });
+    }
+
     public void testStaleNetworkErrorDoesNotInvalidateActiveBrowser() throws Throwable {
         MainActivity activity = getActivity();
         runTestOnUiThread(() -> {

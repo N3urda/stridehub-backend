@@ -24,7 +24,7 @@ public final class LocalStore extends SQLiteOpenHelper {
     private final SharedPreferences preferences;
     private boolean importing;
     public LocalStore(Context context) {
-        super(context,"tinyyumi.db",null,5);
+        super(context,"tinyyumi.db",null,6);
         preferences=context.getSharedPreferences("local_profile",Context.MODE_PRIVATE);
     }
     @Override public void onCreate(SQLiteDatabase db) {
@@ -42,18 +42,19 @@ public final class LocalStore extends SQLiteOpenHelper {
         if(oldVersion<3)createImports(db);
         if(oldVersion<4)createSync(db);
         else if(oldVersion<5){db.execSQL("ALTER TABLE sync_queue ADD COLUMN server TEXT NOT NULL DEFAULT ''");backfillIdentity(db);}
+        if(oldVersion>=4&&oldVersion<6)db.execSQL("ALTER TABLE sync_queue ADD COLUMN claim_generation TEXT");
     }
     private void createSync(SQLiteDatabase db) {
         db.execSQL("ALTER TABLE measurements ADD COLUMN upload_uuid TEXT");
         db.execSQL("ALTER TABLE measurements ADD COLUMN captured_time TEXT");
-        db.execSQL("CREATE TABLE sync_queue (measurement_id INTEGER PRIMARY KEY, uuid TEXT NOT NULL, binding TEXT NOT NULL, server TEXT NOT NULL, payload TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', detail TEXT)");
+        db.execSQL("CREATE TABLE sync_queue (measurement_id INTEGER PRIMARY KEY, uuid TEXT NOT NULL, binding TEXT NOT NULL, server TEXT NOT NULL, payload TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', detail TEXT, claim_generation TEXT)");
         backfillIdentity(db);
     }
     private void backfillIdentity(SQLiteDatabase db) {
         try(Cursor rows=db.rawQuery("SELECT id,measured_at FROM measurements WHERE upload_uuid IS NULL",null)) {
             while(rows.moveToNext()) {
                 ContentValues values=new ContentValues();values.put("upload_uuid",java.util.UUID.randomUUID().toString());
-                values.put("captured_time",java.time.Instant.ofEpochMilli(rows.getLong(1)).atOffset(java.time.ZoneOffset.UTC).toString());
+                values.put("captured_time",Measurement.formatCapturedTime(rows.getLong(1),java.time.ZoneOffset.UTC));
                 db.update("measurements",values,"id=?",new String[]{Long.toString(rows.getLong(0))});
             }
         }
@@ -74,7 +75,7 @@ public final class LocalStore extends SQLiteOpenHelper {
                 StringBuilder key=new StringBuilder();for(byte b:hash)key.append(String.format(java.util.Locale.ROOT,"%02x",b&255));
                 try(Cursor c=db.rawQuery("SELECT 1 FROM legacy_imports WHERE fingerprint=?",new String[]{key.toString()})){if(c.moveToFirst())continue;}
                 Measurement m=io.stridehub.app.scale.core.LegacyCsv.measurement(row);
-                m.capturedTime=java.time.Instant.ofEpochMilli(m.measuredAt).atOffset(java.time.ZoneOffset.UTC).toString();
+                m.capturedTime=Measurement.formatCapturedTime(m.measuredAt,java.time.ZoneOffset.UTC);
                 // The original export row retains all historical derived values and metadata.
                 // Retain historical estimates, calculation time and profile exactly.
                 io.stridehub.app.scale.core.LegacyCsv.restoreDerived(m,rows.get(0),row);
@@ -90,7 +91,7 @@ public final class LocalStore extends SQLiteOpenHelper {
         SQLiteDatabase transaction=getWritableDatabase();transaction.beginTransaction();try {
         ContentValues values=new ContentValues();
         values.put("upload_uuid",java.util.UUID.randomUUID().toString());
-        values.put("captured_time",m.capturedTime==null?java.time.Instant.ofEpochMilli(m.measuredAt).atOffset(java.time.ZoneOffset.UTC).toString():m.capturedTime);
+        values.put("captured_time",m.capturedTime==null?Measurement.formatCapturedTime(m.measuredAt,java.time.ZoneOffset.UTC):m.capturedTime);
         values.put("measured_at",m.measuredAt);values.put("local_day",m.localDay);values.put("weight",m.weightKg);
         values.put("fat",m.bodyFatPercent);values.put("impedance",m.impedance);values.put("bmi",m.bmi);
         values.put("source",m.source);values.put("device_address",m.deviceAddress);
@@ -185,7 +186,10 @@ public final class LocalStore extends SQLiteOpenHelper {
     public synchronized void delete(long id) {
         SQLiteDatabase db=getWritableDatabase();db.beginTransaction();
         try {
-            String[] args={Long.toString(id)};db.delete("sync_queue","measurement_id=?",args);db.delete("measurement_derivations","measurement_id=?",args);
+            String[] args={Long.toString(id)};
+            ContentValues cancelled=new ContentValues();cancelled.put("status","cancelled_inflight");cancelled.put("detail","本机已删除，NAS 可能已收到；不会重试，请检查 NAS");
+            db.update("sync_queue",cancelled,"measurement_id=? AND status='sending'",args);
+            db.delete("sync_queue","measurement_id=? AND status<>'cancelled_inflight'",args);db.delete("measurement_derivations","measurement_id=?",args);
             db.delete("measurements","id=?",args);db.setTransactionSuccessful();
         }finally{db.endTransaction();}
     }

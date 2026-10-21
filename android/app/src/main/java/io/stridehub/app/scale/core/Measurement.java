@@ -21,6 +21,11 @@ public final class Measurement {
     public long metricsCalculatedAt;
     public String metricsProfileSnapshot;
 
+    /** Explicit seconds/milliseconds are required even for an exact whole minute. */
+    public static String formatCapturedTime(long when,ZoneId zone) {
+        return java.time.format.DateTimeFormatter.ofPattern("uuuu-MM-dd'T'HH:mm:ss.SSSXXX",java.util.Locale.ROOT)
+            .format(Instant.ofEpochMilli(when).atZone(zone));
+    }
     public static Measurement create(Profile profile, long when, double weight, Double fat,
                                      int impedance, String source, String device, String raw) {
         if (!Double.isFinite(weight) || weight < 2 || weight > 300)
@@ -30,7 +35,7 @@ public final class Measurement {
         if (when <= 0) throw new IllegalArgumentException("测量时间无效");
         Measurement value = new Measurement();
         value.measuredAt = when;
-        value.capturedTime = Instant.ofEpochMilli(when).atZone(ZoneId.systemDefault()).toOffsetDateTime().toString();
+        value.capturedTime = formatCapturedTime(when,ZoneId.systemDefault());
         value.localDay = Instant.ofEpochMilli(when).atZone(ZoneId.systemDefault()).toLocalDate().toString();
         value.weightKg = weight;
         value.bodyFatPercent = fat;

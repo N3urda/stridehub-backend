@@ -291,10 +291,11 @@ public final class MainActivity extends Activity {
         menu.show();
     }
 
-    private void leave(boolean logout) {
-        new AlertDialog.Builder(this).setTitle(logout ? "退出本机登录？" : "切换连接？")
+    private AlertDialog leave(boolean logout) {
+        return new AlertDialog.Builder(this).setTitle(logout ? "退出本机登录？" : "切换连接？")
                 .setMessage("请先保存当前页面内容。本机登录状态将被清除，服务器上的数据会保留。")
                 .setNegativeButton("取消", null).setPositiveButton("继续", (dialog, which) -> {
+                    io.stridehub.app.sync.NasSync.disconnect(MainActivity.this);
                     pendingPassword = null;
                     generation++;
                     destroyBrowser();

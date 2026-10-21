@@ -19,6 +19,7 @@ import java.util.concurrent.Executors;
 public final class NasSync {
     private static final java.util.concurrent.ExecutorService WORK=Executors.newSingleThreadExecutor();
     private static Context app;
+    private static final String PROCESS=java.util.UUID.randomUUID().toString();
     private static SharedPreferences prefs(Context c){
         app=c.getApplicationContext();
         return app.getSharedPreferences("nas_sync",0);
@@ -30,7 +31,7 @@ public final class NasSync {
     public static synchronized String binding(Context c){
         SharedPreferences p=prefs(c);
         try{
-            return p.getString("server","").equals(server(c).baseUrl())?p.getString("binding",""):"";
+            return p.getString("server","").equals(server(c).baseUrl())&&p.getString("username","").equals(c.getSharedPreferences("connection",0).getString("username",""))?p.getString("binding",""):"";
         }
         catch(Exception e){
             return "";
@@ -58,7 +59,7 @@ public final class NasSync {
         return new String(cipher.doFinal(Base64.decode(parts[1],2)),StandardCharsets.UTF_8);
     }
     public static synchronized void disconnect(Context c){
-        prefs(c).edit().remove("binding").remove("token").remove("server").remove("attempt").commit();
+        prefs(c).edit().remove("binding").remove("token").remove("server").remove("attempt").remove("username").commit();
         ((JobScheduler)c.getSystemService(Context.JOB_SCHEDULER_SERVICE)).cancel(7341);
     }
     public interface Done{
@@ -84,7 +85,7 @@ public final class NasSync {
                 JSONObject device=request(s,"POST","/admin/health/api/collection/devices",new JSONObject().put("name","StrideHub Android").put("deviceId",deviceId).toString(),cookie,csrf.getString("csrfToken"),null);
                 synchronized(NasSync.class){
                     if(!generation.equals(prefs(c).getString("attempt",""))||!destination.equals(server(c).baseUrl())||!username.equals(c.getSharedPreferences("connection",0).getString("username","")))throw new Exception("连接已取消，请重新配对");
-                    prefs(c).edit().putString("server",destination).putString("binding",device.getString("deviceId")).putString("token",seal(device.getString("token"))).commit();
+                    prefs(c).edit().putString("server",destination).putString("binding",device.getString("deviceId")).putString("username",username).putString("token",seal(device.getString("token"))).commit();
                 }
                 try(LocalStore store=new LocalStore(c)){
                     ContentValues recover=new ContentValues();recover.put("status","pending");recover.putNull("detail");
@@ -103,7 +104,7 @@ public final class NasSync {
     public static void initialize(Context c){
         prefs(c);
     }
-    public static synchronized void enqueueIfBound(LocalStore store){
+    public static void enqueueIfBound(LocalStore store){
         if(app==null)return;
         String b=binding(app);
         if(b.isEmpty())return;
@@ -118,7 +119,7 @@ public final class NasSync {
                     String uuid=cursor.getString(0),time=cursor.getString(1);
                     if(uuid==null){
                         uuid=java.util.UUID.randomUUID().toString();
-                        /* Historical timezone is unknown: UTC represents the known instant only. */time=java.time.Instant.ofEpochMilli(m.measuredAt).atOffset(java.time.ZoneOffset.UTC).toString();
+                        /* Historical timezone is unknown: UTC represents the known instant only. */time=Measurement.formatCapturedTime(m.measuredAt,java.time.ZoneOffset.UTC);
                         ContentValues v=new ContentValues();
                         v.put("upload_uuid",uuid);
                         v.put("captured_time",time);
@@ -174,6 +175,10 @@ public final class NasSync {
         switch(state){
             case "pending":return "待同步";
             case "synced":return "已同步";
+            case "sending":return "发送中，NAS 可能已收到";
+            case "cancelled_inflight":return "本机已删除，发送中回执未确认";
+            case "deleted_local_received":return "本机已删除，NAS 已收到，请在 NAS 删除副本";
+            case "deleted_local_uncertain":return "本机已删除，NAS 可能已收到，请在 NAS 检查";
             case "revoked":return "设备已撤销，请重新配对";
             case "manual_conflict":return "NAS 日记录冲突，请检查";
             default:return "同步被拒绝，请检查 NAS";
@@ -227,45 +232,28 @@ public final class NasSync {
         }
         try(LocalStore store=new LocalStore(c)){
             SQLiteDatabase db=store.getWritableDatabase();
-            try(Cursor rows=db.rawQuery("SELECT measurement_id,uuid,payload FROM sync_queue WHERE binding=? AND status='pending' LIMIT 10",new String[]{
-                b}
-            )){
-                while(rows.moveToNext()){
-                    {
-                        if(!b.equals(binding(c)))return false;
-                        try{
-                            JSONObject response=request(destination,"PUT","/device/v1/weight/"+rows.getString(1),rows.getString(2),null,null,credential);
-                            if(!b.equals(binding(c)))return false;
-                            validateReceipt(response,rows.getString(1),b);
-                            String projection=response.getJSONObject("projection").getString("status");
-                            update(db,rows.getLong(0),projection.equals("manual_conflict")?"manual_conflict":"synced",projection);
-                        }
-                        catch(HttpError e){
-                            if(e.code==401||e.code==403){
-                                ContentValues revoked=new ContentValues();
-                                revoked.put("status","revoked");
-                                revoked.put("detail","设备已撤销，请断开后重新配对");
-                                db.update("sync_queue",revoked,"binding=? AND status='pending'",new String[]{
-                                    b}
-                                );
-                                return false;
-                            }
-                            if(e.code==408||e.code==429){
-                                update(db,rows.getLong(0),"pending","NAS 暂忙，稍后自动重试");
-                                return true;
-                            }
-                            if(e.code>=300&&e.code<500)update(db,rows.getLong(0),"error",e.code==409?"冲突或 NAS 已删除；不可覆盖，请检查 NAS":"请求被拒绝 "+e.code);
-                            else {
-                                update(db,rows.getLong(0),"pending","NAS 暂不可用，稍后自动重试");
-                                return true;
-                            }
-                        }
-                        catch(Exception e){
-                            update(db,rows.getLong(0),"pending","连接中断，保留原记录稍后重试");
-                            return true;
-                        }
+            ContentValues recovered=new ContentValues();recovered.put("status","pending");recovered.putNull("claim_generation");
+            db.update("sync_queue",recovered,"status='sending' AND (claim_generation IS NULL OR claim_generation<>?)",new String[]{PROCESS});
+            for(int handled=0;handled<10;handled++){
+                if(!b.equals(binding(c)))return false;
+                Upload row=claim(db,b);
+                if(row==null)break;
+                try{
+                    // Claim is the send boundary. Deletion after this point is explicitly in-flight.
+                    if(!b.equals(binding(c))){release(db,row.id,"pending","连接已暂停");return false;}
+                    JSONObject response=request(destination,"PUT","/device/v1/weight/"+row.uuid,row.payload,null,null,credential);
+                    validateReceipt(response,row.uuid,b);
+                    String projection=response.getJSONObject("projection").getString("status");
+                    release(db,row.id,projection.equals("manual_conflict")?"manual_conflict":"synced",projection);
+                }catch(HttpError e){
+                    if(e.code==401||e.code==403){
+                        release(db,row.id,"revoked","设备已撤销，请重新配对");
+                        ContentValues revoked=new ContentValues();revoked.put("status","revoked");revoked.put("detail","设备已撤销，请重新配对");
+                        db.update("sync_queue",revoked,"binding=? AND status='pending'",new String[]{b});return false;
                     }
-                }
+                    if(e.code==408||e.code==429||e.code>=500){release(db,row.id,"pending","NAS 暂不可用，稍后自动重试");return true;}
+                    release(db,row.id,"error",e.code==409?"冲突或 NAS 已删除；不可覆盖，请检查 NAS":"请求被拒绝 "+e.code);
+                }catch(Exception e){release(db,row.id,"pending","连接中断，保留原记录稍后重试");return true;}
             }
             try(Cursor n=db.rawQuery("SELECT 1 FROM sync_queue WHERE binding=? AND status='pending' LIMIT 1",new String[]{
                 b}
@@ -273,6 +261,36 @@ public final class NasSync {
                 return n.moveToFirst();
             }
         }
+    }
+    private static final class Upload {
+        final long id;final String uuid,payload;
+        Upload(long id,String uuid,String payload){this.id=id;this.uuid=uuid;this.payload=payload;}
+    }
+    /** A short DB transaction claims exactly one still-existing row; no cursor spans HTTP. */
+    private static Upload claim(SQLiteDatabase db,String binding){
+        db.beginTransaction();
+        try{
+            Upload result=null;
+            try(Cursor row=db.rawQuery("SELECT q.measurement_id,q.uuid,q.payload FROM sync_queue q INNER JOIN measurements m ON m.id=q.measurement_id WHERE q.binding=? AND q.status='pending' ORDER BY q.measurement_id LIMIT 1",new String[]{binding})){
+                if(row.moveToFirst()){
+                    ContentValues claim=new ContentValues();claim.put("status","sending");claim.put("claim_generation",PROCESS);claim.put("detail","发送中，NAS 可能已收到");
+                    if(db.update("sync_queue",claim,"measurement_id=? AND status='pending'",new String[]{Long.toString(row.getLong(0))})==1)result=new Upload(row.getLong(0),row.getString(1),row.getString(2));
+                }
+            }
+            db.setTransactionSuccessful();return result;
+        }finally{db.endTransaction();}
+    }
+    /** Deleting a claimed row prevents replay, even if receipt/timeout arrives afterwards. */
+    private static void release(SQLiteDatabase db,long id,String status,String detail){
+        db.beginTransaction();
+        try{
+            ContentValues value=new ContentValues();value.put("status",status);value.put("detail",detail);value.putNull("claim_generation");
+            db.update("sync_queue",value,"measurement_id=? AND status='sending'",new String[]{Long.toString(id)});
+            value.put("status",status.equals("synced")||status.equals("manual_conflict")?"deleted_local_received":"deleted_local_uncertain");
+            value.put("detail","本机已删除，不会重试；请在 NAS 检查并删除可能的副本");
+            db.update("sync_queue",value,"measurement_id=? AND status='cancelled_inflight'",new String[]{Long.toString(id)});
+            db.setTransactionSuccessful();
+        }finally{db.endTransaction();}
     }
     static void validateReceipt(JSONObject response,String uuid,String device)throws Exception {
         JSONObject measurement=response.getJSONObject("measurement");
