@@ -25,6 +25,9 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowInsets;
+import android.view.WindowManager;
+import android.view.HapticFeedbackConstants;
+import android.widget.Switch;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
@@ -60,16 +63,20 @@ public final class WeighingActivity extends Activity implements ScaleClient.List
     private ScaleClient client;
     private LinearLayout shell, content, nav;
     private ScrollView scroll;
-    private TextView statusLabel, liveValue, liveCaption, liveFat, liveBmi, liveSource, pickerStatus;
+    private TextView statusLabel, stageTitle, liveValue, liveCaption, liveFat, liveBmi, liveSource, pickerStatus;
     private Button measureButton, liveDetail;
     private AlertDialog manualDialog;
     private EditText manualWeight, manualFat;
     private Calendar manualTime;
     private long lastSavedId;
     private int page=0, days=30, historyLimit=50, weightAverageDays=0;
-    private boolean forcePicker=false;
+    private boolean forcePicker=false, foreground, autoResume=true, sessionFinished, permissionPending, externalSettings;
+    private Double currentWeight;
+    private Measurement pendingReview;
+    private String reviewExplanation="";
+    private ScaleClient.State captureState=ScaleClient.State.IDLE;
     private Metric selectedMetric=Metric.WEIGHT;
-    private String status="先连接体脂秤，再赤脚站稳。稳定结果会自动保存。", exportKind="csv";
+    private String status="添加一次体脂秤，以后打开这里即可直接上秤。", exportKind="csv";
     private List<Measurement> records=new ArrayList<>();
     private AlertDialog deviceDialog;
     private LinearLayout deviceList;
@@ -81,7 +88,10 @@ public final class WeighingActivity extends Activity implements ScaleClient.List
         if(saved!=null) {int average=saved.getInt("weightAverageDays",0);weightAverageDays=average==7||average==30?average:0;}
         io.stridehub.app.sync.NasSync.initialize(this);
         store=new LocalStore(this); client=new ScaleClient(this,this);
-        if(saved!=null)lastSavedId=saved.getLong("lastSavedId",0);
+        if(saved!=null){lastSavedId=saved.getLong("lastSavedId",0);autoResume=saved.getBoolean("autoResume",true);externalSettings=saved.getBoolean("externalSettings");permissionPending=saved.getBoolean("permissionPending");sessionFinished=saved.getBoolean("sessionFinished",false);if(sessionFinished)captureState=ScaleClient.State.SAVED;}
+        else autoResume=store.automaticWeighing();
+        if(sessionFinished)status="测量完成，已保存到本机。";
+        else if(!autoResume)status="已暂停接收；点击开始等待即可继续。";
         buildShell(); render();
         if(saved!=null&&saved.getBoolean("manualOpen"))showManual(saved);
     }
@@ -105,40 +115,84 @@ public final class WeighingActivity extends Activity implements ScaleClient.List
         setContentView(shell);
     }
     private void render() {
-        records=store.all(); content.removeAllViews(); statusLabel=null; measureButton=null; liveValue=null; liveCaption=null; liveFat=null; liveBmi=null; liveSource=null;liveDetail=null;
+        records=store.all(); content.removeAllViews(); statusLabel=null; stageTitle=null; measureButton=null; liveValue=null; liveCaption=null; liveFat=null; liveBmi=null; liveSource=null;liveDetail=null;
         if(page==0) renderHome(); else if(page==1) renderTrend(); else if(page==2) renderHistory(); else renderSettings();
         nav.removeAllViews(); String[] titles={"称重","趋势","记录","设置"};
-        for(int i=0;i<titles.length;i++) { final int target=i; Button item=button(titles[i],false); item.setTextColor(page==i?GREEN:MUTED); item.setBackground(interactive(page==i?SOFT:PAPER,16)); item.setTypeface(null,page==i?Typeface.BOLD:Typeface.NORMAL);item.setSelected(page==i);item.setContentDescription(titles[i]+(page==i?"，当前页面":"")); LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,-2,1); p.setMargins(dp(2),0,dp(2),0); nav.addView(item,p); item.setOnClickListener(v->{page=target;render();scroll.scrollTo(0,0);}); }
+        for(int i=0;i<titles.length;i++) { final int target=i; Button item=button(titles[i],false); item.setTextColor(page==i?GREEN:MUTED); item.setBackground(interactive(page==i?SOFT:PAPER,16)); item.setTypeface(null,page==i?Typeface.BOLD:Typeface.NORMAL);item.setSelected(page==i);item.setContentDescription(titles[i]+(page==i?"，当前页面":"")); LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,-2,1); p.setMargins(dp(2),0,dp(2),0); nav.addView(item,p); item.setOnClickListener(v->{page=target;render();scroll.scrollTo(0,0);maybeAutoStart();}); }
     }
     private void intro(String title,String subtitle) { content.addView(text(title,29,INK,true)); TextView sub=text(subtitle,13,MUTED,false); sub.setLineSpacing(dp(3),1); add(content,sub,7,22); }
     private void renderHome() {
-        intro("采集身体数据", "离线也能保存；NAS 同步状态会单独显示。");
-        LinearLayout connection=card();
-        connection.addView(text("开始一次记录",17,INK,true));
-        statusLabel=text(status,13,MUTED,false);statusLabel.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);statusLabel.setLineSpacing(dp(3),1);add(connection,statusLabel,8,12);
-        measureButton=button(client.isBusy()?"停止连接":"连接体脂秤",true); connection.addView(measureButton,new LinearLayout.LayoutParams(-1,-2));
-        measureButton.setOnClickListener(v->{if(client.isBusy()){client.stop();status="已停止连接，已保存的记录不受影响";render();}else{forcePicker=false;startMeasurement();}});
-        Button manual=button("手工记录体重",false);add(connection,manual,8,0);manual.setOnClickListener(v->showManual());
-        if(store.device()!=null){Button change=button("选择另一台秤",false);add(connection,change,8,0);change.setOnClickListener(v->{forcePicker=true;startMeasurement();});}
-        add(content,connection,0,16);
-        LinearLayout hero=card(); hero.setPadding(dp(24),dp(23),dp(24),dp(23)); hero.setBackground(shape(0xffe8efe6,24));
-        Measurement latest=records.isEmpty()?null:records.get(0);
-        for(Measurement record:records)if(record.id==lastSavedId){latest=record;break;}
-        final Measurement displayed=latest;
-        liveCaption=text(latest==null?"还没有已保存的记录":(latest.id==lastSavedId?"刚保存":"最近一次")+"  ·  "+formatTime(latest.measuredAt),12,MUTED,false); hero.addView(liveCaption);
-        LinearLayout weight=row(); weight.setGravity(Gravity.BOTTOM);
-        liveValue=text(latest==null?"—":format(latest.weightKg),52,INK,true); weight.addView(liveValue);
-        TextView unit=text("kg",20,MUTED,false); unit.setPadding(dp(9),0,0,dp(13)); weight.addView(unit); add(hero,weight,10,16);
-        View line=new View(this); line.setBackgroundColor(0xffd4dfd0); hero.addView(line,new LinearLayout.LayoutParams(-1,dp(1)));
+        intro("称重", "打开此页，直接上秤。稳定结果先保存到手机。");
+        LinearLayout hero=card();hero.setBackground(shape(SOFT,24));
+        stageTitle=text(stageHeading(),23,INK,true);hero.addView(stageTitle);
+        statusLabel=text(status,13,MUTED,false);statusLabel.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);add(hero,statusLabel,8,16);
+        Measurement saved=null;
+        if(captureState==ScaleClient.State.SAVED)for(Measurement m:records)if(m.id==lastSavedId){saved=m;break;}
+        Measurement shown=pendingReview!=null?pendingReview:saved;
+        boolean live=currentWeight!=null && captureState==ScaleClient.State.MEASURING;
+        liveCaption=text(pendingReview!=null?"稳定结果 · 等待确认":live?"实时读数 · 站稳后自动保存":saved!=null?"刚保存 · "+formatTime(saved.measuredAt):"本次称重 · 等待读数",12,MUTED,false);hero.addView(liveCaption);
+        LinearLayout weight=row();weight.setGravity(Gravity.BOTTOM);
+        liveValue=text(live?format(currentWeight):shown==null?"—":format(shown.weightKg),58,INK,true);weight.addView(liveValue);
+        TextView unit=text("kg",20,MUTED,false);unit.setPadding(dp(9),0,0,dp(13));weight.addView(unit);add(hero,weight,9,12);
         LinearLayout metrics=row();
-        LinearLayout fatMetric=metric("体脂率",latest==null||latest.bodyFatPercent==null?"—":format(latest.bodyFatPercent)+" %");liveFat=(TextView)fatMetric.getChildAt(1);
-        LinearLayout bmiMetric=metric("BMI",latest==null||latest.bmi==null?"—":format(latest.bmi));liveBmi=(TextView)bmiMetric.getChildAt(1);
-        metrics.addView(fatMetric,new LinearLayout.LayoutParams(0,-2,1));metrics.addView(bmiMetric,new LinearLayout.LayoutParams(0,-2,1));add(hero,metrics,19,0);
-        liveSource=text(latest==null?"连接体脂秤，或手工填写第一条体重。":sourceLabel(latest)+" · 已保存到本机\n"+io.stridehub.app.sync.NasSync.rowStatus(store,latest.id),12,MUTED,false);liveSource.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);add(hero,liveSource,15,0);
-        if(latest!=null){liveDetail=button("查看这次记录的身体指标",false);add(hero,liveDetail,12,0);liveDetail.setOnClickListener(v->showDetail(displayed));}
+        LinearLayout fat=metric("体脂率",shown==null||shown.bodyFatPercent==null?"—":format(shown.bodyFatPercent)+" %");liveFat=(TextView)fat.getChildAt(1);
+        LinearLayout bmi=metric("BMI",shown==null||shown.bmi==null?"—":format(shown.bmi));liveBmi=(TextView)bmi.getChildAt(1);
+        metrics.addView(fat,new LinearLayout.LayoutParams(0,-2,1));metrics.addView(bmi,new LinearLayout.LayoutParams(0,-2,1));add(hero,metrics,4,12);
+        String source=pendingReview!=null?reviewExplanation:live?"等待稳定结果 · 尚未保存":saved!=null?sourceLabel(saved)+" · 已保存到本机\n"+io.stridehub.app.sync.NasSync.rowStatus(store,saved.id):"接收时保持此页在前台，屏幕会暂时保持亮起。";
+        liveSource=text(source,12,MUTED,false);liveSource.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);add(hero,liveSource,0,14);
+        measureButton=button(primaryLabel(),!client.isBusy()||pendingReview!=null);hero.addView(measureButton,new LinearLayout.LayoutParams(-1,-2));measureButton.setOnClickListener(v->primaryAction());
+        if(pendingReview!=null){Button discard=button("忽略这条，继续等待",false);add(hero,discard,8,0);discard.setOnClickListener(v->{pendingReview=null;currentWeight=null;client.discardPendingMeasurement();render();});}
+        if(saved!=null){final Measurement row=saved;liveDetail=button("查看这次记录的身体指标",false);add(hero,liveDetail,8,0);liveDetail.setOnClickListener(v->showDetail(row));}
         content.addView(hero);
-        Button sync=button("查看同步与备份",false);add(content,sync,12,0);sync.setOnClickListener(v->{page=3;render();scroll.scrollTo(0,0);});
-        add(content,text("赤脚站稳，等待结果。体脂缺失时只保存体重。\n本机估算可能与原 App 不同，数据仅用于日常记录。",12,MUTED,false),16,0);
+        LinearLayout secondary=row();Button manual=button("手工记录",false),help=button("设备与帮助",false);
+        secondary.addView(manual,new LinearLayout.LayoutParams(0,-2,1));LinearLayout.LayoutParams helpLayout=new LinearLayout.LayoutParams(0,-2,1);helpLayout.leftMargin=dp(8);secondary.addView(help,helpLayout);add(content,secondary,12,16);
+        manual.setOnClickListener(v->showManual());help.setOnClickListener(v->showConnectionHelp());
+        if(store.device()!=null)add(content,text("我的秤 · "+store.deviceName()+"\n"+(store.automaticWeighing()?"进入称重页自动寻找":"已关闭自动寻找，可手动开始"),12,MUTED,false),0,14);
+        Measurement latest=records.isEmpty()?null:records.get(0);
+        if(latest!=null && (saved==null || latest.id!=saved.id)){
+            final Measurement previous=latest;LinearLayout history=card();history.addView(text("最近已保存 · "+formatTime(latest.measuredAt),12,MUTED,false));
+            add(history,text(format(latest.weightKg)+" kg",26,INK,true),9,6);history.addView(text(sourceLabel(latest)+" · "+io.stridehub.app.sync.NasSync.rowStatus(store,latest.id),12,MUTED,false));
+            history.setBackground(interactive(Color.WHITE,22));history.setClickable(true);history.setFocusable(true);history.setContentDescription("查看最近已保存记录，"+format(latest.weightKg)+" 千克，"+formatTime(latest.measuredAt));history.setOnClickListener(v->showDetail(previous));add(content,history,0,12);
+        }
+        Button sync=button("查看同步与备份",false);content.addView(sync);sync.setOnClickListener(v->{page=3;render();scroll.scrollTo(0,0);});
+    }
+    private String stageHeading(){
+        if(pendingReview!=null)return "这是你的本次称重吗？";
+        switch(captureState){
+            case SEARCHING:return "直接上秤，正在等你";
+            case CONNECTING:return "发现你的秤，正在准备";
+            case READY:return "可以上秤了";
+            case MEASURING:return "正在称重，请站稳";
+            case SAVING:return "正在保存";
+            case SAVED:return "这次称重已保存";
+            case ERROR:return "暂时还没收到结果";
+            default:return !autoResume?"已暂停等待":store.device()==null?"先添加你的体脂秤":"准备称重";
+        }
+    }
+    private String primaryLabel(){
+        if(pendingReview!=null)return "这是我的，保存到手机";
+        if(client.isBusy())return "暂停等待";
+        if(sessionFinished)return "再称一次";
+        if(store.device()==null)return "添加体脂秤";
+        if(!hasBlePermissions())return "允许"+permissionName();
+        if(!bluetoothEnabled())return "打开蓝牙";
+        return captureState==ScaleClient.State.ERROR?"重新寻找":"开始等待";
+    }
+    private void primaryAction(){
+        if(pendingReview!=null){client.confirmPendingMeasurement();return;}
+        if(client.isBusy()){pauseMeasurement("已暂停接收；点击开始等待即可继续。");return;}
+        forcePicker=false;autoResume=true;sessionFinished=false;startMeasurement();
+    }
+    private void pauseMeasurement(String message){
+        autoResume=false;currentWeight=null;pendingReview=null;client.stop();captureState=ScaleClient.State.IDLE;status=message;updateAwake();render();
+    }
+    private void showConnectionHelp(){
+        LinearLayout body=column();body.setPadding(dp(22),dp(10),dp(22),dp(12));
+        body.addView(text("第一次选好秤后，进入称重页会自动寻找，不必每次点连接。正常站上去即可；秤未亮时轻踩一次唤醒。",14,INK,false));
+        add(body,text("搜索持续 90 秒，发现设备后最多等待 2 分钟。请将手机放在秤附近；如果原来的秤 App 正在占用连接，退出它后再试。离开 APP 会暂停接收，返回后继续尚未结束的等待。",13,MUTED,false),14,12);
+        if(store.device()!=null)add(body,text("已记住："+store.deviceName()+"\n"+store.device(),12,MUTED,false),0,12);
+        ScrollView wrapper=new ScrollView(this);wrapper.addView(body);
+        new AlertDialog.Builder(this).setTitle("设备与连接帮助").setView(wrapper).setNegativeButton("关闭",null).setNeutralButton("连接诊断",(d,w)->showDiagnostics()).setPositiveButton("更换体脂秤",(d,w)->{forcePicker=true;autoResume=true;sessionFinished=false;startMeasurement();}).show();
     }
     private LinearLayout metric(String title,String value) { LinearLayout box=column(); box.addView(text(title,12,MUTED,false)); add(box,text(value,25,INK,true),7,0); return box; }
     private void renderTrend() {
@@ -260,12 +314,15 @@ public final class WeighingActivity extends Activity implements ScaleClient.List
             }).show());
         Button export=button("导出全部记录 · CSV",false); data.addView(export); export.setOnClickListener(v->requestExport("csv")); add(content,data,16,0);
         LinearLayout device=card(); device.addView(text("体脂秤",18,INK,true)); add(device,text(store.device()==null?"还未记住设备": "已记住设备  "+store.device(),12,MUTED,false),10,10);
+        Switch automatic=new Switch(this);automatic.setText("进入称重页自动寻找我的秤");automatic.setTextColor(INK);automatic.setMinHeight(dp(48));automatic.setChecked(store.automaticWeighing());device.addView(automatic);
+        automatic.setOnCheckedChangeListener((v,checked)->{store.setAutomaticWeighing(checked);autoResume=checked;if(!checked&&client.isBusy())pauseMeasurement("自动等待已关闭，可手动开始称重。");});
         Button choose=button("扫描并选择设备",false); device.addView(choose); choose.setOnClickListener(v->{forcePicker=true;startMeasurement();});
-        if(store.device()!=null) { Button forget=button("忘记这台设备",false); device.addView(forget); forget.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("忘记设备？").setMessage("下次测量时重新选择体脂秤，已有记录会保留。").setNegativeButton("取消",null).setPositiveButton("忘记",(d,w)->{client.stop();store.rememberDevice(null);render();}).show()); }
+        if(store.device()!=null) { Button forget=button("忘记这台设备",false); device.addView(forget); forget.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("忘记设备？").setMessage("下次测量时重新选择体脂秤，已有记录会保留。").setNegativeButton("取消",null).setPositiveButton("忘记",(d,w)->{pauseMeasurement("已忘记体脂秤，可重新添加。");store.rememberDevice(null);render();}).show()); }
         Button diagnostics=button("连接诊断",false); device.addView(diagnostics); diagnostics.setOnClickListener(v->showDiagnostics()); add(content,device,16,0);
         add(content,text("StrideHub · 身体记录\n体脂是估算值，会受饮水、运动等因素影响。\n已有分级沿用原 App 标准；FMI / FFMI 不设分级。仅作记录参考，不用于诊断。",12,MUTED,false),23,0);
     }
     private void showProfile(Runnable afterSave) {
+        if(client.isBusy())pauseMeasurement("资料更新期间已暂停接收。");
         Profile previous=store.profile(); LinearLayout form=column(); form.setPadding(dp(24),dp(10),dp(24),dp(12));
         add(form,text("体脂估算需要这些资料。称重可离线使用；配对 NAS 后，资料会随测量快照上传，当前支持 18–80 岁成人。",13,MUTED,false),0,16);
         EditText height=field(form,"身高（厘米）","80–250",InputType.TYPE_CLASS_NUMBER); if(previous!=null) height.setText(Integer.toString(previous.heightCm));
@@ -294,6 +351,7 @@ public final class WeighingActivity extends Activity implements ScaleClient.List
         showManual(null);
     }
     private void showManual(Bundle draft) {
+        pauseMeasurement("正在手工记录；保存后可再次开始称重。");
         LinearLayout form=column();form.setPadding(dp(24),dp(8),dp(24),dp(12));
         add(form,text("保存到本机。已配对 NAS 时会加入同步队列；体脂率未知可留空。",13,MUTED,false),0,16);
         EditText weight=field(form,"体重（kg）","例如 65.4",InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL);manualWeight=weight;
@@ -324,7 +382,7 @@ public final class WeighingActivity extends Activity implements ScaleClient.List
                     if(!Double.isFinite(fat)||fat<1||fat>75){fieldError(bodyFat,error,"体脂率应在 1–75% 之间，未知时请留空");return;}
                 }
                 Measurement m=Measurement.create(store.profile(),selected.getTimeInMillis(),kg,fat,0,"手工录入",null,null);
-                store.save(m);lastSavedId=m.id;status="已保存 "+format(m.weightKg)+" kg · "+formatTime(m.measuredAt);dialog.dismiss();render();toast("已保存到本机 · "+io.stridehub.app.sync.NasSync.rowStatus(store,m.id));
+                store.save(m);lastSavedId=m.id;sessionFinished=true;autoResume=false;captureState=ScaleClient.State.SAVED;status="已保存 "+format(m.weightKg)+" kg · "+formatTime(m.measuredAt);dialog.dismiss();render();toast("已保存到本机 · "+io.stridehub.app.sync.NasSync.rowStatus(store,m.id));
             } catch(IllegalArgumentException e){error.setText(e instanceof NumberFormatException?"请输入有效的数字":e.getMessage());}
             catch(Exception e){error.setText("保存失败，请检查设备存储空间后重试");}
         }));dialog.show();
@@ -355,8 +413,15 @@ public final class WeighingActivity extends Activity implements ScaleClient.List
         else add(body,text("身体指标暂未计算，原始测量已保存。",12,MUTED,false),0,8);
         add(body,text("阻抗  "+(m.impedance>0?m.impedance+" Ω":"—")+"\n原始值及当时资料会保留，修改个人资料不会重写这次测量。",12,MUTED,false),0,4);
         ScrollView wrapper=new ScrollView(this);wrapper.addView(body);
-        new AlertDialog.Builder(this).setTitle("身体指标详情 · "+io.stridehub.app.sync.NasSync.rowStatus(store,m.id)).setView(wrapper).setPositiveButton("关闭",null).setNeutralButton("删除记录",(d,w)->new AlertDialog.Builder(this).setTitle("删除这次测量？").setMessage(formatTime(m.measuredAt)+" · "+format(m.weightKg)+" kg\n删除后无法恢复。待同步将取消；发送中的记录可能已到达 NAS，请在 NAS 检查。已上传的 NAS 副本会保留，需在 NAS 管理端删除。").setNegativeButton("保留",null).setPositiveButton("删除",(confirm,which)->{store.delete(m.id);render();toast("记录已删除");}).show()).show();
+        new AlertDialog.Builder(this).setTitle("身体指标详情 · "+io.stridehub.app.sync.NasSync.rowStatus(store,m.id)).setView(wrapper).setPositiveButton("关闭",null).setNeutralButton("删除记录",(d,w)->new AlertDialog.Builder(this).setTitle("删除这次测量？").setMessage(formatTime(m.measuredAt)+" · "+format(m.weightKg)+" kg\n删除后无法恢复。待同步将取消；发送中的记录可能已到达 NAS，请在 NAS 检查。已上传的 NAS 副本会保留，需在 NAS 管理端删除。").setNegativeButton("保留",null).setPositiveButton("删除",(confirm,which)->{deleteRecord(m.id);}).show()).show();
     }
+    private void deleteRecord(long id) {
+        store.delete(id);
+        if(id==lastSavedId){lastSavedId=0;sessionFinished=false;pauseMeasurement("这次记录已删除，可重新开始称重。");}
+        else render();
+        toast("记录已删除");
+    }
+    private String permissionName(){return Build.VERSION.SDK_INT>=31?"附近设备权限":"蓝牙扫描所需定位权限";}
     private void addMetricDetail(LinearLayout parent,Measurement m,Metric metric) {
         Double value=TrendChart.valueFor(m,metric);LinearLayout entry=column();entry.setPadding(0,dp(11),0,dp(11));
         LinearLayout heading=row();heading.setGravity(Gravity.CENTER_VERTICAL);heading.addView(text(metric.title,14,INK,false),new LinearLayout.LayoutParams(0,-2,1));
@@ -370,65 +435,108 @@ public final class WeighingActivity extends Activity implements ScaleClient.List
     }
     private String metricNumber(Double value,Metric metric){return TrendChart.formatValue(value,metric);}
     private String unitSuffix(Metric metric){return metric.unit.isEmpty()?"":" "+metric.unit;}
+    private boolean hasBlePermissions(){
+        if(Build.VERSION.SDK_INT>=31)return checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN)==PackageManager.PERMISSION_GRANTED && checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT)==PackageManager.PERMISSION_GRANTED;
+        return checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)==PackageManager.PERMISSION_GRANTED;
+    }
+    private boolean bluetoothEnabled(){
+        try{BluetoothManager manager=(BluetoothManager)getSystemService(BLUETOOTH_SERVICE);BluetoothAdapter adapter=manager==null?null:manager.getAdapter();return adapter!=null && adapter.isEnabled();}catch(SecurityException e){return false;}
+    }
+    private boolean locationReady(){
+        if(Build.VERSION.SDK_INT>30)return true;
+        LocationManager location=(LocationManager)getSystemService(LOCATION_SERVICE);
+        try{return location!=null && (location.isProviderEnabled(LocationManager.GPS_PROVIDER)||location.isProviderEnabled(LocationManager.NETWORK_PROVIDER));}catch(Exception e){return false;}
+    }
+    private void maybeAutoStart(){
+        if(!foreground||page!=0||permissionPending||client.isBusy()||sessionFinished||!autoResume||manualDialog!=null)return;
+        if(store.device()==null)return;
+        Profile profile=store.profile();
+        if(profile==null||profile.validationError(System.currentTimeMillis())!=null){status="请先补充身体资料，再开始称重。";render();return;}
+        if(!hasBlePermissions()){status="开启"+permissionName()+"后，即可自动寻找你的秤。";render();return;}
+        if(!bluetoothEnabled()){status="蓝牙已关闭。打开蓝牙后会继续寻找你的秤。";render();return;}
+        if(!locationReady()){status="此 Android 版本需要打开系统定位开关才能发现蓝牙秤。";render();return;}
+        beginScan(profile);
+    }
     private void startMeasurement() {
+        autoResume=true;sessionFinished=false;
         Profile profile=store.profile();
         if(profile==null||profile.validationError(System.currentTimeMillis())!=null){showProfile(this::startMeasurement);return;}
         List<String> missing=new ArrayList<>();
         if(Build.VERSION.SDK_INT>=31){if(checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN)!=PackageManager.PERMISSION_GRANTED)missing.add(Manifest.permission.BLUETOOTH_SCAN);if(checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT)!=PackageManager.PERMISSION_GRANTED)missing.add(Manifest.permission.BLUETOOTH_CONNECT);}
         else if(checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)!=PackageManager.PERMISSION_GRANTED)missing.add(Manifest.permission.ACCESS_FINE_LOCATION);
-        if(!missing.isEmpty()){requestPermissions(missing.toArray(new String[0]),PERMISSIONS);return;}
+        if(!missing.isEmpty()){permissionPending=true;requestPermissions(missing.toArray(new String[0]),PERMISSIONS);return;}
         BluetoothManager manager=(BluetoothManager)getSystemService(BLUETOOTH_SERVICE);BluetoothAdapter adapter=manager==null?null:manager.getAdapter();
-        if(adapter==null||!getPackageManager().hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE)){showMessage("设备不支持蓝牙低功耗","仍可使用手工记录、趋势与 CSV 导出。");return;}
-        try { if(!adapter.isEnabled()){startActivityForResult(new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE),ENABLE_BT);return;} }
-        catch(SecurityException e){showMessage("蓝牙权限未开启","请在系统应用设置中允许「附近的设备」权限。");return;}
-        if(Build.VERSION.SDK_INT<=30){LocationManager location=(LocationManager)getSystemService(LOCATION_SERVICE);boolean enabled=false;try{enabled=location!=null&&(location.isProviderEnabled(LocationManager.GPS_PROVIDER)||location.isProviderEnabled(LocationManager.NETWORK_PROVIDER));}catch(Exception ignored){}
-            if(!enabled){new AlertDialog.Builder(this).setTitle("请开启定位开关").setMessage("此 Android 版本需要开启定位服务才能扫描蓝牙设备。StrideHub 不会获取或保存你的位置。开启后返回，再点击连接。").setNegativeButton("取消",null).setPositiveButton("打开设置",(d,w)->startActivity(new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))).show();return;}}
-        client.stop();found.clear();status="正在寻找附近的云麦体脂秤…";page=0;render();
+        if(adapter==null||!getPackageManager().hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE)){onError("设备不支持蓝牙低功耗，仍可手工记录。");return;}
+        try{if(!adapter.isEnabled()){permissionPending=true;startActivityForResult(new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE),ENABLE_BT);return;}}
+        catch(SecurityException e){onError("请在系统设置中允许附近设备权限。");return;}
+        if(!locationReady()){
+            new AlertDialog.Builder(this).setTitle("开启系统定位开关").setMessage("此 Android 版本通过定位开关控制蓝牙扫描，APP 不读取位置。开启后返回，会继续寻找体脂秤。")
+                .setNegativeButton("稍后",(d,w)->pauseMeasurement("系统定位开关尚未开启，可在准备好后继续。"))
+                .setPositiveButton("打开设置",(d,w)->{externalSettings=true;startActivity(new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS));}).show();return;
+        }
+        beginScan(profile);
+    }
+    private void beginScan(Profile profile){
+        client.stop();found.clear();currentWeight=null;pendingReview=null;captureState=ScaleClient.State.SEARCHING;status="正在等待体脂秤的信号，你可以直接上秤。";page=0;render();
         String preferred=forcePicker?null:store.device();if(preferred==null)showDevicePicker();
-        client.startScan(profile,preferred);
-        if(measureButton!=null)measureButton.setText("停止连接");
+        client.startScan(profile,preferred,preferred==null?"unknown":store.deviceType());updateAwake();
     }
     private void showDevicePicker() {
         if(deviceDialog!=null&&deviceDialog.isShowing())deviceDialog.dismiss();
         LinearLayout box=column();box.setPadding(dp(24),dp(10),dp(24),dp(16));
-        pickerStatus=text("请踩亮体脂秤，靠近手机。扫描最多持续 20 秒。",13,MUTED,false);box.addView(pickerStatus);
+        pickerStatus=text("踩亮体脂秤即可发现。第一次选择后会记住，下次自动寻找。",13,MUTED,false);box.addView(pickerStatus);
         deviceList=column();add(box,deviceList,12,0);ScrollView wrapper=new ScrollView(this);wrapper.addView(box);
-        deviceDialog=new AlertDialog.Builder(this).setTitle("选择你的体脂秤").setView(wrapper).setNeutralButton("重新扫描",null).setNegativeButton("取消",(d,w)->{client.stop();status="已取消连接";render();}).create();
-        deviceDialog.setOnCancelListener(d->{client.stop();status="已取消连接";render();});deviceDialog.show();
-        deviceDialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener(v->{forcePicker=true;startMeasurement();});
+        deviceDialog=new AlertDialog.Builder(this).setTitle("添加你的体脂秤").setView(wrapper).setNegativeButton("取消",(d,w)->pauseMeasurement("已取消添加体脂秤。")).create();
+        deviceDialog.setOnCancelListener(d->pauseMeasurement("已取消添加体脂秤。"));deviceDialog.show();
     }
     @Override public void onDeviceFound(ScaleClient.Device device) {
         found.put(device.address,device);
+        if(device.address.equals(store.device()))store.rememberDevice(device.address,device.name,device.transportType());
         if(deviceList==null||deviceDialog==null||!deviceDialog.isShowing())return;
         deviceList.removeAllViews();
         for(ScaleClient.Device item:found.values()){
-            Button b=button((item.name==null||item.name.isEmpty()?"云麦体脂秤":item.name)+"\n"+item.address+"  ·  "+item.rssi+" dBm",false);b.setTextSize(13);b.setSingleLine(false);b.setGravity(Gravity.START|Gravity.CENTER_VERTICAL);b.setPadding(dp(12),dp(10),dp(12),dp(10));add(deviceList,b,0,8);b.getLayoutParams().height=dp(70);
-            b.setOnClickListener(v->{deviceDialog.dismiss();deviceList=null;pickerStatus=null;client.connect(item,store.profile());});
+            String strength=item.rssi>=-65?"信号较好":item.rssi>=-85?"已收到信号":"信号较弱，可将手机靠近";
+            Button b=button(item.name+"\n"+strength+" · "+item.address,false);b.setTextSize(13);b.setSingleLine(false);b.setGravity(Gravity.START|Gravity.CENTER_VERTICAL);b.setPadding(dp(12),dp(10),dp(12),dp(10));add(deviceList,b,0,8);b.getLayoutParams().height=dp(76);
+            b.setOnClickListener(v->{
+                store.rememberDevice(item.address,item.name,item.transportType());forcePicker=false;
+                deviceDialog.dismiss();deviceList=null;pickerStatus=null;
+                if(client.isBusy()){client.connect(item,store.profile());render();}
+                else startMeasurement();
+            });
         }
     }
+    @Override public void onStateChanged(ScaleClient.State state,String message){
+        captureState=state;status=message;
+        if(state!=ScaleClient.State.MEASURING)currentWeight=null;
+        if(state!=ScaleClient.State.REVIEW)pendingReview=null;
+        updateAwake();if(shell!=null)render();
+        if(pickerStatus!=null)pickerStatus.setText(message+(found.isEmpty()?"":"\n请选择你要使用的设备。"));
+    }
     @Override public void onStatus(String message) {
-        status=message;
-        if(statusLabel!=null)statusLabel.setText(message);
-        if(pickerStatus!=null)pickerStatus.setText(message+(found.isEmpty()?"\n请踩亮体脂秤，并靠近手机。":"\n点选你要使用的设备。"));
-        if(measureButton!=null)measureButton.setText(client.isBusy()?"停止连接":"连接体脂秤");
+        status=message;if(statusLabel!=null)statusLabel.setText(message);if(pickerStatus!=null)pickerStatus.setText(message);updateAwake();
     }
     @Override public void onLiveWeight(double weightKg) {
-        if(liveValue!=null){liveValue.setText(format(weightKg));liveCaption.setText("实时读数 · 站稳后自动保存");if(liveFat!=null)liveFat.setText("—");if(liveBmi!=null)liveBmi.setText("—");if(liveSource!=null)liveSource.setText("等待稳定结果 · 尚未保存");if(liveDetail!=null)liveDetail.setVisibility(View.GONE);}
+        currentWeight=weightKg;captureState=ScaleClient.State.MEASURING;pendingReview=null;
+        if(liveValue!=null){liveValue.setText(format(weightKg));liveCaption.setText("实时读数 · 站稳后自动保存");if(stageTitle!=null)stageTitle.setText(stageHeading());if(liveFat!=null)liveFat.setText("—");if(liveBmi!=null)liveBmi.setText("—");if(liveSource!=null)liveSource.setText("等待稳定结果 · 尚未保存");if(liveDetail!=null)liveDetail.setVisibility(View.GONE);}
     }
+    @Override public void onConfirmationRequired(Measurement measurement,String explanation){pendingReview=measurement;reviewExplanation=explanation;currentWeight=null;captureState=ScaleClient.State.REVIEW;page=0;render();scroll.scrollTo(0,0);}
     @Override public void onMeasurement(Measurement measurement) {
-        try {store.save(measurement);}
-        catch(Exception e){client.stop();render();onError("记录保存失败，请检查设备存储空间后重试");return;}
-        client.confirmSaved();
-        if(measurement.deviceAddress!=null)store.rememberDevice(measurement.deviceAddress);
-        lastSavedId=measurement.id;status="测量完成，已保存到本机";
-        if(deviceDialog!=null&&deviceDialog.isShowing())deviceDialog.dismiss();
-        deviceList=null;pickerStatus=null;render();toast("已保存 "+format(measurement.weightKg)+" kg");
+        try{store.save(measurement);}catch(Exception e){client.stop();onError("记录保存失败，请检查设备存储空间后重试。");return;}
+        lastSavedId=measurement.id;sessionFinished=true;autoResume=false;currentWeight=null;pendingReview=null;
+        client.confirmSaved();captureState=ScaleClient.State.SAVED;status="测量完成，已保存到本机。";
+        if(deviceDialog!=null&&deviceDialog.isShowing())deviceDialog.dismiss();deviceList=null;pickerStatus=null;
+        render();updateAwake();shell.performHapticFeedback(Build.VERSION.SDK_INT>=30?HapticFeedbackConstants.CONFIRM:HapticFeedbackConstants.KEYBOARD_TAP);toast("已保存 "+format(measurement.weightKg)+" kg");
     }
-    @Override public void onError(String message) {status=message;if(statusLabel!=null)statusLabel.setText(message);if(pickerStatus!=null)pickerStatus.setText(message);if(measureButton!=null)measureButton.setText(client.isBusy()?"停止连接":"连接体脂秤");toast(message);}
+    @Override public void onError(String message){autoResume=false;captureState=ScaleClient.State.ERROR;currentWeight=null;pendingReview=null;status=message;render();updateAwake();if(pickerStatus!=null)pickerStatus.setText(message);}
+    private void updateAwake(){
+        if(foreground && client!=null && client.isBusy())getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        else getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+    }
     @Override public void onRequestPermissionsResult(int requestCode,String[] permissions,int[] grants) {
-        super.onRequestPermissionsResult(requestCode,permissions,grants);if(requestCode!=PERMISSIONS)return;
+        super.onRequestPermissionsResult(requestCode,permissions,grants);if(requestCode!=PERMISSIONS)return;permissionPending=false;
         boolean granted=grants.length>0;for(int value:grants)granted&=value==PackageManager.PERMISSION_GRANTED;
-        if(granted)startMeasurement();else new AlertDialog.Builder(this).setTitle("连接需要蓝牙权限").setMessage(Build.VERSION.SDK_INT>=31?"请允许「附近的设备」权限后再连接体脂秤。你仍可手工记录。":"此 Android 版本需要定位权限才能扫描蓝牙。StrideHub 不会获取或保存位置信息。你仍可手工记录。").setNegativeButton("稍后",null).setPositiveButton("应用设置",(d,w)->startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:"+getPackageName())))).show();
+        if(granted)startMeasurement();else{onError(permissionName()+"未开启，可允许后重试，或手工记录。");new AlertDialog.Builder(this).setTitle("允许"+permissionName()).setMessage("蓝牙称重需要"+permissionName()+"。拒绝不影响查看历史或手工记录。")
+            .setNegativeButton("稍后",null).setPositiveButton("应用设置",(d,w)->{externalSettings=true;startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:"+getPackageName())));}).show();}
     }
     private void requestExport(String kind) {
         exportKind=kind;String stamp=new SimpleDateFormat("yyyyMMdd-HHmm",Locale.US).format(System.currentTimeMillis());
@@ -437,7 +545,7 @@ public final class WeighingActivity extends Activity implements ScaleClient.List
     }
     @Override protected void onActivityResult(int requestCode,int resultCode,Intent data) {
         super.onActivityResult(requestCode,resultCode,data);
-        if(requestCode==ENABLE_BT){if(resultCode==RESULT_OK)startMeasurement();else{status="蓝牙未开启";render();}return;}
+        if(requestCode==ENABLE_BT){permissionPending=false;if(resultCode==RESULT_OK)startMeasurement();else onError("蓝牙未开启。开启后即可继续称重。");return;}
         if(requestCode==IMPORT && resultCode==RESULT_OK && data!=null && data.getData()!=null) {
             final android.net.Uri importUri=data.getData();
             final android.content.Context appContext=getApplicationContext();
@@ -473,13 +581,25 @@ public final class WeighingActivity extends Activity implements ScaleClient.List
         TextView body=text(client.diagnostics(),12,INK,false);body.setTextIsSelectable(true);body.setPadding(dp(22),dp(12),dp(22),dp(12));ScrollView wrapper=new ScrollView(this);wrapper.addView(body);
         new AlertDialog.Builder(this).setTitle("连接诊断 · 本机").setView(wrapper).setNegativeButton("关闭",null).setPositiveButton("导出文本",(d,w)->requestExport("diagnostics")).show();
     }
-    @Override protected void onStart(){super.onStart();if(store!=null&&shell!=null)render();}
+    @Override protected void onStart(){super.onStart();foreground=true;if(store!=null&&shell!=null)render();}
+    @Override protected void onResume(){
+        super.onResume();
+        if(externalSettings){
+            externalSettings=false;permissionPending=false;
+            // Returning from Settings is not consent to show the same permission prompt again.
+            if(hasBlePermissions()&&bluetoothEnabled()&&locationReady())startMeasurement();
+            else onError("系统设置尚未就绪，请开启"+permissionName()+"、蓝牙及所需开关后再试。");
+        }else maybeAutoStart();
+    }
     @Override protected void onStop() {
-        super.onStop();client.stop();if(deviceDialog!=null&&deviceDialog.isShowing())deviceDialog.dismiss();deviceList=null;pickerStatus=null;
-        if(status.contains("寻找")||status.contains("扫描")||status.contains("连接中"))status="连接已暂停，返回后可重新连接";
+        foreground=false;boolean interrupted=client.isBusy();client.stop();currentWeight=null;pendingReview=null;
+        if(deviceDialog!=null&&deviceDialog.isShowing())deviceDialog.dismiss();deviceList=null;pickerStatus=null;
+        if(sessionFinished){captureState=ScaleClient.State.SAVED;status="测量完成，已保存到本机。";}
+        if(interrupted&&!sessionFinished){captureState=ScaleClient.State.IDLE;status=autoResume?"接收已暂停，返回称重页会继续等待。":"已暂停接收。";}
+        updateAwake();super.onStop();
     }
     @Override protected void onDestroy(){client.stop();store.close();super.onDestroy();}
-    @Override protected void onSaveInstanceState(Bundle out){super.onSaveInstanceState(out);out.putInt("page",page);out.putInt("days",days);out.putString("metric",selectedMetric.name());out.putInt("weightAverageDays",weightAverageDays);out.putBoolean("forcePicker",forcePicker);out.putString("exportKind",exportKind);out.putLong("lastSavedId",lastSavedId);if(manualDialog!=null&&manualDialog.isShowing()){out.putBoolean("manualOpen",true);out.putString("manualWeight",manualWeight.getText().toString());out.putString("manualFat",manualFat.getText().toString());out.putLong("manualTime",manualTime.getTimeInMillis());}}
+    @Override protected void onSaveInstanceState(Bundle out){super.onSaveInstanceState(out);out.putInt("page",page);out.putInt("days",days);out.putString("metric",selectedMetric.name());out.putInt("weightAverageDays",weightAverageDays);out.putBoolean("forcePicker",forcePicker);out.putString("exportKind",exportKind);out.putLong("lastSavedId",lastSavedId);out.putBoolean("autoResume",autoResume);out.putBoolean("externalSettings",externalSettings);out.putBoolean("permissionPending",permissionPending);out.putBoolean("sessionFinished",sessionFinished);if(manualDialog!=null&&manualDialog.isShowing()){out.putBoolean("manualOpen",true);out.putString("manualWeight",manualWeight.getText().toString());out.putString("manualFat",manualFat.getText().toString());out.putLong("manualTime",manualTime.getTimeInMillis());}}
     private LinearLayout column(){LinearLayout v=new LinearLayout(this);v.setOrientation(LinearLayout.VERTICAL);return v;}
     private LinearLayout row(){LinearLayout v=new LinearLayout(this);v.setOrientation(LinearLayout.HORIZONTAL);return v;}
     private TextView text(String value,float size,int color,boolean bold){TextView v=new TextView(this);v.setText(value);v.setTextSize(size);v.setTextColor(color);v.setIncludeFontPadding(false);v.setLineSpacing(dp(3),1);if(bold)v.setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL));return v;}

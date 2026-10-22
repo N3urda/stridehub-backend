@@ -10,6 +10,7 @@ import android.os.Looper;
 import android.os.ParcelUuid;
 import android.util.SparseArray;
 import io.stridehub.app.scale.core.Measurement;
+import io.stridehub.app.scale.core.BroadcastMeasurementGate;
 import io.stridehub.app.scale.core.Profile;
 import io.stridehub.app.scale.core.YunmaiProtocol;
 import java.text.SimpleDateFormat;
@@ -18,12 +19,15 @@ import java.util.*;
 /** Foreground-only BLE session. All state and callbacks are confined to the main thread. */
 @SuppressLint("MissingPermission")
 public final class ScaleClient {
+    public enum State { IDLE, SEARCHING, CONNECTING, READY, MEASURING, REVIEW, SAVING, SAVED, ERROR }
     public interface Listener {
         void onStatus(String message);
         void onDeviceFound(Device device);
         void onLiveWeight(double weightKg);
         void onMeasurement(Measurement measurement);
         void onError(String message);
+        default void onStateChanged(State state, String message) { onStatus(message); }
+        default void onConfirmationRequired(Measurement measurement, String explanation) { }
     }
     public static final class Device {
         public final String name, address;
@@ -32,6 +36,12 @@ public final class ScaleClient {
         Device(String name, String address, int rssi, boolean broadcast) {
             this.name = name; this.address = address; this.rssi = rssi; this.broadcast = broadcast;
         }
+        public String transportType() { return broadcast ? "broadcast" : "gatt"; }
+    }
+    private static final class RecentBroadcast {
+        final YunmaiProtocol.Frame frame;
+        final long receivedAt;
+        RecentBroadcast(YunmaiProtocol.Frame frame, long receivedAt) { this.frame = frame; this.receivedAt = receivedAt; }
     }
     private static UUID uuid(int value) {
         return UUID.fromString(String.format(Locale.ROOT, "0000%04x-0000-1000-8000-00805f9b34fb", value));
@@ -46,6 +56,15 @@ public final class ScaleClient {
     private final ArrayDeque<String> log = new ArrayDeque<>();
     private final ArrayDeque<byte[]> commands = new ArrayDeque<>();
     private final YunmaiProtocol.Decoder decoder = new YunmaiProtocol.Decoder();
+    private final BroadcastMeasurementGate broadcastGate = new BroadcastMeasurementGate();
+    private final Map<String, RecentBroadcast> recentBroadcasts = new HashMap<>();
+    private final Map<String, Long> deviceUpdatedAt = new HashMap<>();
+    private State state = State.IDLE;
+    private String status = "称重尚未开始", preferredType = "unknown", pendingBroadcastFingerprint;
+    private Measurement pendingMeasurement;
+    private YunmaiProtocol.Frame pendingFrame;
+    private int connectionRetries;
+    private Runnable reconnectTask;
     private BluetoothLeScanner scanner;
     private ScanCallback scanCallback;
     private BluetoothGatt gatt;
@@ -53,47 +72,68 @@ public final class ScaleClient {
     private Profile profile;
     private Device selected;
     private String preferred = "", pendingFingerprint, lastSavedFingerprint;
-    private boolean busy, scanActive, broadcastArmed, awaitingWrite, delivered, saved, mtuPending;
+    private boolean busy, scanActive, awaitingWrite, delivered, saved, mtuPending;
     private long sessionStarted;
     private int generation, invalidFrames, scanResults;
-    private final Runnable scanTimeout = this::onScanTimeout;
-    private void onScanTimeout() {
-        if (selected != null) return;
-        stopScan();
-        if (found.isEmpty()) fail("没有发现云麦秤。请踩亮秤、关闭原 App 的蓝牙连接，再重新搜索。");
-        else listener.onStatus(preferred.isEmpty() ? "搜索结束，请选择你的秤；若已休眠，请踩亮后重试" : "未发现上次使用的秤，可点击「选择另一台秤」重新搜索");
-    }
-    private final Runnable sessionTimeout = () -> fail("等待测量超时。请赤脚上秤并保持站立；仍无结果可导出连接诊断。");
-    private final Runnable operationTimeout = () -> fail("蓝牙通信超时，请唤醒秤后重试");
+    private final Runnable scanTimeout = () -> {
+        if (selected == null) fail(found.isEmpty()
+                ? "暂未收到体脂秤信号。请确认秤已亮起、手机在附近，且其他 App 未连接。可以继续等待。"
+                : "还未选中体脂秤，请选择设备后继续等待。已有记录不受影响。");
+    };
+    private final Runnable scanHint = () -> {
+        if (busy && selected == null) changeState(State.SEARCHING, preferred.isEmpty()
+                ? "还在等待体脂秤信号，请直接上秤；本次会持续等待 90 秒"
+                : "正在等待已记住的体脂秤，请直接上秤；无需反复点击连接");
+    };
+    private final Runnable sessionTimeout = () -> fail("本次等待已结束。若秤已休眠，请重新唤醒后再试；已有记录不受影响。");
+    private final Runnable operationTimeout = () -> retryConnection("蓝牙通信超时");
     private final Runnable finishTimeout = () -> { if (saved) finishSaved(); };
     private final Runnable mtuTimeout = this::finishMtu;
 
     public ScaleClient(Context context, Listener listener) {
         this.context = context.getApplicationContext(); this.listener = listener;
-        lastSavedFingerprint = this.context.getSharedPreferences("ble_replay", Context.MODE_PRIVATE).getString("lastSaved", null);
+        android.content.SharedPreferences replay = this.context.getSharedPreferences("ble_replay", Context.MODE_PRIVATE);
+        lastSavedFingerprint = replay.getString("lastSaved", null);
+        long now = System.currentTimeMillis();
+        for (Map.Entry<String, ?> entry : replay.getAll().entrySet()) {
+            if (entry.getKey().startsWith("broadcast:") && entry.getValue() instanceof Long) {
+                long when = (Long) entry.getValue();
+                if (now >= when && now - when <= BroadcastMeasurementGate.REPLAY_WINDOW_MS)
+                    broadcastGate.markSaved(entry.getKey().substring(10), when);
+            }
+        }
         BluetoothManager manager = (BluetoothManager) context.getSystemService(Context.BLUETOOTH_SERVICE);
         adapter = manager == null ? null : manager.getAdapter();
     }
     public boolean isBusy() { return busy; }
+    public State getState() { return state; }
+    public String getStatus() { return status; }
+    public Device getSelectedDevice() { return selected; }
+    private void changeState(State next, String message) {
+        state = next; status = message; listener.onStateChanged(next, message);
+    }
     public String diagnostics() {
-        return "TinyYumi 0.2.0 · 本机连接诊断\nAndroid " + Build.VERSION.RELEASE + " / " + Build.MODEL
+        return "StrideHub · 本机连接诊断\nAndroid " + Build.VERSION.RELEASE + " / " + Build.MODEL
                 + "\n日志包含设备地址和测量报文，仅在主动导出时离开应用。\n\n" + String.join("\n", log);
     }
     private void record(String message) {
         if (log.size() >= 200) log.removeFirst();
         log.addLast(new SimpleDateFormat("HH:mm:ss", Locale.ROOT).format(new Date()) + " " + message);
     }
-    public void startScan(Profile profile, String preferredAddress) {
-        cleanup(); found.clear(); unknownSeen.clear(); selected = null; scanResults = 0;
+    public void startScan(Profile profile, String preferredAddress) { startScan(profile, preferredAddress, "unknown"); }
+    public void startScan(Profile profile, String preferredAddress, String preferredType) {
+        cleanup(); found.clear(); unknownSeen.clear(); recentBroadcasts.clear(); deviceUpdatedAt.clear();
+        selected = null; scanResults = 0; connectionRetries = 0;
+        this.preferredType = "broadcast".equals(preferredType) ? "broadcast" : "gatt".equals(preferredType) ? "gatt" : "unknown";
         if (profile == null || profile.validationError(System.currentTimeMillis()) != null) {
-            listener.onError("请先填写有效的身体资料"); return;
+            fail("请先填写有效的身体资料"); return;
         }
         this.profile = profile; preferred = preferredAddress == null ? "" : preferredAddress;
-        if (adapter == null) { listener.onError("这台设备不支持蓝牙"); return; }
+        if (adapter == null) { fail("这台设备不支持蓝牙"); return; }
         try {
-            if (!adapter.isEnabled()) { listener.onError("请先打开蓝牙"); return; }
+            if (!adapter.isEnabled()) { fail("请先打开蓝牙"); return; }
             scanner = adapter.getBluetoothLeScanner();
-            if (scanner == null) { listener.onError("蓝牙尚未就绪，请稍后重试"); return; }
+            if (scanner == null) { fail("蓝牙尚未就绪，请稍后重试"); return; }
             busy = true; sessionStarted = System.currentTimeMillis();
             final int token = generation;
             scanCallback = new ScanCallback() {
@@ -109,10 +149,11 @@ public final class ScaleClient {
             };
             scanActive = true;
             scanner.startScan(null, new ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build(), scanCallback);
-            main.postDelayed(scanTimeout, 20_000);
+            main.postDelayed(scanHint, 20_000);
+            main.postDelayed(scanTimeout, 90_000);
             main.postDelayed(sessionTimeout, 120_000);
             record("SCAN start");
-            listener.onStatus(preferred.isEmpty() ? "正在寻找体脂秤，请轻踩唤醒" : "正在寻找上次使用的秤，请轻踩唤醒");
+            changeState(State.SEARCHING, preferred.isEmpty() ? "正在寻找体脂秤，请直接上秤，发现后选择你的设备" : "已开始等待已记住的体脂秤，请直接上秤");
         } catch (SecurityException e) { fail("缺少附近设备权限，请在系统设置中允许"); }
         catch (IllegalStateException e) { fail("蓝牙状态发生变化，请重新打开蓝牙后重试"); }
     }
@@ -127,64 +168,126 @@ public final class ScaleClient {
             List<ParcelUuid> services = scan.getServiceUuids();
             boolean hasYunmaiService = services != null && services.contains(new ParcelUuid(uuid(0x1320)));
             YunmaiProtocol.Frame broadcast = null;
+            boolean broadcastIdentity = hasYunmaiService || YunmaiProtocol.isBroadcastName(name)
+                    || (address.equals(preferred) && "broadcast".equals(preferredType));
             SparseArray<byte[]> manufacturer = scan.getManufacturerSpecificData();
             if (manufacturer != null) for (int i = 0; i < manufacturer.size(); i++) {
-                broadcast = YunmaiProtocol.parseAdvertisement(manufacturer.keyAt(i), manufacturer.valueAt(i), address, hasYunmaiService);
-                if (broadcast != null) break;
+                int id = manufacturer.keyAt(i); byte[] payload = manufacturer.valueAt(i);
+                broadcastIdentity |= YunmaiProtocol.isBroadcastAdvertisement(id, payload, address, hasYunmaiService);
+                YunmaiProtocol.Frame frame = YunmaiProtocol.parseAdvertisement(id, payload, address, hasYunmaiService);
+                if (frame != null) broadcast = frame;
             }
             boolean yunmaiServices = services != null && services.contains(new ParcelUuid(uuid(0xffe0)))
                     && services.contains(new ParcelUuid(uuid(0xffe5)));
-            boolean candidate = broadcast != null || YunmaiProtocol.isScaleName(name) || yunmaiServices;
+            Device previous = found.get(address);
+            broadcastIdentity |= previous != null && previous.broadcast;
+            boolean candidate = broadcastIdentity || YunmaiProtocol.isScaleName(name) || yunmaiServices;
             if (!candidate) {
-                boolean maybeScale = (name != null && name.toUpperCase(Locale.ROOT).startsWith("YUNMAI"))
-                        || hasYunmaiService;
-                if (maybeScale && unknownSeen.size() < 20 && unknownSeen.add(address))
+                if (name != null && name.toUpperCase(Locale.ROOT).startsWith("YUNMAI")
+                        && unknownSeen.size() < 20 && unknownSeen.add(address))
                     record("UNSUPPORTED ADV " + name + " " + address + " " + YunmaiProtocol.hex(scan.getBytes()));
                 return;
             }
             int product = broadcast == null ? -1 : broadcast.raw[4] & 255;
-            String fallbackName = product == 2 || product == 5 ? "好轻 mini2S" : "云麦广播秤";
-            Device device = new Device(name == null || name.isEmpty() ? fallbackName : name, address, result.getRssi(), broadcast != null);
-            if (!found.containsKey(address)) {
-                found.put(address, device); record("FOUND " + device.name + " " + address + " broadcast=" + device.broadcast);
+            String fallbackName = product == 2 || product == 5 ? "好轻 mini2S" : broadcastIdentity ? "云麦广播秤" : "云麦体脂秤";
+            Device device = new Device(name == null || name.isEmpty() ? fallbackName : name, address, result.getRssi(), broadcastIdentity);
+            long now = System.currentTimeMillis();
+            if (broadcast != null) recentBroadcasts.put(address, new RecentBroadcast(broadcast, now));
+            found.put(address, device);
+            Long updated = deviceUpdatedAt.get(address);
+            if (previous == null || previous.broadcast != device.broadcast || updated == null || now - updated >= 2000) {
+                deviceUpdatedAt.put(address, now);
+                if (previous == null) record("FOUND " + device.name + " " + address + " broadcast=" + device.broadcast);
                 listener.onDeviceFound(device);
-            } else if (device.broadcast && !found.get(address).broadcast) {
-                found.put(address, device); listener.onDeviceFound(device);
             }
-            if (selected == null && address.equals(preferred)) connect(device, profile);
-            if (selected != null && selected.broadcast && selected.address.equals(address) && broadcast != null) {
-                if (!broadcast.finalMeasurement) {
-                    broadcastArmed = true;
-                    listener.onLiveWeight(broadcast.weightKg);
-                } else if (broadcastArmed) {
-                    record("ADV RX " + YunmaiProtocol.hex(broadcast.raw));
-                    publish(broadcast);
-                }
-            }
+            if (selected == null && address.equals(preferred)) { connect(device, profile); return; }
+            if (selected != null && selected.broadcast && selected.address.equals(address) && broadcast != null)
+                handleBroadcast(broadcast, now);
         } catch (SecurityException e) { fail("蓝牙权限已被撤销，请重新授权"); }
     }
     public void connect(Device device, Profile profile) {
         if (!busy || device == null || selected != null) return;
-        this.profile = profile; selected = device;
-        main.removeCallbacks(scanTimeout);
+        if (profile == null || profile.validationError(System.currentTimeMillis()) != null) {
+            fail("请先填写有效的身体资料"); return;
+        }
+        Device latest = found.get(device.address);
+        this.profile = profile; selected = latest != null && latest.broadcast ? latest : device;
+        main.removeCallbacks(scanTimeout); main.removeCallbacks(scanHint);
         main.removeCallbacks(sessionTimeout); main.postDelayed(sessionTimeout, 120_000);
-        sessionStarted = System.currentTimeMillis(); broadcastArmed = false; invalidFrames = 0; decoder.reset();
-        if (device.broadcast) {
-            // Selection after a final advertisement must not save a stale measurement from someone else.
-            listener.onStatus("已找到广播秤，请先下秤，再赤脚上秤测量");
-            record("SELECT broadcast " + device.address);
-            if (!scanActive) {
-                try { scanActive = true; scanner.startScan(null, new ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build(), scanCallback); }
-                catch (Exception e) { fail("无法继续接收广播，请重新搜索"); }
-            }
+        sessionStarted = System.currentTimeMillis(); invalidFrames = 0; decoder.reset(); broadcastGate.resetSession();
+        connectionRetries = 0;
+        if (selected.broadcast) {
+            changeState(State.READY, "已找到体脂秤，请直接站稳，稳定结果会自动保存");
+            record("SELECT broadcast " + selected.address);
+            RecentBroadcast cached = recentBroadcasts.get(selected.address);
+            if (cached != null && sessionStarted >= cached.receivedAt && sessionStarted - cached.receivedAt <= 5000)
+                handleBroadcast(cached.frame, sessionStarted);
             return;
         }
-        stopScan(); record("CONNECT " + device.address); listener.onStatus("正在连接 " + device.name);
+        stopScan(); connectGatt();
+    }
+    private void handleBroadcast(YunmaiProtocol.Frame frame, long now) {
+        if (!busy || delivered || selected == null || pendingMeasurement != null) return;
+        BroadcastMeasurementGate.Decision decision = broadcastGate.inspect(frame, selected.address, now);
+        if (decision == BroadcastMeasurementGate.Decision.LIVE) {
+            if (state != State.MEASURING) changeState(State.MEASURING, "正在称重，请保持站稳，等待稳定结果");
+            listener.onLiveWeight(frame.weightKg);
+        } else if (decision == BroadcastMeasurementGate.Decision.AUTO_SAVE) {
+            record("ADV RX " + YunmaiProtocol.hex(frame.raw)); publish(frame);
+        } else if (decision == BroadcastMeasurementGate.Decision.REVIEW) {
+            try {
+                pendingFrame = frame;
+                pendingMeasurement = YunmaiProtocol.toMeasurement(frame, profile, selected.address, now);
+                String explanation = "收到稳定读数，但没有接收到这次上秤的过程。请确认这是你的本次测量；记录时间采用本次接收时间。";
+                changeState(State.REVIEW, "检测到稳定读数，请确认是否保存");
+                listener.onConfirmationRequired(pendingMeasurement, explanation);
+                record("ADV awaiting confirmation " + YunmaiProtocol.hex(frame.raw));
+            } catch (IllegalArgumentException error) { record("Invalid candidate: " + error.getMessage()); }
+        } else if (decision == BroadcastMeasurementGate.Decision.DUPLICATE) {
+            String message = "这条结果已保存，正在等待下一次测量";
+            if (!message.equals(status)) changeState(State.READY, message);
+        }
+    }
+    public void confirmPendingMeasurement() {
+        if (!busy || state != State.REVIEW || pendingMeasurement == null || pendingFrame == null || selected == null) return;
+        Measurement accepted = pendingMeasurement;
+        pendingBroadcastFingerprint = BroadcastMeasurementGate.fingerprint(pendingFrame, selected.address);
+        pendingMeasurement = null; pendingFrame = null; delivered = true;
+        main.removeCallbacks(sessionTimeout);
+        changeState(State.SAVING, "正在保存这次测量到本机");
+        listener.onMeasurement(accepted);
+    }
+    public void discardPendingMeasurement() {
+        if (!busy || state != State.REVIEW || selected == null) return;
+        broadcastGate.dismiss(pendingFrame, selected.address);
+        pendingMeasurement = null; pendingFrame = null;
+        changeState(State.READY, "已忽略这条读数，继续等待新的测量");
+    }
+    private void connectGatt() {
+        if (!busy || selected == null || selected.broadcast) return;
+        record("CONNECT " + selected.address + " retry=" + connectionRetries);
+        changeState(State.CONNECTING, connectionRetries == 0 ? "正在连接 " + selected.name : "连接中断，正在自动重连（" + connectionRetries + "/2）");
         try {
-            gatt = adapter.getRemoteDevice(device.address).connectGatt(context, false, callback, BluetoothDevice.TRANSPORT_LE);
+            gatt = adapter.getRemoteDevice(selected.address).connectGatt(context, false, callback, BluetoothDevice.TRANSPORT_LE);
+            if (gatt == null) { retryConnection("无法建立蓝牙连接"); return; }
             main.postDelayed(operationTimeout, 15_000);
         } catch (SecurityException e) { fail("没有连接蓝牙的权限"); }
         catch (IllegalArgumentException e) { fail("设备地址无效，请重新搜索"); }
+    }
+    private void retryConnection(String reason) {
+        if (!busy) return;
+        if (saved) { finishSaved(); return; }
+        if (delivered) return;
+        if (selected == null || selected.broadcast || connectionRetries >= 2) {
+            fail(reason + "，请确认秤已唤醒后重新等待"); return;
+        }
+        if (reconnectTask != null) main.removeCallbacks(reconnectTask);
+        closeGatt(); connectionRetries++;
+        record("RETRY " + connectionRetries + " " + reason);
+        changeState(State.CONNECTING, "连接暂时中断，正在自动重试（" + connectionRetries + "/2）");
+        final int token = generation;
+        reconnectTask = () -> { if (token == generation && busy) connectGatt(); };
+        main.postDelayed(reconnectTask, connectionRetries * 1500L);
     }
     private final BluetoothGattCallback callback = new BluetoothGattCallback() {
         @Override public void onConnectionStateChange(BluetoothGatt source, int status, int state) {
@@ -193,11 +296,11 @@ public final class ScaleClient {
                 record("GATT state=" + state + " status=" + status);
                 if (status != BluetoothGatt.GATT_SUCCESS || state == BluetoothProfile.STATE_DISCONNECTED) {
                     if (saved) { finishSaved(); return; }
-                    fail("体脂秤连接已断开（" + status + "），请重新唤醒后测量"); return;
+                    retryConnection("体脂秤连接已断开（" + status + "）"); return;
                 }
                 if (state == BluetoothProfile.STATE_CONNECTED) {
-                    listener.onStatus("正在识别体脂秤");
-                    try { if (!source.discoverServices()) fail("无法读取秤的蓝牙服务"); }
+                    changeState(State.CONNECTING, "正在识别体脂秤");
+                    try { if (!source.discoverServices()) retryConnection("无法读取秤的蓝牙服务"); }
                     catch (SecurityException e) { fail("蓝牙权限已被撤销"); }
                 }
             });
@@ -205,7 +308,7 @@ public final class ScaleClient {
         @Override public void onServicesDiscovered(BluetoothGatt source, int status) {
             main.post(() -> {
                 if (source != gatt || !busy) return;
-                if (status != BluetoothGatt.GATT_SUCCESS) { fail("无法读取蓝牙服务（" + status + "）"); return; }
+                if (status != BluetoothGatt.GATT_SUCCESS) { retryConnection("无法读取蓝牙服务（" + status + "）"); return; }
                 main.removeCallbacks(operationTimeout);
                 mtuPending = true;
                 try {
@@ -250,7 +353,7 @@ public final class ScaleClient {
         configure(gatt, BluetoothGatt.GATT_SUCCESS);
     }
     private void configure(BluetoothGatt source, int status) {
-        if (status != BluetoothGatt.GATT_SUCCESS) { fail("无法读取蓝牙服务（" + status + "）"); return; }
+        if (status != BluetoothGatt.GATT_SUCCESS) { retryConnection("无法读取蓝牙服务（" + status + "）"); return; }
         main.removeCallbacks(operationTimeout);
         BluetoothGattCharacteristic notify = null; writer = null;
         for (BluetoothGattService service : source.getServices()) {
@@ -288,8 +391,8 @@ public final class ScaleClient {
         writeNext();
     }
     private void writeNext() {
-        if (gatt == null || !busy || awaitingWrite) return;
-        if (commands.isEmpty()) { if (saved) finishSaved(); else listener.onStatus("已连接，请赤脚上秤，等待体脂测量完成"); return; }
+        if (gatt == null || writer == null || !busy || awaitingWrite) return;
+        if (commands.isEmpty()) { if (saved) finishSaved(); else if (state != State.MEASURING) changeState(State.READY, "已连接，请站稳等待结果，稳定后会自动保存"); return; }
         byte[] command = commands.removeFirst();
         int type = (writer.getProperties() & BluetoothGattCharacteristic.PROPERTY_WRITE) != 0
                 ? BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT : BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE;
@@ -317,13 +420,16 @@ public final class ScaleClient {
                         record("Ignored stored result from an earlier session"); continue;
                     }
                     publish(frame);
-                } else listener.onLiveWeight(frame.weightKg);
+                } else {
+                    if (state != State.MEASURING) changeState(State.MEASURING, "正在称重，请保持站稳，等待稳定结果");
+                    listener.onLiveWeight(frame.weightKg);
+                }
             }
             if (delivered) return;
             if (decoder.rejectedCount() > invalidFrames) {
                 invalidFrames = decoder.rejectedCount();
                 record("Rejected malformed/unsupported frames=" + invalidFrames);
-                if (invalidFrames >= 3) listener.onStatus("收到尚不支持或不完整的数据，可导出诊断协助适配");
+                if (invalidFrames >= 3) changeState(state, "收到尚不支持或不完整的数据，可导出诊断协助适配");
             }
         });
     }
@@ -333,14 +439,16 @@ public final class ScaleClient {
             String fingerprint = YunmaiProtocol.replayFingerprint(frame, selected.address);
             if (fingerprint != null && fingerprint.equals(lastSavedFingerprint)) {
                 record("Ignored already saved final packet");
-                listener.onStatus("这条结果已保存，请先下秤，再重新测量");
+                changeState(State.READY, "这条结果已保存，正在等待下一次测量");
                 return;
             }
             Measurement measurement = YunmaiProtocol.toMeasurement(frame, profile, selected.address, System.currentTimeMillis());
             pendingFingerprint = fingerprint;
+            pendingBroadcastFingerprint = BroadcastMeasurementGate.fingerprint(frame, selected.address);
             record("FINAL kg=" + measurement.weightKg + " fat=" + measurement.bodyFatPercent + " source=" + measurement.source);
             delivered = true;
             main.removeCallbacks(sessionTimeout);
+            changeState(State.SAVING, "正在保存这次测量到本机");
             listener.onMeasurement(measurement);
         } catch (IllegalArgumentException e) { record("Invalid measurement: " + e.getMessage()); }
     }
@@ -352,36 +460,56 @@ public final class ScaleClient {
             lastSavedFingerprint = pendingFingerprint;
             context.getSharedPreferences("ble_replay", Context.MODE_PRIVATE).edit().putString("lastSaved", lastSavedFingerprint).apply();
         }
+        if (pendingBroadcastFingerprint != null) {
+            long now = System.currentTimeMillis();
+            broadcastGate.markSaved(pendingBroadcastFingerprint, now);
+            android.content.SharedPreferences replay = context.getSharedPreferences("ble_replay", Context.MODE_PRIVATE);
+            android.content.SharedPreferences.Editor editor = replay.edit();
+            for (Map.Entry<String, ?> entry : replay.getAll().entrySet()) {
+                if (entry.getKey().startsWith("broadcast:") && entry.getValue() instanceof Long) {
+                    long when = (Long) entry.getValue();
+                    if (now < when || now - when > BroadcastMeasurementGate.REPLAY_WINDOW_MS) editor.remove(entry.getKey());
+                }
+            }
+            editor.putLong("broadcast:" + pendingBroadcastFingerprint, now).apply();
+        }
         if (selected != null && selected.broadcast) { finishSaved(); return; }
         commands.clear(); commands.add(YunmaiProtocol.acknowledgmentCommand());
         main.removeCallbacks(operationTimeout);
         main.postDelayed(finishTimeout, 1500);
         if (!awaitingWrite) writeNext();
     }
-    private void finishSaved() { cleanup(); listener.onStatus("测量完成，已保存到本机"); }
+    private void finishSaved() { cleanup(); changeState(State.SAVED, "测量完成，已保存到本机"); }
     public void stop() {
         boolean wasBusy = busy; cleanup();
-        if (wasBusy) { record("Session stopped"); listener.onStatus("测量已停止"); }
+        if (wasBusy) { record("Session stopped"); changeState(State.IDLE, "测量已暂停"); }
     }
     private void stopScan() {
         if (scanner != null && scanActive && scanCallback != null) {
             try { scanner.stopScan(scanCallback); } catch (SecurityException | IllegalStateException ignored) { }
         }
         if (scanActive) record("SCAN end received=" + scanResults + " supported=" + found.size() + " unsupported=" + unknownSeen.size());
-        scanActive = false; main.removeCallbacks(scanTimeout);
+        scanActive = false; main.removeCallbacks(scanTimeout); main.removeCallbacks(scanHint);
     }
-    private void cleanup() {
-        generation++; busy = false; stopScan();
-        main.removeCallbacks(sessionTimeout); main.removeCallbacks(operationTimeout); main.removeCallbacks(finishTimeout); main.removeCallbacks(mtuTimeout); mtuPending = false;
-        delivered = false; saved = false; pendingFingerprint = null;
-        BluetoothGatt closing = gatt; gatt = null; writer = null; selected = null;
+    private void closeGatt() {
+        main.removeCallbacks(operationTimeout); main.removeCallbacks(mtuTimeout); mtuPending = false;
+        BluetoothGatt closing = gatt; gatt = null; writer = null;
         commands.clear(); awaitingWrite = false; decoder.reset();
         if (closing != null) {
             try { closing.disconnect(); closing.close(); } catch (SecurityException ignored) { }
         }
     }
+    private void cleanup() {
+        generation++; busy = false; stopScan();
+        main.removeCallbacks(sessionTimeout); main.removeCallbacks(finishTimeout);
+        if (reconnectTask != null) main.removeCallbacks(reconnectTask);
+        reconnectTask = null;
+        delivered = false; saved = false; pendingFingerprint = null; pendingBroadcastFingerprint = null;
+        pendingMeasurement = null; pendingFrame = null; selected = null; broadcastGate.resetSession();
+        closeGatt();
+    }
     private void fail(String message) {
         if (saved) { record("Acknowledgment incomplete: " + message); finishSaved(); return; }
-        record("ERROR " + message); cleanup(); listener.onError(message);
+        record("ERROR " + message); cleanup(); changeState(State.ERROR, message); listener.onError(message);
     }
 }

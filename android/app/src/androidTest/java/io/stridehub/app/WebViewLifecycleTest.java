@@ -106,7 +106,7 @@ public final class WebViewLifecycleTest extends ActivityInstrumentationTestCase2
             assertEquals(View.VISIBLE, browser.notice.getVisibility());
             assertTrue(browser.status.getText().toString().contains("连接失败"));
             assertEquals(View.VISIBLE, browser.tabs.getVisibility());
-            assertEquals("采集", ((android.widget.Button)browser.tabs.getChildAt(4)).getText().toString());
+            assertEquals("称重", ((android.widget.Button)browser.tabs.getChildAt(4)).getText().toString());
         });
     }
 

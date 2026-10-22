@@ -201,5 +201,15 @@ public final class LocalStore extends SQLiteOpenHelper {
         preferences.edit().putInt("height",p.heightCm).putString("birth",p.birthDate).putBoolean("male",p.male).putInt("userId",p.userId).putBoolean("complete",true).apply();
     }
     public String device(){return preferences.getString("device",null);}
-    public void rememberDevice(String address){preferences.edit().putString("device",address).apply();}
+    public String deviceName(){return preferences.getString("deviceName","我的体脂秤");}
+    public String deviceType(){return preferences.getString("deviceType","unknown");}
+    public boolean automaticWeighing(){return preferences.getBoolean("automaticWeighing",true);}
+    public void setAutomaticWeighing(boolean enabled){preferences.edit().putBoolean("automaticWeighing",enabled).apply();}
+    public void rememberDevice(String address){rememberDevice(address,"我的体脂秤","unknown");}
+    public void rememberDevice(String address,String name,String type){
+        SharedPreferences.Editor edit=preferences.edit().putString("device",address);
+        if(address==null)edit.remove("deviceName").remove("deviceType");
+        else{edit.putString("deviceName",name==null||name.isEmpty()?"我的体脂秤":name);edit.putString("deviceType",type==null?"unknown":type);}
+        edit.apply();
+    }
 }

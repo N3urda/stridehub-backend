@@ -81,23 +81,7 @@ public final class YunmaiProtocol {
         return validWeight(frame.weightKg) ? frame : null;
     }
     public static Frame parseAdvertisement(int manufacturerId, byte[] payload, String address, boolean hasYunmaiService) {
-        // These fields are product/type metadata, not a fixed three-byte signature.
-        // The supplied APK uses one layout for these known broadcast products.
-        if (payload == null || payload.length != 14 || address == null) return null;
-        int product = u(payload[4]);
-        boolean knownProduct = product == 2 || product == 5 || product == 11;
-        // Preserve the previously supported X format when its service is omitted.
-        boolean legacyX = product == 11 && u(payload[5]) == 0x74 && u(payload[6]) == 0x17;
-        if (!(hasYunmaiService && knownProduct) && !legacyX) return null;
-        if (checksum(payload, 7, 13) != u(payload[13])) return null;
-        String[] mac = address.split(":");
-        if (mac.length != 6) return null;
-        try {
-            int[] octets = new int[6];
-            for (int i=0;i<6;i++) { if (mac[i].length()!=2) return null; octets[i]=Integer.parseInt(mac[i],16); }
-            if (manufacturerId != ((octets[4]<<8)|octets[5])) return null;
-            for (int i=0;i<4;i++) if (u(payload[i]) != octets[3-i]) return null;
-        } catch (NumberFormatException e) { return null; }
+        if (!isBroadcastAdvertisement(manufacturerId, payload, address, hasYunmaiService)) return null;
         int state = u(payload[8]);
         if (state < 1 || state > 3) return null;
         Frame frame = new Frame(); frame.broadcast = true; frame.raw = payload.clone();
@@ -106,6 +90,28 @@ public final class YunmaiProtocol {
         frame.impedance = be16(payload, 11);
         if (!validImpedance(frame.impedance)) frame.impedance = 0;
         return validWeight(frame.weightKg) ? frame : null;
+    }
+    /** Device identity remains valid while the platform is empty or the scale sends its idle packet. */
+    public static boolean isBroadcastAdvertisement(int manufacturerId, byte[] payload, String address, boolean hasYunmaiService) {
+        // These fields are product/type metadata, not a fixed three-byte signature.
+        // The supplied APK uses one layout for these known broadcast products.
+        if (payload == null || payload.length != 14 || address == null) return false;
+        int product = u(payload[4]);
+        boolean knownProduct = product == 2 || product == 5 || product == 11;
+        // Preserve the previously supported X format when its service is omitted.
+        boolean legacyX = product == 11 && u(payload[5]) == 0x74 && u(payload[6]) == 0x17;
+        if (!(hasYunmaiService && knownProduct) && !legacyX) return false;
+        if (checksum(payload, 7, 13) != u(payload[13])) return false;
+        String[] mac = address.split(":");
+        if (mac.length != 6) return false;
+        try {
+            int[] octets = new int[6];
+            for (int i=0;i<6;i++) { if (mac[i].length()!=2) return false; octets[i]=Integer.parseInt(mac[i],16); }
+            if (manufacturerId != ((octets[4]<<8)|octets[5])) return false;
+            for (int i=0;i<4;i++) if (u(payload[i]) != octets[3-i]) return false;
+        } catch (NumberFormatException e) { return false; }
+        int state = u(payload[8]);
+        return state >= 0 && state <= 3;
     }
     public static byte[] userCommand(Profile profile, long now) {
         String error = profile == null ? "请填写身体资料" : profile.validationError(now);
@@ -134,6 +140,9 @@ public final class YunmaiProtocol {
         return upper.startsWith("YUNMAI-SIGNAL") || upper.startsWith("YUNMAI-IS")
                 || upper.startsWith("YUNMAI-ADV") || upper.startsWith("YUNMAI-SCALE")
                 || upper.startsWith("YUNMAI-TZC") || upper.startsWith("ALIBABA-M1502");
+    }
+    public static boolean isBroadcastName(String name) {
+        return name != null && name.toUpperCase(Locale.ROOT).startsWith("YUNMAI-ADV");
     }
     /** The device timestamp in raw makes a later same-weight measurement a different event. */
     public static String replayFingerprint(Frame frame, String address) {

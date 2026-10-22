@@ -280,7 +280,7 @@ def main():
     for label, expected in [('身体', '身体与恢复'), ('运动', '每一次出发，都有迹可循。'), ('计划', '训练、饮食与目标')]:
         tap(label)
         wait_contains(expected)
-    tap('采集')
+    tap('称重')
     wait_contains('身体记录')
     tap('返回 StrideHub')
     report('native overview, body, running, plans and collection navigation opens within one app')

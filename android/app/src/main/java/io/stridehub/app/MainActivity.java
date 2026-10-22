@@ -46,6 +46,8 @@ public final class MainActivity extends Activity {
     private int generation;
     private boolean failedPage;
     private String retryUrl;
+    private static final int WEIGH_SHORTCUT = 7401;
+    private boolean awaitingWeighing;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -67,9 +69,22 @@ public final class MainActivity extends Activity {
                     android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT, this::handleBack);
         }
         transfers = new FileTransfers(this);
+        WeighingShortcut.register(this);
         username = preferences.getString("username", "");
         allowHttp = preferences.getBoolean("http", false);
         remember = preferences.getBoolean("remember", true);
+        awaitingWeighing = state != null && state.getBoolean("awaitingWeighing");
+        if (state == null && WeighingShortcut.ACTION.equals(getIntent().getAction())) {
+            getIntent().setAction(Intent.ACTION_MAIN);
+            awaitingWeighing = true;
+            startActivityForResult(new Intent(this, io.stridehub.app.scale.WeighingActivity.class), WEIGH_SHORTCUT);
+        }
+        // An offline weighing shortcut must not restore an expired web session in the background.
+        if (awaitingWeighing) return;
+        restoreConnection();
+    }
+
+    private void restoreConnection() {
         String address = preferences.getString("server", "");
         if (!address.isEmpty() && remember) {
             try {
@@ -220,7 +235,7 @@ public final class MainActivity extends Activity {
 
         @Override public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
             if (browser == null || view != browser.web) return;
-            if (request.isForMainFrame()) fail("连接失败，请检查手机网络和服务器。可重试，或打开「采集」离线记录体重。");
+            if (request.isForMainFrame()) fail("连接失败，请检查手机网络和服务器。可重试，或打开「称重」离线记录体重。");
         }
 
         @Override public void onReceivedHttpError(WebView view, WebResourceRequest request, WebResourceResponse response) {
@@ -335,7 +350,13 @@ public final class MainActivity extends Activity {
     }
 
     @Override protected void onActivityResult(int request, int result, Intent data) {
+        if (request == WEIGH_SHORTCUT) { awaitingWeighing = false; restoreConnection(); return; }
         if (!transfers.result(request, result, data)) super.onActivityResult(request, result, data);
+    }
+
+    @Override protected void onSaveInstanceState(Bundle out) {
+        super.onSaveInstanceState(out);
+        out.putBoolean("awaitingWeighing", awaitingWeighing);
     }
 
     @Override protected void onPause() {

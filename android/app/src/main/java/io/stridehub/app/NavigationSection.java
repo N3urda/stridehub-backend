@@ -5,7 +5,7 @@ import java.net.URI;
 /** Matches actual loaded pages, including installation subdirectories and filtered views. */
 final class NavigationSection {
     static final String HOME = "/admin/insights";
-    static final String[] LABELS = {"总览", "身体", "运动", "计划", "采集"};
+    static final String[] LABELS = {"总览", "身体", "运动", "计划", "称重"};
     static final String[] PATHS = {HOME, "/admin/health", "/admin/running", "/admin/plans", "native:weight"};
 
     static boolean isHome(ServerAddress server, String url) {
