@@ -13,6 +13,20 @@ class WorkoutParityTest {
         listOf(6,9,10,49).forEach {sport->assertFalse(WorkoutPresentation.canAssociate(WorkoutPresentation.zepp(JSONObject(cloud.toString()).put("sportType",sport),"zepp-ineligible")))}
         listOf("Walk","Ride","Other").forEach {sport->assertFalse(WorkoutPresentation.canAssociate(JSONObject().put("sportType",sport)))}
     }
+    @Test fun olderRunAssociationUsesDirectAuthoritativeLookupOutsideNewest500Candidates() {
+        val oldId="activity-old-eligible-run"
+        val newestCandidates=(1..500).map {"activity-newer-$it"}
+        assertFalse(oldId in newestCandidates)
+        val directResponses=mapOf("/api/v1/activities/$oldId" to JSONObject("{\"id\":\"$oldId\",\"name\":\"Older run\",\"sportType\":\"Run\",\"distanceInMeter\":5000,\"movingTimeInSeconds\":1800}"))
+        val requestedPath=WorkoutPresentation.associationPath(oldId)
+        val response=checkNotNull(directResponses[requestedPath])
+        val current=WorkoutPresentation.associationSummary(oldId,response)
+        assertEquals(oldId,current.getString("id"));assertTrue(WorkoutPresentation.canAssociate(current))
+        assertFalse(WorkoutPresentation.canAssociate(WorkoutPresentation.associationSummary(oldId,JSONObject(response.toString()).put("sportType","Ride"))))
+        val cloudId="zepp-older-run"
+        assertEquals("/api/v1/health/zepp/workouts/$cloudId",WorkoutPresentation.associationPath(cloudId))
+        assertTrue(WorkoutPresentation.canAssociate(WorkoutPresentation.associationSummary(cloudId,fixture("zepp-workout-summary-native"))))
+    }
     @Test fun confirmedSourcesRemainNavigableWithoutChangingCanonicalTrainingIdentity() {
         val merged=JSONObject("{\"id\":\"import-1\",\"sources\":[{\"source\":\"import\",\"id\":\"import-1\"},{\"source\":\"zepp\",\"id\":\"zepp-cloud-1\"}],\"aliases\":[\"import-1\",\"zepp-cloud-1\"],\"sourceLink\":{\"id\":\"zepp-cloud-1\",\"version\":1}}")
         assertEquals(setOf("import-1","zepp-cloud-1"),WorkoutPresentation.sources(merged).map {it.getString("id")}.toSet())

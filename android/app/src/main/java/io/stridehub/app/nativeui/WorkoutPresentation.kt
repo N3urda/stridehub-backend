@@ -19,6 +19,8 @@ object WorkoutPresentation {
         put("durationMinutes",number(source,"durationSeconds")?.div(60) ?: JSONObject.NULL)
         put("averageHeartRate",number(source,"averageHeartRateBpm") ?: JSONObject.NULL)
     }
+    fun associationPath(canonicalId:String):String = if(canonicalId.startsWith("zepp-")) "/api/v1/health/zepp/workouts/"+encoded(canonicalId) else "/api/v1/activities/"+encoded(canonicalId)
+    fun associationSummary(canonicalId:String,source:JSONObject):JSONObject = if(canonicalId.startsWith("zepp-")) zepp(source,canonicalId) else imported(source)
     fun canAssociate(current:JSONObject)=current.optString("sportType") in listOf("Run","TrailRun","VirtualRun")
     fun sources(preview:JSONObject):List<JSONObject> {
         val rows=preview.array("sources").toMutableList()

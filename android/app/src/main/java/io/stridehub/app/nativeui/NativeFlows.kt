@@ -161,9 +161,10 @@ private fun activityFields(options:JSONObject):List<FormField> {
             data.array("items").forEach {activity->val id=activity.getString("id");Card {Row(Modifier.padding(12.dp),verticalAlignment=Alignment.CenterVertically){Checkbox(id in selected,{checked->selected=if(checked) selected+id else selected-id});Column {Text(activity.text("name"));Text("${activity.text("startAt")} · ${activity.text("distanceKm")} km",style=MaterialTheme.typography.bodySmall)}}}}
             Button(onClick={vm.action {repo->repo.mutate("/api/v1/training/sessions/${encoded(planned.getString("id"))}/link","POST",JSONObject().put("version",planned.get("version")).put("activityIds",JSONArray(selected)));vm.pop();vm.pop();vm.message="运动关联已保存"}},enabled=!vm.busy,modifier=Modifier.fillMaxWidth()){Text("保存关联 (${selected.size})")}
         }}
-    } else NativeData(vm,"/api/v1/training/activities") {eligible->
+    } else NativeData(vm,WorkoutPresentation.associationPath(r.getString("id"))) {source->
         val target=r.getString("id")
-        if(eligible.array("items").none {it.text("id")==target}) PageColumn {InfoCard("此运动不能关联跑步课表","服务器当前支持的候选中没有这条记录。仅跑步、越野跑与室内跑可关联；记录类型可能已修改，请返回刷新。")}
+        val current=WorkoutPresentation.associationSummary(target,source)
+        if(!WorkoutPresentation.canAssociate(current)) PageColumn {InfoCard("此运动不能关联跑步课表","当前记录类型为${sportLabel(current.text("sportType"))}。仅跑步、越野跑与室内跑可关联；请返回刷新记录。")}
         else NativeData(vm,"/api/v1/training/sessions") {data->PageColumn {
         SectionTitle("选择训练课表","把这次运动关联到已保存的训练。")
         data.array("items").forEach {session->InfoCard(session.text("title"),session.text("startAt")){vm.action {repo->val ids=session.optJSONArray("activityIds") ?: JSONArray();val target=r.getString("id");if((0 until ids.length()).none {ids.optString(it)==target}) ids.put(target);repo.mutate("/api/v1/training/sessions/${encoded(session.getString("id"))}/link","POST",JSONObject().put("version",session.get("version")).put("activityIds",ids));vm.pop();vm.message="已关联课表"}}}
