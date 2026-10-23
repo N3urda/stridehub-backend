@@ -2,6 +2,9 @@
 package io.stridehub.app.nativeui
 
 import android.app.Application
+import android.app.Activity
+import android.content.ContextWrapper
+import androidx.core.view.WindowCompat
 import android.content.Context
 import android.content.Intent
 import android.provider.OpenableColumns
@@ -82,6 +85,15 @@ class AppModel(app:Application, private val state:SavedStateHandle):AndroidViewM
     val preferences=context.getSharedPreferences("native-ui",Context.MODE_PRIVATE)
     var theme by rememberSaveable { mutableStateOf(preferences.getString("theme","system") ?: "system") }
     val dark=theme=="dark" || (theme=="system" && isSystemInDarkTheme())
+    val activity=remember(context) {context.hostActivity()}
+    SideEffect {
+        activity?.window?.let {window->
+            WindowCompat.getInsetsController(window,window.decorView).apply {
+                isAppearanceLightStatusBars=!dark
+                isAppearanceLightNavigationBars=!dark
+            }
+        }
+    }
     val colors=if(dark) darkColorScheme(primary=Color(0xFFA9C7FF),secondary=Color(0xFFD1BCFA)) else lightColorScheme(primary=Color(0xFF2D5FC5),secondary=Color(0xFF7960AF),background=Color(0xFFF7F8FC),surface=Color(0xFFF7F8FC))
     MaterialTheme(colorScheme=colors) {
         val snackbar=remember { SnackbarHostState() }
@@ -220,3 +232,9 @@ class AppModel(app:Application, private val state:SavedStateHandle):AndroidViewM
     OutlinedButton(onClick=vm::logout,enabled=!vm.busy,modifier=Modifier.fillMaxWidth()){Text("退出 / 切换服务器或账号")}
 }}
 fun statusLabel(value:String)=mapOf("deleted" to "已删除","queued" to "已排队","running" to "正在处理","syncing" to "正在同步","success" to "已完成","partial" to "部分完成","no_data" to "没有新数据","failed" to "失败","interrupted" to "已中断","skipped" to "已跳过","idle" to "待同步","not_configured" to "尚未配置","auth_required" to "需重新授权","planned" to "已计划","completed" to "已完成","cancelled" to "已取消","active" to "进行中","pending" to "待执行","draft" to "草稿","paused" to "已暂停")[value] ?: value
+
+private fun Context.hostActivity():Activity? = when(this) {
+    is Activity -> this
+    is ContextWrapper -> if(baseContext===this) null else baseContext.hostActivity()
+    else -> null
+}
