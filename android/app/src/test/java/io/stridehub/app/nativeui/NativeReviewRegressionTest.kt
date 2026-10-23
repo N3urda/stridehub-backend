@@ -60,6 +60,18 @@ class NativeReviewRegressionTest {
         assertFalse(ChartData.breakBefore(rows,1,60.0));assertTrue(ChartData.breakBefore(rows,2,60.0))
         assertTrue(ChartData.breakBefore(rows,1,null)) // Unknown cadence does not imply continuous coverage.
     }
+    @Test fun moreThanThirtySparseSamplesRemainVisibleAsStandaloneMeasuredPoints() {
+        val start=OffsetDateTime.parse("2026-10-23T08:00:00+08:00")
+        val rows=(0 until 45).map {index->JSONObject().put("at",start.plusSeconds(index*120L).toString()).put("bpm",70+index%10)}
+        for(cadence in listOf(null,1.0,60.0)) {
+            val drawnSegments=ChartData.plotSegments(rows,"bpm",cadence)
+            assertEquals("Every measured sample gets a visible standalone marker",45,drawnSegments.size)
+            assertTrue(drawnSegments.all {it.size==1})
+            assertEquals((0 until 45).toList(),drawnSegments.flatten())
+        }
+        val withMissing=rows.toMutableList().apply {set(20,JSONObject().put("at",start.plusSeconds(2400).toString()).put("bpm",JSONObject.NULL))}
+        assertEquals(44,ChartData.plotSegments(withMissing,"bpm",null).flatten().size)
+    }
     @Test fun actualZeppParserSummaryKeysProducePaceAndAscentWithoutInventingUnknowns() {
         // Matches ZeppWorkoutParser.summary output: distance/duration yield speed, and ascentMeters.
         val parserOutput=JSONObject(requireNotNull(javaClass.getResource("/zepp-workout-summary-native.json")).readText())

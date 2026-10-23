@@ -29,6 +29,19 @@ object ChartData {
         val value=row.opt(key)
         when(value){is Number->value.toDouble();is String->runCatching {OffsetDateTime.parse(value).toEpochSecond().toDouble()}.getOrNull() ?: runCatching {LocalDate.parse(value).toEpochDay().toDouble()}.getOrNull();else->null}
     } ?: index.toDouble()
+    fun plotSegments(rows:List<JSONObject>,key:String,expectedCadenceSeconds:Double?):List<List<Int>> {
+        val segments=mutableListOf<MutableList<Int>>()
+        var current:MutableList<Int>?=null
+        values(rows,key).forEachIndexed {index,value->
+            if(value==null) current=null else {
+                if(current==null || breakBefore(rows,index,expectedCadenceSeconds)) {
+                    current=mutableListOf();segments.add(current!!)
+                }
+                current!!.add(index)
+            }
+        }
+        return segments
+    }
     fun breakBefore(rows:List<JSONObject>,index:Int,expectedCadenceSeconds:Double?):Boolean {
         if(index==0) return true
         val previous=rows[index-1];val current=rows[index]
@@ -55,16 +68,15 @@ object ChartData {
             val xs=rows.mapIndexed {i,row->ChartData.x(row,i)};val xLow=xs.minOrNull() ?: 0.0;val xHigh=xs.maxOrNull()?.takeIf {it>xLow} ?: xLow+1
             Canvas(Modifier.fillMaxWidth().height(155.dp).semantics {contentDescription="$title，最低 ${"%.1f".format(min)}，最高 ${"%.1f".format(max)}，${known.size} 个有效测量点。缺失数据留空。"}.pointerInput(rows,key){detectTapGestures {point->val target=xLow+point.x/size.width*(xHigh-xLow);selected=xs.indices.minByOrNull {abs(xs[it]-target)} ?: -1}}) {
                 (0..3).forEach {i->val y=size.height*i/3;drawLine(grid,Offset(0f,y),Offset(size.width,y),1f)}
-                var previous:Offset?=null;var previousX:Double?=null
-                values.forEachIndexed {index,v->
-                    if(v==null) {previous=null;previousX=null} else {
-                        val point=Offset(((xs[index]-xLow)/(xHigh-xLow)*size.width).toFloat(),(size.height-(v-low)/(high-low)*size.height).toFloat())
-                        val dateGap=ChartData.breakBefore(rows,index,expectedCadenceSeconds)
-                        if(previous!=null && !dateGap) drawLine(color,previous!!,point,3.dp.toPx())
-                        if(values.size<30 || index==selected) drawCircle(color,if(index==selected) 5.dp.toPx() else 2.5.dp.toPx(),point)
-                        previous=point;previousX=xs[index]
+                fun position(index:Int)=Offset(((xs[index]-xLow)/(xHigh-xLow)*size.width).toFloat(),(size.height-(values[index]!!-low)/(high-low)*size.height).toFloat())
+                ChartData.plotSegments(rows,key,expectedCadenceSeconds).forEach {segment->
+                    segment.zipWithNext().forEach {(a,b)->drawLine(color,position(a),position(b),3.dp.toPx())}
+                    segment.forEach {index->
+                        // Every isolated real sample remains visible regardless of total sample count.
+                        if(segment.size==1 || values.size<30 || index==selected) drawCircle(color,if(index==selected) 5.dp.toPx() else 2.5.dp.toPx(),position(index))
                     }
                 }
+
             }
             if(selected in rows.indices) Text("${rows[selected].text("date",rows[selected].text("at",rows[selected].text("seconds","样本 ${selected+1}")))} · ${values[selected]?.let {"%.2f".format(it)} ?: "缺失"}",style=MaterialTheme.typography.bodySmall)
             Text("点按查看测量值 · 缺失值保留空白",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
