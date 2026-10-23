@@ -82,13 +82,31 @@ def wait(label,timeout=30,partial=False):
     raise AssertionError('Expected native text: '+label)
 
 def fill(label,value):
-    root=ui()
-    field=next(n for n in root.iter('node') if n.get('class')=='android.widget.EditText' and (n.get('content-desc')==label or any(label==child.get('text') for child in n.iter('node'))))
+    def fields(root):
+        return [node for node in root.iter('node') if node.get('class')=='android.widget.EditText' and (node.get('content-desc')==label or any(label==child.get('text') for child in node))]
+    # A partially clipped field may expose only its label at the navigation
+    # bar. Bring its input area into view before typing into the focused editor.
+    for _ in range(12):
+        candidates=fields(ui())
+        if candidates:
+            field=candidates[-1]
+            x,y,xx,yy=map(int,re.findall(r'\d+',field.get('bounds')))
+            if yy-y>=100 and y>=250 and yy<=1500:break
+            if y<250:
+                adb('shell','input','swipe','540','500','540','1000','250');continue
+        adb('shell','input','swipe','540','1350','540','850','250')
+    else:raise AssertionError('Native input is not fully visible: '+label)
     adb('shell','input','tap',*point(field))
+    if not any(node.get('focused')=='true' for node in fields(ui())):
+        raise AssertionError('Native input did not receive focus: '+label)
     adb('shell','input','keycombination','113','29')
     adb('shell','input','keyevent','67')
     adb('shell','input','text',value.replace(' ','%s'))
-    adb('shell','input','keyevent','4')
+    # Hardware-keyboard configurations may leave the IME hidden. An
+    # unconditional Back would then leave the editor rather than dismiss it.
+    time.sleep(.35)
+    if 'mInputShown=true' in adb('shell','dumpsys','input_method').decode():
+        adb('shell','input','keyevent','4')
 
 def tab(label):
     tap(label)
