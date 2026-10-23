@@ -59,6 +59,7 @@ import java.util.Collections;
 public final class WeighingActivity extends Activity implements ScaleClient.Listener {
     private int PAPER=0xfff2f5f9, INK=0xff132b46, MUTED=0xff57657a, GREEN=0xff4666ed, SOFT=0xffe8ecfc, LINE=0xffe1e5ef;
     private int SURFACE=Color.WHITE, ON_ACCENT=Color.WHITE;
+    private boolean darkTheme;
     private final int[] pageScroll=new int[4];
     private static final int PERMISSIONS=51, ENABLE_BT=52, EXPORT=53, IMPORT=54;
     private LocalStore store;
@@ -85,10 +86,10 @@ public final class WeighingActivity extends Activity implements ScaleClient.List
     private final LinkedHashMap<String,ScaleClient.Device> found=new LinkedHashMap<>();
 
     @Override public void onCreate(Bundle saved) {
-        boolean dark=(getResources().getConfiguration().uiMode & android.content.res.Configuration.UI_MODE_NIGHT_MASK)==android.content.res.Configuration.UI_MODE_NIGHT_YES;
-        if(dark)setTheme(android.R.style.Theme_Material_NoActionBar);
+        darkTheme=resolveDarkTheme(this);
+        setTheme(darkTheme?android.R.style.Theme_Material_NoActionBar:android.R.style.Theme_Material_Light_NoActionBar);
         super.onCreate(saved);
-        if(dark){ON_ACCENT=0xff132b46;PAPER=0xff101822;INK=0xffe4ecf7;MUTED=0xffa4b0c2;GREEN=0xffa6b7ff;SOFT=0xff273658;LINE=0xff354258;SURFACE=0xff1b2634;}
+        if(darkTheme){ON_ACCENT=0xff132b46;PAPER=0xff101822;INK=0xffe4ecf7;MUTED=0xffa4b0c2;GREEN=0xffa6b7ff;SOFT=0xff273658;LINE=0xff354258;SURFACE=0xff1b2634;}
         if(saved!=null){int[] positions=saved.getIntArray("pageScroll");if(positions!=null)System.arraycopy(positions,0,pageScroll,0,Math.min(4,positions.length));}
         if(saved!=null) { page=saved.getInt("page"); days=saved.getInt("days",30); try{selectedMetric=Metric.valueOf(saved.getString("metric","WEIGHT"));}catch(IllegalArgumentException ignored){} forcePicker=saved.getBoolean("forcePicker"); exportKind=saved.getString("exportKind","csv"); }
         if(saved!=null) {int average=saved.getInt("weightAverageDays",0);weightAverageDays=average==7||average==30?average:0;}
@@ -102,10 +103,15 @@ public final class WeighingActivity extends Activity implements ScaleClient.List
         scroll.post(()->scroll.scrollTo(0,pageScroll[page]));
         if(saved!=null&&saved.getBoolean("manualOpen"))showManual(saved);
     }
+    static boolean resolveDarkTheme(android.content.Context context) {
+        String selected=context.getSharedPreferences("native-ui",MODE_PRIVATE).getString("theme","system");
+        if("dark".equals(selected))return true;
+        if("light".equals(selected))return false;
+        return (context.getResources().getConfiguration().uiMode & android.content.res.Configuration.UI_MODE_NIGHT_MASK)==android.content.res.Configuration.UI_MODE_NIGHT_YES;
+    }
     private void buildShell() {
         getWindow().setStatusBarColor(PAPER); getWindow().setNavigationBarColor(PAPER);
-        boolean dark=(getResources().getConfiguration().uiMode & android.content.res.Configuration.UI_MODE_NIGHT_MASK)==android.content.res.Configuration.UI_MODE_NIGHT_YES;
-        getWindow().getDecorView().setSystemUiVisibility(dark?0:View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
+        getWindow().getDecorView().setSystemUiVisibility(darkTheme?0:View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
         shell=column(); shell.setBackgroundColor(PAPER);
         shell.setOnApplyWindowInsetsListener((view,insets)-> {
             if(Build.VERSION.SDK_INT>=35) { android.graphics.Insets system=insets.getInsets(WindowInsets.Type.systemBars()); view.setPadding(system.left,system.top,system.right,system.bottom); }
