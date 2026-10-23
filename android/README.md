@@ -4,6 +4,8 @@
 
 ## 使用
 
+NAS 网页右上角的「安卓 App」（手机端在更多操作中）提供下载、版本和连接说明。安装包未随部署发布时，页面会明确提示尚未发布。
+
 1. 安装签名 APK（Android 8.0 或更新版本），允许当前文件来源安装应用。
 2. 填写部署地址，例如 `https://sport.example.com`，以及网页版管理员用户名、密码。不要填写 `/admin/login` 或 API 路径。
 3. 登录后进入「总览」，底部可切换身体、运动、计划和称重，当前页面有选中标记。「更多」中可进入饮食、减重、今日安排与反馈、文件导入、刷新、管理原始运动记录、切换服务器或退出本机登录。
@@ -18,6 +20,17 @@
 ## 构建
 
 固定版本：JDK 17、Gradle 8.13、Android Gradle Plugin 8.13.2、SDK 36、Build Tools 35.0.0。Gradle wrapper 含发行包 SHA-256 校验。参考 [Android 官方兼容表](https://developer.android.com/build/releases/agp-8-13-0-release-notes)。
+
+发布 NAS 镜像时，将使用原证书签名的正式 APK 与版本清单一起放入镜像的 `public/downloads/`：
+
+```sh
+python3 tools/publish-android-release.py \
+  --apk /path/to/StrideHub-release.apk \
+  --build-tools "$ANDROID_HOME/build-tools/35.0.0" \
+  --output /path/to/image-context/public/downloads
+```
+
+工具校验签名、包名和非调试属性，从 APK 读取版本与最低 Android 版本，生成 SHA-256 和 `android-release.json`。同版本已有不同内容时会拒绝覆盖。页面仅在清单与实际安装包的大小、摘要一致时提供下载；未来更新 APK 时重新执行此步骤，无需改页面版本文案。安装包和部署清单不提交 Git。
 
 ```sh
 # ANDROID_HOME 指向已安装的 SDK；也可以配置不入库的 local.properties。

@@ -52,4 +52,5 @@ phpstan.neon
 *.keystore
 __pycache__/
 ###< Android client ###
+/public/downloads/
 ###< docs ###

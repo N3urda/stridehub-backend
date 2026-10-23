@@ -37,3 +37,6 @@
 .stridehub-app .compact-metric .metric-label,.stridehub-app .compact-metric .metric-note{color:#5b6d83}
 #health-app .weight-notice:not(.health-error),#health-app .weight-form-help{color:var(--muted)}
 .hub-skip-link:focus:not(:focus-visible){top:-100px}
+
+.hub-app-link{display:inline-flex;align-items:center;min-height:44px;color:#657d9d!important;font-size:12px;font-weight:600;text-decoration:none!important;white-space:nowrap}.hub-app-link[aria-current=page],.hub-mobile-menu a[aria-current=page]{color:var(--hub-blue)!important}.hub-mobile-menu a[aria-current=page]{background:#edf1ff}
+@media(max-width:720px){.hub-app-link{display:none}}
