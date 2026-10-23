@@ -1,27 +1,119 @@
-# StrideHub Android
+# StrideHub Android 0.3.0
 
-可安装的 Android 客户端，连接同一个 StrideHub 后端。原生连接页和导航承载现有手机管理网页，账号、训练、运动记录和健康背景继续由后端保存。
+Android 8.0 及更新版本的全原生客户端。主界面使用 Kotlin、Jetpack Compose 和 Material 3；称重继续复用已有原生 Java、BLE 和 SQLite 实现。登录、图表、表单、文件导入及业务详情均通过 JSON API 完成，不依赖 WebView、网页脚本或浏览器 cookie。
 
-## 使用
+正式包名为 `io.stridehub.app`，当前 `versionName` 为 `0.3.0`、`versionCode` 为 `4`；调试包使用独立包名 `io.stridehub.app.debug`。
 
-NAS 网页右上角的「安卓 App」（手机端在更多操作中）提供下载、版本和连接说明。安装包未随部署发布时，页面会明确提示尚未发布。
+## 安装与连接
 
-1. 安装签名 APK（Android 8.0 或更新版本），允许当前文件来源安装应用。
-2. 填写部署地址，例如 `https://sport.example.com`，以及网页版管理员用户名、密码。不要填写 `/admin/login` 或 API 路径。
-3. 登录后进入「总览」，底部可切换身体、运动、计划和称重，当前页面有选中标记。「更多」中可进入饮食、减重、今日安排与反馈、文件导入、刷新、管理原始运动记录、切换服务器或退出本机登录。
-4. 「保持登录 7 天」使用后端的 remember-me cookie；过期后重新输入密码。APK 不保存密码，不需要配置 API key。
+先升级 StrideHub 后端，再安装此版 APK。后端必须提供移动会话、称重配对和移动业务接口。连接时会检查 `apiVersion=1` 和 `mobile-workflows` 能力；旧后端缺少接口时会显示升级提示。
 
-如果是全新后端，导入页可能先进入原有的运动员资料初始化页面；完成该页面后即可上传。请保持 Android System WebView 更新，图表和编辑器使用它运行。
+1. 安装使用原发布证书签名的 APK。已有正式版应覆盖安装，保留本机称重记录、测量 UUID 和同步队列。
+2. 填写后端根地址，例如 `https://sport.example.com`，以及现有管理员用户名、密码。不要填写 `/admin/login` 或 API 路径。安装在子目录时保留该子目录。
+3. 登录后使用「总览、身体、运动、计划」四个主栏目；「设置与更多」提供饮食、减重目标、健康背景、今日安排与反馈、文件导入、运动管理、同步和账号连接操作。
+4. 称重快捷按钮、登录页的离线称重入口和桌面长按快捷方式均可进入本机称重；离线称重不要求先连接 NAS。
 
-手机的 `localhost` / `127.0.0.1` 指手机自己。电脑开发实例目前只监听本机；请先让后端在手机可达的地址提供服务。真实手机推荐有效证书的 HTTPS。可信局域网 HTTP 需要勾选明确的允许项；它不会加密密码和数据。不要因为连接失败关闭证书验证，APK 也不会绕过证书错误。应用支持带安装子目录的 URL，后端及反向代理同样需要正确配置该子目录。
+移动会话最长七天，过期后重新输入密码。勾选保持登录时，token 使用 Android Keystore AES/GCM 加密保存；未勾选时仅在当前进程内持有。APK 不保存密码，也不需要用户复制服务器全局 API key。旧版网页登录状态不会转换为新移动会话，升级后需要重新登录。
 
-应用需要网络。课表写入、跑后反馈、运动对账和并发处理复用现有页面。系统文件选择器支持选择运动文件；上传格式和大小仍由后端决定。服务器同源的下载通过系统保存位置选择器保存，最多 256 MB，不跨源携带 cookie。当前没有离线编辑、原生手表同步、推送或后台自动训练规划；更新后端网页即可更新管理界面。
+手机上的 `localhost`、`127.0.0.1` 指手机自身。后端需在手机可达的网络地址提供服务。使用有效证书的 HTTPS；可信局域网 HTTP 需要在连接页明确允许，HTTP 不加密账号和健康数据。应用使用系统证书验证，不绕过证书错误，不跟随认证请求的重定向。
 
-## 构建
+NAS 网页的「安卓 App」下载入口读取发布清单。部署尚未包含安装包时会显示未发布；构建成功不代表 APK 已发布或后端已部署。
 
-固定版本：JDK 17、Gradle 8.13、Android Gradle Plugin 8.13.2、SDK 36、Build Tools 35.0.0。Gradle wrapper 含发行包 SHA-256 校验。参考 [Android 官方兼容表](https://developer.android.com/build/releases/agp-8-13-0-release-notes)。
+## 页面、缓存与保存
 
-发布 NAS 镜像时，将使用原证书签名的正式 APK 与版本清单一起放入镜像的 `public/downloads/`：
+总览展示最近真实记录、睡眠、身体、运动、下一项计划与同步状态。身体页提供睡眠、日指标、分钟心率、血压、身体测量和体重趋势。运动页提供日期和类型筛选、分页、来源与重复记录核对、详情、原生曲线与轨迹、计圈/分段、跑步分析及可用的 GPX 导出。计划页和常用记录入口复用服务器的训练、健康计划、饮食、减重目标、条目完成、训练关联和反馈规则。
+
+各主栏目保存自己的详情路径和页面状态。原生表单包含日期/时间、枚举和数值等输入；部分编辑能力由服务器按来源及导入模式决定。手工运动可在文件导入模式下新增；Zepp 直接来源的运动保持只读。删除运动前显示关联数据影响，有训练或来源合并关联时需先解除。
+
+健康 API 缓存与表单草稿放在独立的 Room 数据库 `native-health-v1.db`，按规范化服务器地址和账号隔离；不重建称重数据库 `tinyyumi.db`。已缓存的页面在连接失败时可继续显示，并标明缓存时间和离线状态。缺失测量保留缺失说明，不生成零值代替实际数据。
+
+训练、饮食、计划及运动修改需要服务器在线确认。保存失败不会显示成功；409/428 版本冲突保留草稿并提示核对服务器最新内容。普通健康修改不会在账号切换后盲目重放。称重有独立的持久上传队列，见下文。
+
+退出或切换账号/服务器立即清除本机移动凭据、当前账号健康缓存和草稿，并暂停称重同步。在线时同时撤销该移动会话；远端不可达时明确提示本机已退出，远端凭据仍受有效期限制。本机称重历史和原目的地队列保留，新账号不会接管旧账号记录。
+
+应用私有数据关闭系统备份和应用数据迁移。更换设备或卸载前，请通过称重 CSV 导出保留需要的本机数据。
+
+## 文件导入与服务器同步
+
+系统文件选择器支持 FIT、TCX、GPX，移动上传接口每个文件最多 25 MiB，仍受服务器/PHP 上传配置约束。原生 API 客户端单次响应上限为 16 MiB，过大时需缩小日期范围；GPX 通过原生保存位置选择器导出。上传进度完成和 HTTP 202 仅表示已排队；页面读取单文件回执，再显示成功、重复跳过、失败、中断或已删除。失败/中断可重试，重复提交不会重复排入同一文件。删除关联运动后，服务器清理保留的原文件并留下删除回执，重试不会重新创建它。
+
+Zepp 日数据、睡眠和运动同步提交为服务器持久任务，手机查询任务状态。App 退到后台不会取消已提交的任务；连接中断也不能作为任务失败的证明。重新连接后先刷新状态。未配置、认证失败、部分完成、没有数据和进程中断保留各自结果，不统一显示成成功。
+
+服务器需运行现有守护进程 `bin/console app:daemon:run`。`SystemDaemon` 自动每分钟执行 `bin/console app:mobile:workflows:run --limit=10`，无需另建移动同步定时任务；并发唤醒通过全局/单任务锁避开重复执行。文件导入仍由现有导入队列处理，文件模式下默认每五分钟运行一次。仅运行 Web 服务而没有 daemon 时，任务可能一直排队。
+
+回执和任务状态保存在现有数据库；重试原文件与进程锁位于 `watch/.uploads/mobile-imports/` 和 `watch/.uploads/mobile-locks/`。既有 Web/daemon 容器必须共享并持久化数据库和 `watch` 挂载。锁针对现有同一主机的 NAS/容器部署；多主机部署需要另行设计可靠的共享锁。
+
+移动接口概览如下，业务数据还复用已有健康、训练和运动 JSON API。所有移动响应保持 `private, no-store`，App 自行管理账号隔离缓存。
+
+| 接口 | 用途 |
+| --- | --- |
+| `POST /mobile/v1/sessions` | 原生账号登录及版本/能力检查 |
+| `GET /mobile/v1/session`、`DELETE /mobile/v1/session` | 查询及撤销当前移动会话 |
+| `POST /mobile/v1/collection/devices` | 用户确认后的原生称重配对/令牌轮换 |
+| `/api/v1/health/...`、`/api/v1/training/...` | 健康工作台、记录、计划、训练与版本化修改 |
+| `GET /api/v1/mobile/workouts` | 稳定分页的统一运动列表、筛选后的概览 |
+| `GET /api/v1/mobile/activity-options` | 允许的新增/编辑选项和单位 |
+| `/api/v1/mobile/activities[/{id}]` | 专用运动新增、查看、更新和删除接口 |
+| `GET /api/v1/mobile/activities/{id}/streams` | 各运动类型的曲线、轨迹、计圈与分段 |
+| `POST /api/v1/mobile/activities/{id}/enrich` | 按能力补充天气和地理信息 |
+| `/api/v1/mobile/imports[/{id}]`、`POST .../{id}/retry` | 上传、列表、单文件真实结果和幂等重试 |
+| `/api/v1/mobile/sync[/{id}]` | 提交和查询 daily/sleep/workouts 同步任务 |
+| `PUT /device/v1/weight/{measurementId}` | 独立称重设备凭据及持久测量回执 |
+
+统一运动列表接受 `page`、`limit`、`from`、`to` 和 `sportType=all|Run|Walk|Ride|Other`；类型过滤先于汇总和分页。更新/删除保留服务端版本校验，不开放通用管理命令接口。完整字段以对应服务及接口测试为准。
+
+## 自动称重、历史与 CSV
+
+「称重」首次选择体脂秤后记住设备，之后进入称重页自动寻找。搜索持续 90 秒，发现设备后最多等待两分钟；等待期间保持屏幕亮起，离开应用暂停，返回后继续未完成的等待。可主动暂停、关闭自动寻找或更换体脂秤。应用关闭后不会持续收秤，秤休眠时仍需唤醒。
+
+收到同次测量过程和稳定读数后自动保存；只收到稳定广播时要求确认归属，避免把秤重播的旧结果当成本次测量。本次实时读数和已保存历史分开展示，实时值明确标记尚未保存。手工补录支持日期与时间、字段错误提示和旋转后的草稿恢复；保存后先展示刚保存的记录。
+
+首次使用按 Android 版本申请附近设备权限或旧版扫描所需定位权限。BLE 不是安装前提，也不申请广泛存储权限。记录、历史、趋势和身体成分估算保存在本机，未配对或 NAS 不可达时仍可使用。
+
+旧 TinyYumi 的私有数据库属于另一包名，不能直接继承。请在旧 App 导出完整 CSV，再在本 App「称重 → 设置 → 导入旧 TinyYumi 记录」中选择文件。导入最多 8 MiB，整批事务保存；同一记录重复导入会跳过，已删除的导入记录不会因重放复活。保留测量时间、当时日期、资料快照和支持算法版本的历史估算；不支持的算法版本整批拒绝。CSV 不包含原始蓝牙报文，不能恢复该报文；导入不会覆盖当前资料或设备绑定。
+
+核对总条数、日期、体重和历史详情后再停用旧 App。尚未完成备份/同步时，不要卸载唯一保存记录的应用。迁入源码及许可证说明见 `TINYYUMI-ORIGIN.md`。
+
+### 称重配对与持久上传
+
+在称重设置中明确配对 NAS，才会上传本机稳定测量和导入历史；仅登录不会自动启用历史上传，实时 BLE 读数也不会上传。配对复用当前原生移动会话，通过 `/mobile/v1/collection/devices` 获取独立设备凭据；设备凭据使用 Android Keystore 加密保存，后续测量上传不使用移动账号 token。
+
+每条测量有持久 UUID 和采集时区偏移。SQLite 事务冻结规范化载荷及目的地绑定后再发送，重试沿用同一身份和内容。上传任务要求网络、可跨重启恢复，每轮最多处理十条记录；连接中断、超时及暂时故障保留原任务并退避重试。只有回执中的设备、测量 ID 匹配且未被删除时，才确认上传结果。手工日记录冲突、校验失败和服务器删除墓碑保持可见，不能自动覆盖或复活。
+
+退出、断开或切换目的地会停用设备凭据并取消当前调度；队列和不含秘密的原服务器/账号设备身份仍保留。明确回到相同服务器、相同账号并确认配对后，轮换同一设备令牌，恢复可恢复的原队列；已同步、冲突和终止错误不会被统一重置。其他账号不能接管旧队列。删除本机记录会取消尚未发送的任务；服务器已收到的副本需在 NAS 单独删除。
+
+## 构建与签名升级
+
+项目配置：JDK 17、Gradle 8.13、Android Gradle Plugin 8.13.2、Kotlin/Compose 插件 2.0.21、SDK 36、Build Tools 35.0.0。Gradle wrapper 包含发行包 SHA-256 校验；具体依赖版本以 Gradle 文件为准。
+
+```sh
+# 从仓库根目录准备 SDK；也可使用不入库的 android/local.properties。
+sdkmanager 'platforms;android-36' 'build-tools;35.0.0' 'platform-tools'
+cd android
+./gradlew --no-daemon testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest
+```
+
+调试 APK 为 `app/build/outputs/apk/debug/app-debug.apk`，测试 APK 为 `app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk`。GitHub Actions 的 **Android APK** 工作流运行单元测试、lint、调试/测试 APK 构建和 APK 原生边界检查，并保留调试 APK 与测试/lint 报告；CI 构建不等于模拟器或真机验收。
+
+正式升级必须使用与已安装版本相同的签名证书，并递增 `versionCode`。不要为本次升级重新生成签名密钥；新证书无法覆盖已有安装。卸载后重装会丢失私有本机数据，不是签名问题的升级方案。仅首次发布全新应用时创建一次密钥，并在仓库外妥善保存。
+
+通过私有环境配置以下四项，不提交密钥或密码，不把密码写入命令历史：
+
+- `STRIDEHUB_KEYSTORE`：原签名密钥库绝对路径
+- `STRIDEHUB_STORE_PASSWORD`：密钥库密码
+- `STRIDEHUB_KEY_ALIAS`：原密钥别名
+- `STRIDEHUB_KEY_PASSWORD`：私钥密码
+
+```sh
+# 在 android/ 目录执行；私有签名环境已准备好。
+./gradlew --no-daemon testDebugUnitTest lintDebug assembleRelease
+"$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs \
+  app/build/outputs/apk/release/app-release.apk
+```
+
+与上一版正式 APK 的证书摘要核对一致后，再做覆盖安装和升级数据核验。缺少签名配置时产出可能为 unsigned，不能当作可安装正式包。
+
+发布 NAS 镜像时，在仓库根目录把已核对签名的 APK 和版本清单放入镜像的 `public/downloads/`：
 
 ```sh
 python3 tools/publish-android-release.py \
@@ -30,74 +122,43 @@ python3 tools/publish-android-release.py \
   --output /path/to/image-context/public/downloads
 ```
 
-工具校验签名、包名和非调试属性，从 APK 读取版本与最低 Android 版本，生成 SHA-256 和 `android-release.json`。同版本已有不同内容时会拒绝覆盖。页面仅在清单与实际安装包的大小、摘要一致时提供下载；未来更新 APK 时重新执行此步骤，无需改页面版本文案。安装包和部署清单不提交 Git。
+发布工具检查有效签名、正式包名和非调试属性，从 APK 读取版本和最低 Android 版本，并生成 SHA-256 及 `android-release.json`；它不能替代与原签名证书的人工核对。同版本不同内容会拒绝覆盖。下载页仅在清单与实际 APK 的大小、摘要匹配时提供下载；安装包和部署清单不提交 Git。
+
+## 验证入口与实际验收边界
+
+`verifyNativeUi` 在 `preBuild` 和 `check` 前扫描生产 Java/Kotlin，拒绝恢复 WebView 创建、CookieManager 或网页脚本执行。APK 还需运行字节码门禁，覆盖打包后的代码及依赖：
 
 ```sh
-# ANDROID_HOME 指向已安装的 SDK；也可以配置不入库的 local.properties。
-sdkmanager 'platforms;android-36' 'build-tools;35.0.0' 'platform-tools'
-cd android
-./gradlew testDebugUnitTest lintDebug assembleDebug
+# 从仓库根目录执行。
+python3 tools/verify-native-apk.py \
+  android/app/build/outputs/apk/debug/app-debug.apk \
+  --dexdump "$ANDROID_HOME/build-tools/35.0.0/dexdump"
 ```
 
-调试包：`app/build/outputs/apk/debug/app-debug.apk`，包名 `io.stridehub.app.debug`。GitHub Actions 的 **Android APK** 工作流保留调试 APK 与检查报告，可在 Actions 中下载。它使用调试证书，单独安装，不覆盖正式版本。
+门禁检查嵌入浏览器构造/导航和旧 cookie 调用，不能单独证明所有页面和业务均已验收。`ServerAddressTest`/`CorePolicyJUnitTest`、`NativeContractTest`、原有称重核心和 CSV 测试由 `testDebugUnitTest` 运行。`app/src/androidTest/` 提供原生会话、Room 账号隔离、Compose 表单/图表、独立导航、旧称重库升级、离线入口、BLE 生命周期及上传队列/回执回归。
 
-正式包名 `io.stridehub.app`。创建一次自己的签名密钥，并保存到仓库外的私有位置：
+仪器测试使用 `androidx.test.runner.AndroidJUnitRunner`。只在专门的调试模拟器上运行，不能清除或覆盖用户正式应用/个人设备的数据：
 
 ```sh
-keytool -genkeypair -keystore /private/path/stridehub-release.jks \
-  -alias stridehub -keyalg RSA -keysize 3072 -validity 10000
+# 在 android/ 目录执行，并确认连接的是专用验收模拟器。
+./gradlew connectedDebugAndroidTest
 ```
 
-通过私有环境传入以下四项（不要提交到 Git，也不要直接把密码写入 shell 历史）：
-
-- `STRIDEHUB_KEYSTORE`：密钥文件绝对路径
-- `STRIDEHUB_STORE_PASSWORD`：密钥库密码
-- `STRIDEHUB_KEY_ALIAS`：密钥别名
-- `STRIDEHUB_KEY_PASSWORD`：私钥密码
+需要直接运行已构建测试 APK 时，安装到专用 `emulator-5556` 后使用：
 
 ```sh
-./gradlew testDebugUnitTest lintDebug assembleRelease
-"$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose \
-  app/build/outputs/apk/release/app-release.apk
+adb -s emulator-5556 install -r android/app/build/outputs/apk/debug/app-debug.apk
+adb -s emulator-5556 install -r android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+adb -s emulator-5556 shell am instrument -w \
+  io.stridehub.app.debug.test/androidx.test.runner.AndroidJUnitRunner
 ```
 
-没有签名配置时只能生成 unsigned 文件，不能把它当成可安装正式包。发布后要保留相同签名密钥，升级时增加 `versionCode`；丢失密钥将无法覆盖安装已有版本。正式版关闭 WebView 调试，应用没有 JS/native bridge、广泛存储权限或可供其他应用传入 URL 的深链接。
+以上 `adb` 路径以仓库根目录为工作目录。仪器测试会操作调试应用的数据；完整流程只应使用专用测试账号、合成数据、隔离数据库和真实隔离的 `watch` 挂载。测试文件选择器、后端导入和异步任务时，不能仅凭创建同名目录推定已经隔离。
 
-## 验证与数据处理
+`tests/e2e/native-android-upgrade.py` 专门验证已有 0.2.0 调试 APK（versionCode 2）到本版（versionCode 4）的覆盖升级。脚本固定检查专用 `stridehub_native` AVD、`emulator-5556` 和调试包，使用合成测量、原 UUID/冻结载荷、五种队列状态及删除墓碑作前后快照。准备好专用旧版夹具、同一调试签名和 APK 后，依次执行脚本的 `seed`、覆盖安装新 APK、`verify`；不要对个人应用运行该脚本。
 
-`ServerAddressTest`、`LoginScriptTest` 验证 URL、同源边界和脚本转义，`CorePolicyJUnitTest` 将它们接入 Gradle。`tests/e2e/android-login.cjs` 使用真实 Java 生成的脚本登录隔离后端，同时以合成页面测试错误表单与特殊字符。
+完整原生端到端验收入口为 `tests/e2e/native-android.py`（本轮正在补齐，执行结果待验收）。具体参数、隔离环境和实测结果由本轮验收记录提供；没有对应结果时应标为待验收，不能沿用历史网页客户端的通过结论。
 
-`tests/e2e/android-apk.py` 在专用 Android 模拟器中操作实际 APK，使用隔离后端验证登录、导航、数据写入、文件上传及退出。它固定使用 `emulator-5556` 和端口 `8082`，避免操作个人实例；只在专门准备的验收环境运行。`app/src/androidTest/` 另有原生生命周期与文件选择器并发回归，可在指定测试设备执行 `connectedDebugAndroidTest`；这些回调测试不代替真实服务器验收。
+模拟器、合成 BLE 广播、单元测试、静态门禁和构建结果不能替代真实手机收秤、系统权限/后台行为、TalkBack/大字体、NAS 部署及真实 Zepp 账号核对。运行命令的说明不代表这些检查已经通过；最终测试次数、设备、服务版本、产物摘要及未验证范围以实际验收报告为准。
 
-完整 APK 验收仅允许调试包，开始前会核对隔离容器（默认 `stridehub-unified-e2e`）确实将 `var/runtime/android-e2e-watch` 绑定到 `/var/www/watch`；仅创建一个同名目录不足以隔离上传。缺少绑定时，脚本在修改测试资料或清理调试应用前停止。
-
-会话 cookie 和网页运行时存储位于 Android 应用沙箱；服务器、用户名和 HTTP/保持登录偏好保存在私有 preferences。密码只存在当次登录的内存中。关闭备份及应用数据迁移；切换账号/服务器和退出本机登录会清除该应用的 cookie、缓存与 Web Storage。退出本机登录不等同于撤销其他设备的会话。健康资料仍以服务器记录为准。
-
-WebView 边界参考 [Android 官方 URI 校验说明](https://developer.android.com/privacy-and-security/risks/unsafe-uri-loading)。APK 只向配置的登录页面及其合法 POST 表单提交凭证；第三方 cookie、任意本地文件访问及混合内容均禁用。
-
-本目录与仓库保持相同的 GPL-3.0-or-later 许可证，见根目录 `LICENSE`。
-
-## 身体记录与自动称重（0.2.1）
-
-只保留一个 StrideHub 安装包，包名沿用 `io.stridehub.app`。TinyYumi 的蓝牙称重、手工记录、SQLite 历史、趋势与身体成分估算已迁入 `io.stridehub.app.scale`，作为内部页面打开，没有第二个启动图标。原登录、网页控制、文件导入继续使用现有客户端。登录页有离线称重入口，NAS 不可达时仍能记录。
-
-「称重」首次选择体脂秤后会记住设备，之后进入称重页自动寻找，无需每次点击连接。长按启动图标也可直接打开称重（取决于手机桌面支持），不需要先登录 NAS。搜索持续 90 秒，发现设备后最多等待 2 分钟；等待期间保持屏幕亮起，离开应用暂停，返回后继续未完成的等待。可主动暂停、关闭自动寻找或更换体脂秤。收到同次测量过程和稳定读数后自动保存；只收到稳定读数时需要确认归属，避免把秤重播的旧结果当作本次测量。不会采集应用关闭后的称重；秤已休眠时仍需唤醒。
-
-本次称重与历史记录分开展示，等待时不会把旧体重显示为新结果；实时读数会明确标记尚未保存。手工补录支持日期与时间，错误会定位到对应字段，旋转屏幕会保留尚未保存的草稿。补录后先展示刚保存的那次记录，避免较新的历史记录盖住保存结果。首页和历史分别显示本机保存及 NAS 同步状态；未配对、待同步、已同步、原账号队列暂停不会混为一谈。「查看同步与备份」可进入配对、重试与 CSV 导出。
-
-首次连接秤时申请附近设备权限（旧 Android 为扫描所需定位权限），无需广泛文件权限。称重可离线保存在本机；设置中明确配对 NAS 后，可持久同步稳定测量和导入历史。退出或切换 NAS 账号会立即停用原生同步，并保留本机历史和暂停的原账号队列。
-
-旧 TinyYumi 的私有数据库属于另一包名，不能直接继承。请在旧 App 设置中导出全部 CSV，再在本 App 的称重 → 设置 → 导入旧 TinyYumi 记录选择文件。导入最多 8 MB，整批事务保存，同一导出记录重放不重复添加，已删除的导入记录不会因重放复活。保留测量时间、当时日期、资料快照以及支持算法版本的历史估算；不支持的算法版本整批拒绝，原文件仍可保留。CSV 原本不包含原始蓝牙报文，因此不能从 CSV 恢复报文。导入不会自动覆盖当前个人资料或设备绑定。
-
-核对总条数、日期、体重和历史详情后再停用旧 App；尚未完成 NAS 同步前，不应卸载唯一保存数据的 App。来源修订见 `TINYYUMI-ORIGIN.md`。原有六组纯 Java 称重测试已纳入 Gradle JUnit，另有 CSV 格式测试及模拟器事务/去重/离线入口回归。
-
-
-### Native NAS weighing sync
-
-Weighing → Settings uses the existing StrideHub connection and HTTP opt-in. Log in to the intended account in StrideHub, then explicitly confirm pairing and upload of local stable measurements/imports. Live BLE readings are never uploaded. Device credentials use Android Keystore AES/GCM; browser Cookie+CSRF is used only for pairing and is never stored by sync. Redirects are not followed and TLS uses the platform trust store.
-
-Each measurement has a durable UUID and captured timestamp/offset. A SQLite transaction freezes the canonical payload and binding before retry. Jobs require network, persist across reboot, process at most ten records per run, and retry uncertain/transient failures with backoff. A successful receipt must identify the expected device/measurement and be nondeleted. A manual daily-entry conflict or validation/tombstone rejection remains visible for NAS review. No automatic overwrite or resurrection occurs.
-
-Disconnect/logout/server switch disables native credentials and cancels scheduling. Queues and nonsecret per-server/login device identities remain visible. Explicit pairing to the original exact destination/login rotates the same device token and resumes its pending/revoked rows; synced or conflict/error rows are not reset. New server/accounts cannot adopt old rows. Delete local cancels unsent work; an already received NAS copy must be deleted separately from NAS administration. Export remains available for retained local history.
-
-Verification: source `var/runtime/android-toolchain/env.sh` from repository root, run `android/gradlew` in `android/` for `assembleDebug assembleDebugAndroidTest testDebugUnitTest lintDebug`. If Google's UTP dependency cannot download, install the built debug/test APKs only on `emulator-5556` and use `am instrument -w io.stridehub.app.debug.test/android.test.InstrumentationTestRunner`. Use a clean debug test application state for the full suite; never clear a user's release application or use a personal device.
+本目录与仓库使用相同的 GPL-3.0-or-later 许可证，见根目录 `LICENSE`。
