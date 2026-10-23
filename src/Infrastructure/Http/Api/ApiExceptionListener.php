@@ -27,7 +27,7 @@ final readonly class ApiExceptionListener implements EventSubscriberInterface
     {
         $path = $event->getRequest()->getPathInfo();
 
-        if (self::PATH_PREFIX !== $path && !str_starts_with($path, self::PATH_PREFIX.'/')) {
+        if (self::PATH_PREFIX !== $path && !str_starts_with($path, self::PATH_PREFIX.'/') && '/mobile/v1' !== $path && !str_starts_with($path, '/mobile/v1/')) {
             return;
         }
 

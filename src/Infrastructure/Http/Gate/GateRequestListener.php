@@ -64,7 +64,7 @@ final readonly class GateRequestListener implements EventSubscriberInterface
             return true;
         }
 
-        return array_any(['/device/v1', '/api/v1', '/admin/insights', '/admin/plans', '/admin/training', '/admin/running', '/admin/health', '/admin/nutrition', '/admin/weight'], fn (string $prefix): bool => $path === $prefix || str_starts_with($path, $prefix.'/'));
+        return array_any(['/mobile/v1', '/device/v1', '/api/v1', '/admin/insights', '/admin/plans', '/admin/training', '/admin/running', '/admin/health', '/admin/nutrition', '/admin/weight'], fn (string $prefix): bool => $path === $prefix || str_starts_with($path, $prefix.'/'));
     }
 
     /**
