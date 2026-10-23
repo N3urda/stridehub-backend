@@ -53,9 +53,9 @@ fun sportLabel(value:String)=mapOf("Run" to "跑步","Walk" to "步行","Hike" t
         Metrics(row,listOf("distanceKm" to "距离 km","durationMinutes" to "运动分钟","averageHeartRate" to "平均心率 bpm"))
         Text("来源："+row.array("sources").joinToString("、"){if(it.text("source")=="zepp") "Zepp / Amazfit" else "手动 / 文件导入"})
         if(cloud) {
-            Metrics(detail,listOf("caloriesKcal" to "能量 kcal","averagePaceSecondsPerKm" to "平均配速 秒/km","maxHeartRateBpm" to "最高心率 bpm","elevationGainMeters" to "累计爬升 m"))
+            Metrics(HealthContracts.zeppSummary(detail),listOf("caloriesKcal" to "能量 kcal","paceSecondsPerKm" to "平均配速 秒/km","maxHeartRateBpm" to "最高心率 bpm","ascentMeters" to "累计爬升 m"))
             val streams=detail.optJSONObject("streams") ?: JSONObject()
-            listOf(Triple("heartRate","bpm","心率 · bpm"),Triple("pace","secondsPerKilometer","配速 · 秒/km"),Triple("cadence","stepsPerMinute","步频 · 步/分"),Triple("altitude","meters","海拔 · m"),Triple("power","watts","功率 · W")).forEach {(stream,key,title)->NativeLineChart(title,streams.array(stream),key,if(stream=="heartRate") Color(0xFFCA5B78) else MaterialTheme.colorScheme.primary)}
+            listOf(Triple("heartRate","bpm","心率 · bpm"),Triple("pace","secondsPerKilometer","配速 · 秒/km"),Triple("cadence","stepsPerMinute","步频 · 步/分"),Triple("altitude","meters","海拔 · m"),Triple("power","watts","功率 · W")).forEach {(stream,key,title)->NativeLineChart(title,streams.array(stream),key,if(stream=="heartRate") Color(0xFFCA5B78) else MaterialTheme.colorScheme.primary,expectedCadenceSeconds=1.0)}
             NativeRoute(streams.array("location").mapNotNull {p->if(p.has("latitude") && p.has("longitude")) RoutePoint(p.optDouble("latitude"),p.optDouble("longitude")) else null})
             detail.optJSONArray("notes")?.let {a->for(i in 0 until a.length()) Text(a.optString(i),style=MaterialTheme.typography.bodySmall)}
         } else {

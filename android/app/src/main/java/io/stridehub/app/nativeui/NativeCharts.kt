@@ -29,8 +29,20 @@ object ChartData {
         val value=row.opt(key)
         when(value){is Number->value.toDouble();is String->runCatching {OffsetDateTime.parse(value).toEpochSecond().toDouble()}.getOrNull() ?: runCatching {LocalDate.parse(value).toEpochDay().toDouble()}.getOrNull();else->null}
     } ?: index.toDouble()
+    fun breakBefore(rows:List<JSONObject>,index:Int,expectedCadenceSeconds:Double?):Boolean {
+        if(index==0) return true
+        val previous=rows[index-1];val current=rows[index]
+        val delta=x(current,index)-x(previous,index-1)
+        if(current.has("date") && previous.has("date")) return delta>1.5 || delta<=0
+        if(current.has("at") && previous.has("at")) {
+            // Sparse provider streams omit invalid samples. Unknown cadence never licenses a join.
+            return expectedCadenceSeconds==null || delta<=0 || delta>expectedCadenceSeconds*1.5
+        }
+        return expectedCadenceSeconds!=null && (delta<=0 || delta>expectedCadenceSeconds*1.5)
+    }
+
 }
-@Composable fun NativeLineChart(title:String,rows:List<JSONObject>,key:String,color:Color) {
+@Composable fun NativeLineChart(title:String,rows:List<JSONObject>,key:String,color:Color,expectedCadenceSeconds:Double?=null) {
     val values=remember(rows.toString(),key){ChartData.values(rows,key)}
     val known=values.filterNotNull();var selected by remember {mutableIntStateOf(-1)}
     Card(Modifier.fillMaxWidth()) {Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
@@ -47,7 +59,7 @@ object ChartData {
                 values.forEachIndexed {index,v->
                     if(v==null) {previous=null;previousX=null} else {
                         val point=Offset(((xs[index]-xLow)/(xHigh-xLow)*size.width).toFloat(),(size.height-(v-low)/(high-low)*size.height).toFloat())
-                        val dateGap=rows[index].has("date") && previousX!=null && xs[index]-previousX!!>1.5
+                        val dateGap=ChartData.breakBefore(rows,index,expectedCadenceSeconds)
                         if(previous!=null && !dateGap) drawLine(color,previous!!,point,3.dp.toPx())
                         if(values.size<30 || index==selected) drawCircle(color,if(index==selected) 5.dp.toPx() else 2.5.dp.toPx(),point)
                         previous=point;previousX=xs[index]

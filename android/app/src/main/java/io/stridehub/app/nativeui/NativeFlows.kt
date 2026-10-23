@@ -29,27 +29,45 @@ import java.util.UUID
         val initial=original?.optJSONObject("fields") ?: Forms.initial(fields)
         val key="activity:"+id.ifBlank {r.optString("draftId","new")}
         var text by rememberSaveable(key){mutableStateOf(initial.toString())};var version by rememberSaveable {mutableStateOf(original?.text("version","").orEmpty())}
-        var loaded by remember {mutableStateOf(false)};var busy by remember {mutableStateOf(false)};var error by remember {mutableStateOf<String?>(null)};var conflict by remember {mutableStateOf<JSONObject?>(null)};val scope=rememberCoroutineScope()
-        LaunchedEffect(key){repo.cache.draft(repo.account,key)?.let {text=it.payload};loaded=true}
-        LaunchedEffect(text,loaded){if(loaded){delay(300);repo.saveDraft(key,text)}}
+        var loaded by remember {mutableStateOf(false)};val busy=vm.busy;var error by remember {mutableStateOf<String?>(null)};var conflict by remember {mutableStateOf<JSONObject?>(null)};val scope=rememberCoroutineScope()
+        LaunchedEffect(key,vm.busy){if(!vm.busy) repo.cache.draft(repo.account,key)?.let {text=it.payload};loaded=true}
+        LaunchedEffect(text,loaded,vm.busy){if(loaded && !vm.busy){delay(300)
+            val draft=JSONObject(text);val savedAck=repo.cache.draft(repo.account,key)?.payload?.let(::JSONObject)?.optJSONObject(ActivityMutationCoordinator.ACK)
+            if(savedAck!=null && !draft.has(ActivityMutationCoordinator.ACK)) draft.put(ActivityMutationCoordinator.ACK,savedAck)
+            repo.saveDraft(key,draft.toString())
+        }}
         val data=remember(text){JSONObject(text)}
+        val ack=data.optJSONObject(ActivityMutationCoordinator.ACK)
+        val effectiveId=ack?.optString("id") ?: id
+        val effectiveVersion=ack?.optString("version") ?: version
         PageColumn {
-            SectionTitle(if(id.isBlank()) "新增运动" else "编辑运动","单位：距离 ${options.optJSONObject("units")?.text("distance")} · 海拔 ${options.optJSONObject("units")?.text("elevation")}")
-            if(id.isBlank() && !options.optBoolean("canCreate")) ErrorCard("当前服务器导入模式不支持手动新增运动。")
+            SectionTitle(if(effectiveId.isBlank()) "新增运动" else "编辑运动","单位：距离 ${options.optJSONObject("units")?.text("distance")} · 海拔 ${options.optJSONObject("units")?.text("elevation")}")
+            if(effectiveId.isBlank() && !options.optBoolean("canCreate")) ErrorCard("当前服务器导入模式不支持手动新增运动。")
             FormFields(fields,data,{text=it.toString()},!busy)
             error?.let {ErrorCard(it)}
-            conflict?.let {latest->Card {Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(10.dp)){Text("服务器最新版本，请核对");latest.optJSONObject("fields")?.let {SummaryFields(fields,it)};TextButton(onClick={version=latest.getString("version");conflict=null;error=null}){Text("已核对，保留草稿并使用最新版本号")};TextButton(onClick={text=latest.getJSONObject("fields").toString();version=latest.getString("version");conflict=null;error=null}){Text("使用服务器内容")}}}}
-            Button(enabled=!busy && (id.isNotBlank() || options.optBoolean("canCreate")),onClick={busy=true;error=null;scope.launch {
+            conflict?.let {latest->Card {Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(10.dp)){Text("服务器最新版本，请核对");latest.optJSONObject("fields")?.let {SummaryFields(fields,it)};TextButton(onClick={version=latest.getString("version");data.optJSONObject(ActivityMutationCoordinator.ACK)?.put("version",version)?.let {text=JSONObject(text).put(ActivityMutationCoordinator.ACK,it).toString()};conflict=null;error=null}){Text("已核对，保留草稿并使用最新版本号")};TextButton(onClick={text=latest.getJSONObject("fields").toString();version=latest.getString("version");data.optJSONObject(ActivityMutationCoordinator.ACK)?.put("version",version)?.let {text=JSONObject(text).put(ActivityMutationCoordinator.ACK,it).toString()};conflict=null;error=null}){Text("使用服务器内容")}}}}
+            Button(enabled=loaded && !busy && (effectiveId.isNotBlank() || options.optBoolean("canCreate")),onClick={error=null;val origin=vm.currentRoute;vm.action {activeRepo->
                 try {
                     Forms.validate(fields,data)
                     val body=JSONObject();fields.forEach {field->if(data.has(field.key)) body.put(field.key,data.opt(field.key))}
-                    if(id.isNotBlank()) body.put("version",version)
-                    val saved=repo.mutate("/api/v1/mobile/activities"+if(id.isBlank()) "" else "/"+encoded(id),if(id.isBlank()) "POST" else "PUT",body)
-                    val refreshed=runCatching {repo.get("/api/v1/mobile/activities/"+encoded(saved.text("id",id)))}.isSuccess
-                    repo.cache.deleteDraft(repo.account,key);vm.message=if(refreshed) "运动已保存" else "服务器已确认保存，暂时无法刷新。";vm.refresh();vm.pop()
-                } catch(e:Exception) {error=e.message ?: "保存失败";if(e is ApiFailure && e.status==409 && id.isNotBlank()) conflict=runCatching {repo.get("/api/v1/mobile/activities/"+encoded(id)).data}.getOrNull()}
-                finally {busy=false}
+                    val store=object:ActivityDraftStore {
+                        override suspend fun load(key:String)=activeRepo.cache.draft(activeRepo.account,key)?.payload?.let(::JSONObject)
+                        override suspend fun save(key:String,value:JSONObject) {activeRepo.saveDraft(key,value.toString())}
+                    }
+                    val saved=ActivityMutationCoordinator(store).save(key,effectiveId,effectiveVersion,body,
+                        write={target,currentVersion,payload->
+                            if(target.isNotBlank()) payload.put("version",currentVersion)
+                            activeRepo.mutate("/api/v1/mobile/activities"+if(target.isBlank()) "" else "/"+encoded(target),if(target.isBlank()) "POST" else "PUT",payload)
+                        },readBack={target->activeRepo.get("/api/v1/mobile/activities/"+encoded(target))})
+                    vm.message="运动已保存";vm.refresh();if(vm.currentRoute==origin) vm.pop()
+                } catch(e:Exception) {
+                    if(e is kotlinx.coroutines.CancellationException) throw e
+                    error=e.message ?: "保存失败"
+                    if(e is ApiFailure && e.status==409 && effectiveId.isNotBlank()) conflict=runCatching {activeRepo.get("/api/v1/mobile/activities/"+encoded(effectiveId)).data}.getOrNull()
+                    throw e
+                }
             }},modifier=Modifier.fillMaxWidth()){Text(if(busy) "正在保存…" else "保存运动")}
+
         }
     }
 }

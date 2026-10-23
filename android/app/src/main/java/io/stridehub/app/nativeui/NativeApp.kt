@@ -48,7 +48,7 @@ fun JSONObject.text(key:String,fallback:String="—"):String = if(!has(key) || i
 fun JSONObject.array(key:String):List<JSONObject> = optJSONArray(key)?.let { a -> (0 until a.length()).mapNotNull { a.optJSONObject(it) } } ?: emptyList()
 fun JSONArray.objects():List<JSONObject> = (0 until length()).mapNotNull { optJSONObject(it) }
 fun encoded(value:String)=URLEncoder.encode(value,"UTF-8").replace("+","%20")
-fun route(type:String,kind:String="",id:String="",payload:JSONObject?=null,title:String="",path:String=""):String=JSONObject().put("type",type).put("kind",kind).put("id",id).put("payload",payload).put("title",title).put("path",path).toString()
+fun route(type:String,kind:String="",id:String="",payload:JSONObject?=null,title:String="",path:String=""):String=JSONObject().put("type",type).put("kind",kind).put("id",id).put("payload",payload).put("title",title).put("path",path).apply {if(type=="activityForm" && id.isBlank()) put("draftId",java.util.UUID.randomUUID().toString())}.toString()
 class AppModel(app:Application, private val state:SavedStateHandle):AndroidViewModel(app) {
     var repository by mutableStateOf(NativeRepository.current(app));private set
     var tab by mutableIntStateOf(state["tab"] ?: 0);private set
@@ -145,15 +145,17 @@ class AppModel(app:Application, private val state:SavedStateHandle):AndroidViewM
 @Composable fun ActionRow(label:String,icon:androidx.compose.ui.graphics.vector.ImageVector=Icons.Default.ChevronRight,onClick:()->Unit) { Surface(onClick=onClick,shape=MaterialTheme.shapes.medium,color=MaterialTheme.colorScheme.surfaceContainerLow) {Row(Modifier.fillMaxWidth().padding(16.dp),verticalAlignment=Alignment.CenterVertically){Text(label,Modifier.weight(1f));Icon(icon,label)}} }
 @Composable fun NativeData(vm:AppModel,path:String,content:@Composable (JSONObject)->Unit) {
     val repo=vm.repository ?: return
-    var result by remember(path,repo.account) {mutableStateOf<NativeResult?>(null)};var error by remember(path){mutableStateOf<String?>(null)};var loading by remember(path){mutableStateOf(false)};var retry by remember {mutableIntStateOf(0)}
+    var screen by remember(path,repo.account) {mutableStateOf(NativeContentState())};var loading by remember(path){mutableStateOf(false)};var retry by remember {mutableIntStateOf(0)}
     LaunchedEffect(path,repo.account,vm.revision,retry) {
-        loading=true;error=null
-        repo.cache.response(repo.account,path)?.let { result=NativeResult(JSONObject(it.payload),it.savedAt,false) }
-        try { result=repo.get(path) } catch(e:Exception) {if(e is kotlinx.coroutines.CancellationException) throw e;error=e.message ?: "暂时无法加载"} finally {loading=false}
+        loading=true
+        repo.cache.response(repo.account,path)?.let {screen=screen.preload(it)}
+        try {screen=screen.refreshed(repo.get(path))} catch(e:Exception) {if(e is kotlinx.coroutines.CancellationException) throw e;screen=screen.failed(e)} finally {loading=false}
     }
+    val result=screen.result;val error=screen.error
+
     PullToRefreshBox(isRefreshing=loading,onRefresh={retry++},modifier=Modifier.fillMaxSize()) { Column {
         if(loading && result==null) LinearProgressIndicator(Modifier.fillMaxWidth())
-        result?.let { r -> if(r.offline) Surface(color=MaterialTheme.colorScheme.secondaryContainer) {Text("离线缓存 · ${DateFormat.getDateTimeInstance(DateFormat.SHORT,DateFormat.SHORT).format(Date(r.savedAt))} · 下拉重试",Modifier.fillMaxWidth().padding(10.dp),style=MaterialTheme.typography.labelMedium)} }
+        result?.let { r -> if(r.offline || screen.pending) Surface(color=MaterialTheme.colorScheme.secondaryContainer) {Text("${if(screen.pending) "缓存预览，正在核对" else "离线缓存"} · ${DateFormat.getDateTimeInstance(DateFormat.SHORT,DateFormat.SHORT).format(Date(r.savedAt))} · 下拉重试",Modifier.fillMaxWidth().padding(10.dp),style=MaterialTheme.typography.labelMedium)} }
         error?.let { Column(Modifier.padding(16.dp)) {ErrorCard(it){retry++};if(it.contains("登录")) TextButton(onClick=vm::logout){Text("重新连接")}} }
         if(result!=null) Box(Modifier.weight(1f)){content(result!!.data)} else if(!loading && error==null) Text("暂无记录",Modifier.padding(24.dp))
     }}
