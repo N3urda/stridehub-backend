@@ -20,11 +20,11 @@ import java.time.LocalDate
 
 @Composable fun WorkoutsScreen(vm:AppModel,management:Boolean=false) {
     var from by rememberSaveable {mutableStateOf(LocalDate.now().minusDays(89).toString())};var to by rememberSaveable {mutableStateOf(LocalDate.now().toString())};var sport by rememberSaveable {mutableStateOf("all")};var page by rememberSaveable {mutableIntStateOf(1)}
-    val path="/api/v1/mobile/workouts?page=$page&limit=30&from=$from&to=$to"
+    val path="/api/v1/mobile/workouts?page=$page&limit=30&from=$from&to=$to&sportType=$sport"
     NativeData(vm,path) {data->PageColumn {
         SectionTitle(if(management) "运动记录管理" else "每一次运动","来源关联由你确认，避免重复统计。")
         DateRangeControls(from,to) {a,b->from=a;to=b;page=1}
-        FlowRow(horizontalArrangement=Arrangement.spacedBy(6.dp)){listOf("all" to "全部","Run" to "跑步","Walk" to "步行","Ride" to "骑行","Other" to "其他").forEach {(k,label)->FilterChip(sport==k,{sport=k},label={Text(label)})}}
+        FlowRow(horizontalArrangement=Arrangement.spacedBy(6.dp)){listOf("all" to "全部","Run" to "跑步","Walk" to "步行","Ride" to "骑行","Other" to "其他").forEach {(k,label)->FilterChip(sport==k,{sport=k;page=1},label={Text(label)})}}
         FlowRow(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
             AssistChip(onClick={vm.push(route("imports"))},label={Text("导入文件")})
             AssistChip(onClick={vm.push(route("activityForm"))},label={Text("新增运动")})
@@ -32,7 +32,7 @@ import java.time.LocalDate
         }
         data.optJSONObject("summary")?.let {summary->Metrics(summary,listOf("count" to "次数","distanceKm" to "总距离 km","movingSeconds" to "运动秒数","averageHeartRate" to "平均心率"))}
         if(data.optInt("pendingDuplicates")>0) InfoCard("${data.optInt("pendingDuplicates")} 条运动待核对","打开运动详情确认来源关联。存在疑似重复时，累计总量可能显示缺失。")
-        val rows=data.array("records").filter {sport=="all" || if(sport=="Other") it.text("sportType") !in listOf("Run","TrailRun","VirtualRun","Walk","Hike","Ride","VirtualRide") else it.text("sportType").contains(sport,true)}
+        val rows=data.array("records")
         if(rows.isEmpty()) InfoCard("暂无符合条件的运动","调整日期或类型，或者导入文件。")
         rows.forEach {WorkoutCard(vm,it)}
         val pages=data.optJSONObject("pagination")
