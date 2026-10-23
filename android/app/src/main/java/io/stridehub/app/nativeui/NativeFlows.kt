@@ -31,11 +31,8 @@ import java.util.UUID
         var text by rememberSaveable(key){mutableStateOf(initial.toString())};var version by rememberSaveable {mutableStateOf(original?.text("version","").orEmpty())}
         var loaded by remember {mutableStateOf(false)};val busy=vm.busy;var error by remember {mutableStateOf<String?>(null)};var conflict by remember {mutableStateOf<JSONObject?>(null)};val scope=rememberCoroutineScope()
         LaunchedEffect(key,vm.busy){if(!vm.busy) repo.cache.draft(repo.account,key)?.let {text=it.payload};loaded=true}
-        LaunchedEffect(text,loaded,vm.busy){if(loaded && !vm.busy){delay(300)
-            val draft=JSONObject(text);val savedAck=repo.cache.draft(repo.account,key)?.payload?.let(::JSONObject)?.optJSONObject(ActivityMutationCoordinator.ACK)
-            if(savedAck!=null && !draft.has(ActivityMutationCoordinator.ACK)) draft.put(ActivityMutationCoordinator.ACK,savedAck)
-            repo.saveDraft(key,draft.toString())
-        }}
+        LaunchedEffect(text,loaded,vm.busy){if(loaded && !vm.busy){delay(300);repo.saveActivityDraft(key,text)}}
+
         val data=remember(text){JSONObject(text)}
         val ack=data.optJSONObject(ActivityMutationCoordinator.ACK)
         val effectiveId=ack?.optString("id") ?: id

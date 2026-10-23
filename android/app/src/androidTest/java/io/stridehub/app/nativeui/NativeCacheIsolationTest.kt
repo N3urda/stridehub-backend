@@ -10,6 +10,21 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class NativeCacheIsolationTest {
+    @Test fun delayedEditorAutosaveCannotOverwriteAcknowledgedActivityIdentity() = runBlocking {
+        val context=InstrumentationRegistry.getInstrumentation().targetContext
+        val db=Room.inMemoryDatabaseBuilder(context,NativeDatabase::class.java).build()
+        try {
+            val cache=db.cache();val account="isolated-test";val key="activity:unique-draft"
+            val beforeAck="{\"name\":\"Original draft\"}"
+            cache.putActivityDraft(SavedDraft(account,key,beforeAck))
+            cache.putDraft(SavedDraft(account,key,"{\"name\":\"Saved ride\",\"_activityAcknowledged\":{\"id\":\"ack-id\",\"version\":\"v2\"}}"))
+            // This autosave was prepared before acknowledgement and delivered afterward.
+            cache.putActivityDraft(SavedDraft(account,key,beforeAck))
+            val restored=org.json.JSONObject(cache.draft(account,key)!!.payload)
+            assertEquals("ack-id",restored.getJSONObject(ActivityMutationCoordinator.ACK).getString("id"))
+            assertEquals("v2",restored.getJSONObject(ActivityMutationCoordinator.ACK).getString("version"))
+        } finally {db.close()}
+    }
     @Test fun logoutClearsOnlyAccountAndConflictDraftSurvivesRefresh() = runBlocking {
         val context=InstrumentationRegistry.getInstrumentation().targetContext
         val db=Room.inMemoryDatabaseBuilder(context,NativeDatabase::class.java).build()

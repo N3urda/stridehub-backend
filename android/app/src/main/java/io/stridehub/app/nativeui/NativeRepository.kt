@@ -31,6 +31,12 @@ data class SavedDraft(val account: String, val path: String, val payload: String
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun put(row: CachedResponse)
     @Query("SELECT * FROM drafts WHERE account=:account AND path=:path") suspend fun draft(account: String, path: String): SavedDraft?
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun putDraft(row: SavedDraft)
+    @Transaction suspend fun putActivityDraft(row:SavedDraft) {
+        val current=draft(row.account,row.path)?.payload?.let(::JSONObject)
+        val incoming=JSONObject(row.payload)
+        current?.optJSONObject(ActivityMutationCoordinator.ACK)?.let {incoming.put(ActivityMutationCoordinator.ACK,it)}
+        putDraft(row.copy(payload=incoming.toString()))
+    }
     @Query("DELETE FROM drafts WHERE account=:account AND path=:path") suspend fun deleteDraft(account: String,path: String)
     @Query("DELETE FROM responses WHERE account=:account") suspend fun clearResponses(account: String)
     @Query("DELETE FROM drafts WHERE account=:account") suspend fun clearDrafts(account: String)
@@ -58,6 +64,7 @@ class NativeRepository(private val context: Context, val server: ServerAddress, 
     fun cancel() { client.dispatcher.cancelAll() }
     suspend fun saveDraft(path:String,payload:String) { assertActive();cache.putDraft(SavedDraft(account,path,payload));if(!active()) cache.deleteDraft(account,path) }
 
+    suspend fun saveActivityDraft(path:String,payload:String) {assertActive();cache.putActivityDraft(SavedDraft(account,path,payload));if(!active()) cache.deleteDraft(account,path)}
     val cache = NativeDatabase.get(context).cache()
     private val client = OkHttpClient.Builder().connectTimeout(20,TimeUnit.SECONDS).readTimeout(45,TimeUnit.SECONDS)
         .followRedirects(false).followSslRedirects(false).cache(null).build()
