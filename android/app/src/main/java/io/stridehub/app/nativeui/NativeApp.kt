@@ -113,6 +113,7 @@ class AppModel(app:Application, private val state:SavedStateHandle):AndroidViewM
                         "records" -> RecordsScreen(vm,r.getString("kind"))
                         "form" -> RecordEditor(vm,r)
                         "workout" -> WorkoutScreen(vm,r.getJSONObject("payload"))
+                        "running" -> RunningOverviewScreen(vm,r.optJSONObject("payload"))
                         "data" -> HealthDetail(vm,r)
                         "today" -> TodayScreen(vm)
                         "nutrition" -> NutritionScreen(vm)

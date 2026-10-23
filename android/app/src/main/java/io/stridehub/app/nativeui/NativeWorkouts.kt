@@ -26,6 +26,7 @@ import java.time.LocalDate
         DateRangeControls(from,to) {a,b->from=a;to=b;page=1}
         FlowRow(horizontalArrangement=Arrangement.spacedBy(6.dp)){listOf("all" to "全部","Run" to "跑步","Walk" to "步行","Ride" to "骑行","Other" to "其他").forEach {(k,label)->FilterChip(sport==k,{sport=k;page=1},label={Text(label)})}}
         FlowRow(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+            AssistChip(onClick={vm.push(route("running"))},label={Text("跑步分析")})
             AssistChip(onClick={vm.push(route("imports"))},label={Text("导入文件")})
             AssistChip(onClick={vm.push(route("activityForm"))},label={Text("新增运动")})
             AssistChip(onClick={vm.push(route("sync"))},label={Text("同步 Zepp")})
@@ -43,39 +44,53 @@ import java.time.LocalDate
         }
     }}
 }
-@Composable fun WorkoutCard(vm:AppModel,row:JSONObject) {InfoCard(row.text("name","运动"),"${row.text("startAt")}\n${sportLabel(row.text("sportType"))} · ${row.text("distanceKm")} km · ${row.text("durationMinutes")} 分钟"+(if(row.optJSONArray("duplicateCandidates")?.length()?.let {it>0}==true) "\n有待确认的重复来源" else "")){vm.push(route("workout",payload=row))}}
+@Composable fun WorkoutCard(vm:AppModel,row:JSONObject) {InfoCard(row.text("name","运动"),"${row.text("startAt")}\n${sportLabel(row.text("sportType"))} · ${row.text("distanceKm")} km · ${row.text("durationMinutes",(row.opt("movingSeconds") as? Number)?.let {"%.1f".format(it.toDouble()/60)} ?: "—")} 分钟"+(if(row.optJSONArray("duplicateCandidates")?.length()?.let {it>0}==true) "\n有待确认的重复来源" else "")){vm.push(route("workout",payload=row))}}
 fun sportLabel(value:String)=mapOf("Run" to "跑步","Walk" to "步行","Hike" to "徒步","Ride" to "骑行","TrailRun" to "越野跑","VirtualRun" to "室内跑","VirtualRide" to "室内骑行","WeightTraining" to "力量训练","Other" to "其他")[value] ?: value
 @Composable fun WorkoutScreen(vm:AppModel,row:JSONObject) {
-    val id=row.getString("id");val cloud=id.startsWith("zepp-")
+    val id=row.getString("id");val cloud=id.startsWith("zepp-");val canonicalId=row.text("canonicalId",id)
     val path=if(cloud) "/api/v1/health/zepp/workouts/"+encoded(id) else "/api/v1/mobile/activities/"+encoded(id)
-    NativeData(vm,path) {detail->PageColumn {
-        SectionTitle(row.text("name","运动详情"),row.text("startAt"))
-        Metrics(row,listOf("distanceKm" to "距离 km","durationMinutes" to "运动分钟","averageHeartRate" to "平均心率 bpm"))
-        Text("来源："+row.array("sources").joinToString("、"){if(it.text("source")=="zepp") "Zepp / Amazfit" else "手动 / 文件导入"})
-        if(cloud) {
-            Metrics(HealthContracts.zeppSummary(detail),listOf("caloriesKcal" to "能量 kcal","paceSecondsPerKm" to "平均配速 秒/km","maxHeartRateBpm" to "最高心率 bpm","ascentMeters" to "累计爬升 m"))
-            val streams=detail.optJSONObject("streams") ?: JSONObject()
-            listOf(Triple("heartRate","bpm","心率 · bpm"),Triple("pace","secondsPerKilometer","配速 · 秒/km"),Triple("cadence","stepsPerMinute","步频 · 步/分"),Triple("altitude","meters","海拔 · m"),Triple("power","watts","功率 · W")).forEach {(stream,key,title)->NativeLineChart(title,streams.array(stream),key,if(stream=="heartRate") Color(0xFFCA5B78) else MaterialTheme.colorScheme.primary,expectedCadenceSeconds=1.0)}
-            NativeRoute(streams.array("location").mapNotNull {p->if(p.has("latitude") && p.has("longitude")) RoutePoint(p.optDouble("latitude"),p.optDouble("longitude")) else null})
-            detail.optJSONArray("notes")?.let {a->for(i in 0 until a.length()) Text(a.optString(i),style=MaterialTheme.typography.bodySmall)}
+    NativeData(vm,path) {detail->
+        if(!cloud) NativeData(vm,"/api/v1/activities/"+encoded(id)) {source->
+            val current=WorkoutPresentation.imported(source)
+            WorkoutContent(vm,row,detail,current,current,canonicalId,false)
         } else {
-            detail.optJSONObject("fields")?.let { fields->Metrics(fields,listOf("sportType" to "运动类型","startDateTime" to "开始时间","distance" to "距离（服务器单位）","elevation" to "爬升（服务器单位）","calories" to "能量 kcal","averageHeartRate" to "平均心率","maxHeartRate" to "最高心率"));if(fields.text("description","").isNotBlank()) Text(fields.text("description"))}
-            ImportedStreams(vm,id)
-            if(row.text("sportType") in listOf("Run","TrailRun","VirtualRun")) RunningAnalysis(vm,id)
-            val capabilities=detail.optJSONObject("capabilities") ?: JSONObject()
-            if(capabilities.optBoolean("edit")) OutlinedButton(onClick={vm.push(route("activityForm",id=id,payload=detail))},modifier=Modifier.fillMaxWidth()){Text("编辑运动")}
-            ExportButton(vm,id)
-            ActivityActions(vm,id,detail)
+            val current=WorkoutPresentation.zepp(detail,id)
+            if(canonicalId!=id && !canonicalId.startsWith("zepp-")) NativeData(vm,"/api/v1/activities/"+encoded(canonicalId)) {canonical->WorkoutContent(vm,row,detail,current,WorkoutPresentation.imported(canonical),canonicalId,true)}
+            else WorkoutContent(vm,row,detail,current,current,canonicalId,true)
         }
-        val duplicates=row.optJSONArray("duplicateCandidates") ?: JSONArray()
-        if(duplicates.length()>0) {
-            SectionTitle("核对重复来源","仅在确认是同一次运动后合并。")
-            for(i in 0 until duplicates.length()) {val candidate=duplicates.optString(i);OutlinedButton(onClick={vm.action {repo->repo.mutate("/api/v1/health/workout-links/"+encoded(id),"PUT",JSONObject().put("version",0).put("activityId",candidate));vm.pop();vm.message="来源已关联"}},enabled=!vm.busy){Text("确认关联导入记录 ${candidate.takeLast(12)}")}}
-        }
-        row.optJSONObject("sourceLink")?.let {link->OutlinedButton(onClick={vm.action {repo->repo.mutate("/api/v1/health/workout-links/"+encoded(link.getString("id"))+"?version="+link.text("version"),"DELETE");vm.pop();vm.message="已拆分来源"}}){Text("解除来源合并")}}
-        ActionRow("关联到训练课表"){vm.push(route("association","workout",id=id,payload=row))}
-    }}
+    }
 }
+@Composable private fun WorkoutContent(vm:AppModel,preview:JSONObject,detail:JSONObject,current:JSONObject,canonical:JSONObject,canonicalId:String,cloud:Boolean) {PageColumn {
+    val sourceId=current.getString("id")
+    SectionTitle(current.text("name","运动详情"),current.text("startAt"))
+    Metrics(current,listOf("sportType" to "运动类型","distanceKm" to "距离 km","durationMinutes" to "运动分钟","averageHeartRate" to "平均心率 bpm"))
+    val sources=WorkoutPresentation.sources(preview)
+    Text("当前来源："+if(cloud) "Zepp / Amazfit" else "手动 / 文件导入")
+    if(sources.size>1) {
+        SectionTitle("查看原始来源","来源合并保留每份记录。统计与训练继续使用同一条规范运动。")
+        sources.forEach {source->OutlinedButton(onClick={vm.push(route("workout",payload=WorkoutPresentation.sourceRoute(preview,source.getString("id"))))},enabled=source.getString("id")!=sourceId){Text(if(source.text("source")=="zepp") "Zepp 传感器与设备详情" else "导入记录、曲线与分段")}}
+    }
+    if(cloud) {
+        Metrics(HealthContracts.zeppSummary(detail),listOf("caloriesKcal" to "能量 kcal","paceSecondsPerKm" to "平均配速 秒/km","maxHeartRateBpm" to "最高心率 bpm","ascentMeters" to "累计爬升 m"))
+        val streams=detail.optJSONObject("streams") ?: JSONObject()
+        listOf(Triple("heartRate","bpm","心率 · bpm"),Triple("pace","secondsPerKilometer","配速 · 秒/km"),Triple("cadence","stepsPerMinute","步频 · 步/分"),Triple("altitude","meters","海拔 · m"),Triple("power","watts","功率 · W")).forEach {(stream,key,title)->NativeLineChart(title,streams.array(stream),key,if(stream=="heartRate") Color(0xFFCA5B78) else MaterialTheme.colorScheme.primary,expectedCadenceSeconds=1.0)}
+        NativeRoute(streams.array("location").mapNotNull {p->if(p.has("latitude") && p.has("longitude")) RoutePoint(p.optDouble("latitude"),p.optDouble("longitude")) else null})
+    } else {
+        detail.optJSONObject("fields")?.let {fields->if(fields.text("description","").isNotBlank()) Text(fields.text("description"));Metrics(fields,listOf("calories" to "能量 kcal","maxHeartRate" to "最高心率 bpm"))}
+        ImportedStreams(vm,sourceId)
+        if(WorkoutPresentation.canAssociate(current)) RunningAnalysis(vm,sourceId)
+        if(detail.optJSONObject("capabilities")?.optBoolean("edit")==true) OutlinedButton(onClick={vm.push(route("activityForm",id=sourceId,payload=detail))},modifier=Modifier.fillMaxWidth()){Text("编辑运动")}
+        ExportButton(vm,sourceId);ActivityActions(vm,sourceId,detail)
+    }
+    val duplicates=preview.optJSONArray("duplicateCandidates") ?: JSONArray()
+    if(duplicates.length()>0 && cloud) {
+        SectionTitle("核对重复来源","仅在确认是同一次运动后合并。")
+        for(i in 0 until duplicates.length()) {val candidate=duplicates.optString(i);OutlinedButton(onClick={vm.action {repo->repo.mutate("/api/v1/health/workout-links/"+encoded(sourceId),"PUT",JSONObject().put("version",0).put("activityId",candidate));vm.pop();vm.message="来源已关联"}},enabled=!vm.busy){Text("确认关联导入记录 ${candidate.takeLast(12)}")}}
+    }
+    preview.optJSONObject("sourceLink")?.let {link->OutlinedButton(onClick={vm.action {repo->repo.mutate("/api/v1/health/workout-links/"+encoded(link.getString("id"))+"?version="+link.text("version"),"DELETE");vm.pop();vm.message="已拆分来源"}}){Text("解除来源合并")}}
+    if(WorkoutPresentation.canAssociate(canonical)) ActionRow("关联到训练课表"){vm.push(route("association","workout",id=canonicalId,payload=canonical))}
+    else InfoCard("此运动不能关联跑步课表","训练课表支持跑步、越野跑与室内跑。当前规范记录类型：${sportLabel(canonical.text("sportType"))}。")
+}}
 @Composable private fun ImportedStreams(vm:AppModel,id:String) {val repo=vm.repository ?: return;var result by remember(id){mutableStateOf<JSONObject?>(null)};var error by remember {mutableStateOf<String?>(null)}
     LaunchedEffect(id,vm.revision){try {result=repo.get("/api/v1/mobile/activities/${encoded(id)}/streams").data} catch(e:Exception){if(e is kotlinx.coroutines.CancellationException) throw e;error=e.message}}
     result?.let {data->val streams=data.optJSONObject("streams") ?: JSONObject();val time=streams.optJSONArray("time") ?: JSONArray()
@@ -94,18 +109,12 @@ fun sportLabel(value:String)=mapOf("Run" to "跑步","Walk" to "步行","Hike" t
     }
     error?.let {ErrorCard(it)}
 }
-@Composable private fun RunningAnalysis(vm:AppModel,id:String) {val repo=vm.repository ?: return;var data by remember(id){mutableStateOf<JSONObject?>(null)};var error by remember {mutableStateOf<String?>(null)}
-    LaunchedEffect(id,vm.revision) {try {data=repo.get("/api/v1/running/activities/"+encoded(id)).data} catch(e:Exception){if(e is kotlinx.coroutines.CancellationException) throw e;error=e.message}}
-    data?.let {d->val analysis=d.optJSONObject("analysis") ?: JSONObject();SectionTitle("跑步分析")
-        analysis.optJSONObject("metrics")?.let {Metrics(it,listOf("weightedHeartRate" to "加权心率","paceSecondsPerKm" to "配速 秒/km","speedVariationPercent" to "速度变异 %","efficiencyChangePercent" to "效率变化 %"))}
-        NativeLineChart("配速 · 秒/km",analysis.array("timeline"),"paceSecondsPerKm",MaterialTheme.colorScheme.primary)
-        NativeLineChart("心率 · bpm",analysis.array("timeline"),"heartRate",Color(0xFFCA5B78))
-        NativeLineChart("步频 · 步/分",analysis.array("timeline"),"cadenceSpm",MaterialTheme.colorScheme.secondary)
-        SegmentTable("公里分段",d.array("splits"));SegmentTable("计圈",d.array("laps"))
-        analysis.optJSONArray("notes")?.let {for(i in 0 until it.length()) Text(it.optString(i),style=MaterialTheme.typography.bodySmall)}
-    };error?.let {ErrorCard(it)}
+@Composable private fun RunningAnalysis(vm:AppModel,id:String) {
+    val repo=vm.repository ?: return;var data by remember(id){mutableStateOf<JSONObject?>(null)};var error by remember {mutableStateOf<String?>(null)}
+    LaunchedEffect(id,vm.revision) {try {data=repo.get("/api/v1/running/activities/"+encoded(id)).data} catch(e:Exception){if(e is kotlinx.coroutines.CancellationException) throw e;data=null;error=e.message}}
+    data?.let {RunningAnalysisContent(it)};error?.let {ErrorCard(it)}
 }
-@Composable fun SegmentTable(title:String,rows:List<JSONObject>) {if(rows.isNotEmpty()) {SectionTitle(title);rows.forEachIndexed {index,row->InfoCard("${row.text("number",(index+1).toString())} · ${row.text("name","")}","${row.text("distanceKm")} km · ${row.text("movingSeconds")} 秒 · 配速 ${row.text("paceSecondsPerKm")} 秒/km · 心率 ${row.text("averageHeartRate")}")}}}
+@Composable fun SegmentTable(title:String,rows:List<JSONObject>) {if(rows.isNotEmpty()) {SectionTitle(title);rows.forEachIndexed {index,row->InfoCard("${row.text("number",(index+1).toString())} · ${row.text("name","")}","${row.text("distanceKm")} km · ${row.text("movingSeconds")} 秒 · 配速 ${row.text("paceSecondsPerKm")} 秒/km · 心率 ${row.text("averageHeartRate")}\nGAP ${row.text("gapPaceSecondsPerKm")} 秒/km · 爬升 ${row.text("elevationM")} m")}}}
 @Composable fun Metrics(data:JSONObject,fields:List<Pair<String,String>>) {Card(Modifier.fillMaxWidth()) {Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){fields.forEach {(key,label)->Row(Modifier.fillMaxWidth()){Text(label,Modifier.weight(1f),color=MaterialTheme.colorScheme.onSurfaceVariant);Text(data.text(key),Modifier.weight(1f))}}}}}
 @Composable fun ExportButton(vm:AppModel,id:String) {
     val context=LocalContext.current

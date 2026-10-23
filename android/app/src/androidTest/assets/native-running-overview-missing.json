@@ -1,0 +1,213 @@
+{
+    "filters": {
+        "from": "2026-10-01",
+        "to": "2026-10-23",
+        "sportType": "all",
+        "timezone": "+08:00"
+    },
+    "availableRange": {
+        "from": null,
+        "to": null
+    },
+    "summary": {
+        "count": 0,
+        "distanceKm": 0,
+        "movingSeconds": 0,
+        "elevationM": 0,
+        "longestRunKm": 0,
+        "heartRateCount": 0,
+        "paceSecondsPerKm": null,
+        "averageHeartRate": null,
+        "activeDays": 0
+    },
+    "weekly": [
+        {
+            "date": "2026-09-28",
+            "count": 0,
+            "distanceKm": 0,
+            "movingSeconds": 0,
+            "elevationM": 0,
+            "longestRunKm": 0,
+            "heartRateCount": 0,
+            "paceSecondsPerKm": null,
+            "averageHeartRate": null
+        },
+        {
+            "date": "2026-10-05",
+            "count": 0,
+            "distanceKm": 0,
+            "movingSeconds": 0,
+            "elevationM": 0,
+            "longestRunKm": 0,
+            "heartRateCount": 0,
+            "paceSecondsPerKm": null,
+            "averageHeartRate": null
+        },
+        {
+            "date": "2026-10-12",
+            "count": 0,
+            "distanceKm": 0,
+            "movingSeconds": 0,
+            "elevationM": 0,
+            "longestRunKm": 0,
+            "heartRateCount": 0,
+            "paceSecondsPerKm": null,
+            "averageHeartRate": null
+        },
+        {
+            "date": "2026-10-19",
+            "count": 0,
+            "distanceKm": 0,
+            "movingSeconds": 0,
+            "elevationM": 0,
+            "longestRunKm": 0,
+            "heartRateCount": 0,
+            "paceSecondsPerKm": null,
+            "averageHeartRate": null
+        }
+    ],
+    "monthly": [
+        {
+            "date": "2026-10",
+            "count": 0,
+            "distanceKm": 0,
+            "movingSeconds": 0,
+            "elevationM": 0,
+            "longestRunKm": 0,
+            "heartRateCount": 0,
+            "paceSecondsPerKm": null,
+            "averageHeartRate": null
+        }
+    ],
+    "daily": [
+        {
+            "date": "2026-10-01",
+            "count": 0,
+            "distanceKm": 0
+        },
+        {
+            "date": "2026-10-02",
+            "count": 0,
+            "distanceKm": 0
+        },
+        {
+            "date": "2026-10-03",
+            "count": 0,
+            "distanceKm": 0
+        },
+        {
+            "date": "2026-10-04",
+            "count": 0,
+            "distanceKm": 0
+        },
+        {
+            "date": "2026-10-05",
+            "count": 0,
+            "distanceKm": 0
+        },
+        {
+            "date": "2026-10-06",
+            "count": 0,
+            "distanceKm": 0
+        },
+        {
+            "date": "2026-10-07",
+            "count": 0,
+            "distanceKm": 0
+        },
+        {
+            "date": "2026-10-08",
+            "count": 0,
+            "distanceKm": 0
+        },
+        {
+            "date": "2026-10-09",
+            "count": 0,
+            "distanceKm": 0
+        },
+        {
+            "date": "2026-10-10",
+            "count": 0,
+            "distanceKm": 0
+        },
+        {
+            "date": "2026-10-11",
+            "count": 0,
+            "distanceKm": 0
+        },
+        {
+            "date": "2026-10-12",
+            "count": 0,
+            "distanceKm": 0
+        },
+        {
+            "date": "2026-10-13",
+            "count": 0,
+            "distanceKm": 0
+        },
+        {
+            "date": "2026-10-14",
+            "count": 0,
+            "distanceKm": 0
+        },
+        {
+            "date": "2026-10-15",
+            "count": 0,
+            "distanceKm": 0
+        },
+        {
+            "date": "2026-10-16",
+            "count": 0,
+            "distanceKm": 0
+        },
+        {
+            "date": "2026-10-17",
+            "count": 0,
+            "distanceKm": 0
+        },
+        {
+            "date": "2026-10-18",
+            "count": 0,
+            "distanceKm": 0
+        },
+        {
+            "date": "2026-10-19",
+            "count": 0,
+            "distanceKm": 0
+        },
+        {
+            "date": "2026-10-20",
+            "count": 0,
+            "distanceKm": 0
+        },
+        {
+            "date": "2026-10-21",
+            "count": 0,
+            "distanceKm": 0
+        },
+        {
+            "date": "2026-10-22",
+            "count": 0,
+            "distanceKm": 0
+        },
+        {
+            "date": "2026-10-23",
+            "count": 0,
+            "distanceKm": 0
+        }
+    ],
+    "dailyFrom": "2026-10-01",
+    "bestEfforts": [],
+    "activities": {
+        "items": [],
+        "page": 1,
+        "pageSize": 50,
+        "total": 0
+    },
+    "notes": [
+        "统计涵盖筛选范围内全部跑步，记录列表每页 50 条；骑行和已删除记录不计入。",
+        "平均配速 = 有有效距离与时长的运动总时长 \/ 总距离；平均心率按已记录心率的运动时长加权。",
+        "周统计从周一开始；边界周只统计筛选范围，热力图最多展示范围末尾 366 天。",
+        "最佳表现取已导入并计算的运动内最快片段，不等同于认证比赛成绩。训练时间与跑量表示训练量，不是生理恢复或伤病风险评分。"
+    ]
+}

@@ -1,0 +1,208 @@
+{
+    "activity": {
+        "id": "run-native-fixture",
+        "name": "Synthetic trail run"
+    },
+    "analysis": {
+        "timeline": [
+            {
+                "seconds": 0,
+                "distanceKm": 0,
+                "paceSecondsPerKm": 333.3,
+                "heartRate": 140,
+                "cadenceSpm": 170,
+                "altitudeM": 10,
+                "powerW": null
+            },
+            {
+                "seconds": 10,
+                "distanceKm": 0.03,
+                "paceSecondsPerKm": 333.3,
+                "heartRate": 145,
+                "cadenceSpm": 172,
+                "altitudeM": 12,
+                "powerW": null
+            },
+            {
+                "seconds": 20,
+                "distanceKm": 0.06,
+                "paceSecondsPerKm": 333.3,
+                "heartRate": 146,
+                "cadenceSpm": 172,
+                "altitudeM": 13,
+                "powerW": null
+            },
+            {
+                "seconds": 99.999,
+                "distanceKm": 0.065,
+                "paceSecondsPerKm": null,
+                "heartRate": null,
+                "cadenceSpm": null,
+                "altitudeM": null,
+                "powerW": null
+            },
+            {
+                "seconds": 100,
+                "distanceKm": 0.065,
+                "paceSecondsPerKm": null,
+                "heartRate": 80,
+                "cadenceSpm": null,
+                "altitudeM": 13,
+                "powerW": null
+            },
+            {
+                "seconds": 110,
+                "distanceKm": 0.065,
+                "paceSecondsPerKm": 400,
+                "heartRate": 135,
+                "cadenceSpm": 164,
+                "altitudeM": 13,
+                "powerW": null
+            },
+            {
+                "seconds": 120,
+                "distanceKm": 0.09,
+                "paceSecondsPerKm": 333.3,
+                "heartRate": 140,
+                "cadenceSpm": 168,
+                "altitudeM": 15,
+                "powerW": null
+            },
+            {
+                "seconds": 130,
+                "distanceKm": 0.12,
+                "paceSecondsPerKm": 333.3,
+                "heartRate": 142,
+                "cadenceSpm": 168,
+                "altitudeM": 15,
+                "powerW": null
+            }
+        ],
+        "scatter": [
+            {
+                "paceSecondsPerKm": 333.3,
+                "heartRate": 140,
+                "seconds": 0
+            },
+            {
+                "paceSecondsPerKm": 333.3,
+                "heartRate": 145,
+                "seconds": 10
+            },
+            {
+                "paceSecondsPerKm": 333.3,
+                "heartRate": 146,
+                "seconds": 20
+            },
+            {
+                "paceSecondsPerKm": 400,
+                "heartRate": 135,
+                "seconds": 110
+            },
+            {
+                "paceSecondsPerKm": 333.3,
+                "heartRate": 140,
+                "seconds": 120
+            },
+            {
+                "paceSecondsPerKm": 333.3,
+                "heartRate": 142,
+                "seconds": 130
+            }
+        ],
+        "zones": [
+            {
+                "name": "Z1",
+                "from": 100,
+                "to": 139,
+                "seconds": 10
+            },
+            {
+                "name": "Z2",
+                "from": 140,
+                "to": 159,
+                "seconds": 30
+            },
+            {
+                "name": "Z3",
+                "from": 160,
+                "to": 180,
+                "seconds": 0
+            }
+        ],
+        "heartRateDistribution": [
+            {
+                "from": 130,
+                "to": 139,
+                "seconds": 10
+            },
+            {
+                "from": 140,
+                "to": 149,
+                "seconds": 30
+            }
+        ],
+        "coverage": {
+            "samples": 7,
+            "analyzedSeconds": 40,
+            "heartRateSeconds": 40,
+            "paceSeconds": 40,
+            "gapSeconds": 80,
+            "pausedSeconds": 10,
+            "invalidIntervals": 0
+        },
+        "metrics": {
+            "weightedHeartRate": 140,
+            "paceSecondsPerKm": 347.8,
+            "speedVariationPercent": 7.53,
+            "efficiencyChangePercent": null
+        },
+        "notes": [
+            "统计按相邻原始时间戳加权；超过 30 秒的记录断档、显式暂停和无效值不计入有效时长。",
+            "曲线仅为显示抽样，统计使用全部有效区间。导入器可能已前向填充传感器缺项，覆盖率代表导入数据覆盖，并非硬件测量完整率。",
+            "步频沿用 Dreeve 的单脚周期 × 2 口径；不同导出工具的单位可能不同，请结合设备记录核对。",
+            "前后半程效率变化仅在至少 20 分钟、两半有效配速\/心率覆盖各达 90% 且速度变异不超过 15% 时展示；未做坡度或温度校正，不等同于有氧能力评分。"
+        ]
+    },
+    "splits": [
+        {
+            "number": 1,
+            "distanceKm": 1,
+            "movingSeconds": 300,
+            "paceSecondsPerKm": 300,
+            "gapPaceSecondsPerKm": 295,
+            "elevationM": 10
+        },
+        {
+            "number": 2,
+            "distanceKm": 1,
+            "movingSeconds": 290,
+            "paceSecondsPerKm": 290,
+            "gapPaceSecondsPerKm": 288,
+            "elevationM": 5
+        }
+    ],
+    "laps": [
+        {
+            "number": 1,
+            "name": "Synthetic lap",
+            "distanceKm": 2,
+            "movingSeconds": 590,
+            "averageHeartRate": 145
+        }
+    ],
+    "splitSummary": {
+        "paceVariationPercent": 1.69,
+        "secondHalfPaceChangePercent": -3.33,
+        "fastestFullKmPace": 290
+    },
+    "availableStreams": [
+        "time",
+        "distance",
+        "velocity_smooth",
+        "heartrate",
+        "cadence",
+        "moving",
+        "altitude"
+    ]
+}
