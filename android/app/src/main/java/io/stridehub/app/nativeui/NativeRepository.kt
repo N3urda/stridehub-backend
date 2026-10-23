@@ -67,7 +67,7 @@ class NativeRepository(private val context: Context, val server: ServerAddress, 
         continuation.invokeOnCancellation { call.cancel() }
         call.enqueue(object: Callback {
             override fun onFailure(call: Call,e: java.io.IOException) { if(continuation.isActive) continuation.resumeWithException(e) }
-            override fun onResponse(call: Call,response: Response) { response.use {
+            override fun onResponse(call: Call,response: Response) { try { response.use {
                 val source=it.body?.source()
                 val limit=16L*1024*1024
                 source?.request(limit+1)
@@ -85,7 +85,7 @@ class NativeRepository(private val context: Context, val server: ServerAddress, 
                         else -> message.ifBlank { "服务器返回 ${it.code}，请重试。" }
                     }))
                 } else continuation.resume(body)
-            }}
+            }} catch(e:Exception) {if(continuation.isActive) continuation.resumeWithException(e)} }
         })
     }
     private fun request(path: String): Request.Builder {
