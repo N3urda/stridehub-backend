@@ -13,6 +13,12 @@ use Doctrine\DBAL\Connection;
 /** One read model for imported and cloud workouts, with explicit duplicate confirmations. */
 final readonly class WorkoutCatalog
 {
+    private const array SPORT_GROUPS = [
+        'Run' => ['Run', 'TrailRun', 'VirtualRun'],
+        'Walk' => ['Walk', 'Hike'],
+        'Ride' => ['Ride', 'VirtualRide', 'MountainBikeRide', 'GravelRide', 'EBikeRide', 'EMountainBikeRide', 'Velomobile'],
+    ];
+
     public function __construct(private Connection $connection, private TrainingRepository $repository, private ?SerializableTimezone $timezone = null)
     {
     }
@@ -85,13 +91,23 @@ final readonly class WorkoutCatalog
     }
 
     /** @return array<string, mixed> */
-    public function overview(string $from, string $to, \DateTimeZone $zone): array
+    public function overview(string $from, string $to, \DateTimeZone $zone, string $sportGroup = 'all'): array
     {
         HealthDataService::range($from, $to);
-        $rows = array_values(array_filter($this->all(), static function (array $r) use ($from, $to, $zone): bool {
+        if (!in_array($sportGroup, ['all', 'Run', 'Walk', 'Ride', 'Other'], true)) {
+            throw new TrainingError('sportType 必须为 all、Run、Walk、Ride 或 Other。');
+        }
+        $groupedSports = array_merge(...array_values(self::SPORT_GROUPS));
+        $rows = array_values(array_filter($this->all(), static function (array $r) use ($from, $to, $zone, $sportGroup, $groupedSports): bool {
             $date = new \DateTimeImmutable($r['startAt'])->setTimezone($zone)->format('Y-m-d');
 
-            return $date >= $from && $date <= $to;
+            $matchesSport = match ($sportGroup) {
+                'all' => true,
+                'Other' => !in_array($r['sportType'], $groupedSports, true),
+                default => in_array($r['sportType'], self::SPORT_GROUPS[$sportGroup], true),
+            };
+
+            return $date >= $from && $date <= $to && $matchesSport;
         }));
         $pending = count(array_filter($rows, static fn (array $r): bool => [] !== $r['duplicateCandidates']));
         $weeks = [];

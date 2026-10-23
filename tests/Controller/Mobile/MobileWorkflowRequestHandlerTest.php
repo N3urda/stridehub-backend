@@ -116,6 +116,33 @@ final class MobileWorkflowRequestHandlerTest extends AdminWebTestCase
         self::assertResponseStatusCodeSame(422);
     }
 
+    public function testSportGroupsFilterBeforeOverviewAndPagination(): void
+    {
+        foreach (['Run', 'TrailRun', 'VirtualRun', 'Walk', 'Hike', 'Ride', 'VirtualRide', 'GravelRide', 'Workout'] as $sport) {
+            $this->call('POST', 'activities', [...$this->manual(), 'sportType' => $sport]);
+            self::assertResponseStatusCodeSame(201);
+        }
+        $query = 'workouts?from=2026-10-23&to=2026-10-23&limit=2&sportType=';
+        $run = $this->call('GET', $query.'Run');
+        self::assertSame(3, $run['pagination']['total']);
+        self::assertSame(2, $run['pagination']['pages']);
+        self::assertSame(3, $run['summary']['count']);
+        self::assertSame(3, $run['weeks'][0]['count']);
+        self::assertCount(2, $run['records']);
+        self::assertSame(0, $run['pendingDuplicates']);
+        $last = $this->call('GET', $query.'Run&page=2');
+        self::assertCount(1, $last['records']);
+        self::assertFalse($last['pagination']['hasMore']);
+        self::assertSame(2, $this->call('GET', $query.'Walk')['summary']['count']);
+        self::assertSame(3, $this->call('GET', $query.'Ride')['summary']['count']);
+        $other = $this->call('GET', $query.'Other');
+        self::assertSame(1, $other['summary']['count']);
+        self::assertSame('Workout', $other['records'][0]['sportType']);
+        self::assertSame(9, $this->call('GET', $query.'all')['pagination']['total']);
+        $this->call('GET', $query.'invalid');
+        self::assertResponseStatusCodeSame(422);
+    }
+
     public function testMalformedAndUnknownBodiesCannotDispatchCommands(): void
     {
         foreach (['[]', 'null', '{', '"text"'] as $body) {
@@ -208,6 +235,13 @@ final class MobileWorkflowRequestHandlerTest extends AdminWebTestCase
         $bytes = file_get_contents(__DIR__.'/../../Domain/Import/FileParser/fixtures/activity.tcx');
         $receipt = $service->upload('DEMO.TCX', $bytes);
         self::assertSame('queued', $receipt['state']);
+        $repo = self::getContainer()->get(TrainingRepository::class);
+        $queued = $repo->find('mobile-import', $receipt['id']);
+        self::getContainer()->get('default.storage')->delete('watch/'.$queued['queuedFilename']);
+        self::assertSame('interrupted', $service->import($receipt['id'])['state']);
+        $receipt = $service->retryImport($receipt['id']);
+        self::assertSame(2, $receipt['attempt']);
+        self::assertStringEndsWith('-2.tcx', $repo->find('mobile-import', $receipt['id'])['queuedFilename']);
         $db = self::getContainer()->get(Connection::class);
         $db->insert('KeyValue', ['key' => 'lock.importData', 'value' => '{"lockAcquiredBy":"test"}']);
         self::getContainer()->get(ImportActivityFilesCommandHandler::class)->handle(new ImportActivityFiles(new SpyOutput()));

@@ -65,7 +65,7 @@ final readonly class MobileWorkflowService
     /**
      * @return array<string, mixed>
      */
-    public function workouts(?string $from, ?string $to, int $page, int $limit): array
+    public function workouts(?string $from, ?string $to, int $page, int $limit, string $sportType = 'all'): array
     {
         if ($page < 1 || $limit < 1 || $limit > 100) {
             throw new TrainingError('page 必须大于零，limit 必须在 1 到 100 之间。');
@@ -74,7 +74,7 @@ final readonly class MobileWorkflowService
         $to ??= $this->clock->getCurrentDateTimeImmutable()->setTimezone($zone)->format('Y-m-d');
         HealthDataService::range($from, $to);
         $from ??= new \DateTimeImmutable($to)->modify('-365 days')->format('Y-m-d');
-        $overview = $this->catalog->overview($from, $to, $zone);
+        $overview = $this->catalog->overview($from, $to, $zone, $sportType);
         $total = count($overview['records']);
         $overview['records'] = array_slice($overview['records'], ($page - 1) * $limit, $limit);
         $overview['pagination'] = ['page' => $page, 'limit' => $limit, 'total' => $total, 'pages' => (int) ceil($total / $limit), 'hasMore' => $page * $limit < $total];
@@ -213,15 +213,7 @@ final readonly class MobileWorkflowService
                 || array_any($this->repository->list('workout-links'), static fn (array $link): bool => $link['activityId'] === $id)) {
                 throw new TrainingError('请先解除训练和来源关联，再删除运动。', 409);
             }
-            $filenames = $this->connection->fetchFirstColumn('SELECT originalFilename FROM FileImport WHERE activityId = ?', [$id]);
             $this->commands->dispatch(new DeleteActivity(ActivityId::fromString($id)));
-            foreach ($this->repository->list('mobile-import') as $receipt) {
-                if (($receipt['activityId'] ?? null) === $id || in_array($receipt['queuedFilename'], $filenames, true)) {
-                    // Keep the deduplication tombstone but remove the retained retry payload.
-                    $this->defaultStorage->delete('watch/.uploads/mobile-imports/'.$receipt['id']);
-                    $this->repository->save('mobile-import', $receipt['id'], [...$receipt, 'state' => 'deleted', 'activityId' => null, 'error' => '关联运动及原始文件已删除。'], $receipt['version']);
-                }
-            }
         });
     }
 
@@ -393,7 +385,7 @@ final readonly class MobileWorkflowService
                 return $this->publicImport($this->repository->save('mobile-import', $id, [...$record, 'state' => 'queued'], $record['version']));
             }
             ++$record['attempt'];
-            $queued = 'mobile-'.$id.'-'.$record['attempt'].'.'.pathinfo($record['filename'], PATHINFO_EXTENSION);
+            $queued = 'mobile-'.$id.'-'.$record['attempt'].'.'.ActivityFileName::fromString($record['filename'])->getExtension()->value;
             $record = $this->repository->save('mobile-import', $id, [...$record, 'queuedFilename' => $queued, 'state' => 'staging', 'error' => null], $record['version']);
             $actual = $this->watch->writeFile(ActivityFileName::fromString($queued), $this->defaultStorage->read('watch/.uploads/mobile-imports/'.$id));
 

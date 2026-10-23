@@ -50,7 +50,7 @@ final readonly class MobileWorkflowRequestHandler
                 return new ApiErrorResponse(405, 'method_not_allowed', '此接口不支持该方法。', ['Allow' => implode(', ', $allowed)]);
             }
             if ('workouts' === $resource && '' === $id) {
-                return new JsonResponse($this->workflows->workouts($request->query->get('from'), $request->query->get('to'), $this->integer($request, 'page', 1), $this->integer($request, 'limit', 30)));
+                return new JsonResponse($this->workflows->workouts($request->query->get('from'), $request->query->get('to'), $this->integer($request, 'page', 1), $this->integer($request, 'limit', 30), $request->query->get('sportType', 'all')));
             }
             if ('activity-options' === $resource && '' === $id) {
                 return new JsonResponse($this->workflows->options());
