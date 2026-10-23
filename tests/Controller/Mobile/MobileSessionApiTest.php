@@ -6,6 +6,7 @@ namespace App\Tests\Controller\Mobile;
 
 use App\Tests\Controller\Admin\AdminWebTestCase;
 use Doctrine\DBAL\Connection;
+use PHPUnit\Framework\Attributes\DataProvider;
 
 final class MobileSessionApiTest extends AdminWebTestCase
 {
@@ -50,6 +51,32 @@ final class MobileSessionApiTest extends AdminWebTestCase
         self::assertResponseStatusCodeSame(204);
         $this->call('GET', '/mobile/v1/session', token: $session['token']);
         self::assertResponseStatusCodeSame(401);
+    }
+
+    #[DataProvider('bearerSeparators')]
+    public function testSessionAndSharedApiRespectBearerHeaderWhitespace(string $separator): void
+    {
+        $token = $this->login()['token'];
+        $server = ['HTTP_AUTHORIZATION' => 'Bearer'.$separator.$token];
+        $this->client->request('GET', '/mobile/v1/session', server: $server);
+        self::assertResponseIsSuccessful();
+        self::assertSame('admin', json_decode($this->client->getResponse()->getContent(), true)['username']);
+        $this->client->request('GET', '/api/v1/activities', server: $server);
+        self::assertResponseIsSuccessful();
+        self::assertTrue($this->client->getResponse()->headers->hasCacheControlDirective('no-store'));
+        $this->client->request('DELETE', '/mobile/v1/session', server: $server);
+        self::assertResponseStatusCodeSame(204);
+        $this->client->request('GET', '/mobile/v1/session', server: $server);
+        self::assertResponseStatusCodeSame(401);
+    }
+
+    /** @return iterable<string, array{string}> */
+    public static function bearerSeparators(): iterable
+    {
+        yield 'one space' => [' '];
+        yield 'two spaces' => ['  '];
+        yield 'tab' => ["\t"];
+        yield 'mixed whitespace' => [" \t "];
     }
 
     public function testInvalidCredentialsUseUniformErrorsAndAreThrottled(): void

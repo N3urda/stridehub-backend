@@ -13,6 +13,7 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Attribute\AsController;
 use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Component\Security\Http\AccessToken\HeaderAccessTokenExtractor;
 
 #[AsController]
 final readonly class MobileSessionRequestHandler
@@ -43,7 +44,7 @@ final readonly class MobileSessionRequestHandler
     public function current(Request $request): Response
     {
         return $this->respond(function () use ($request): Response {
-            $token = $this->bearer($request);
+            $token = new HeaderAccessTokenExtractor()->extractAccessToken($request) ?? '';
             if ($request->isMethod('DELETE')) {
                 $this->sessions->revoke($token);
 
@@ -65,13 +66,6 @@ final readonly class MobileSessionRequestHandler
 
             return new JsonResponse($this->collection->pair($body['name'], $body['deviceId']), 201);
         });
-    }
-
-    private function bearer(Request $request): string
-    {
-        $header = $request->headers->get('Authorization') ?? '';
-
-        return str_starts_with($header, 'Bearer ') ? substr($header, 7) : '';
     }
 
     private function respond(callable $operation): Response
