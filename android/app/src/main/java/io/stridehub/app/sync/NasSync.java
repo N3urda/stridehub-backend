@@ -15,7 +15,7 @@ import java.security.KeyStore;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.Executors;
-/** Serialized, immutable uploads. Only pairing uses the browser session. */
+/** Serialized, immutable uploads. Pairing uses the native mobile session. */
 public final class NasSync {
     private static final java.util.concurrent.ExecutorService WORK=Executors.newSingleThreadExecutor();
     private static Context app;
@@ -72,7 +72,10 @@ public final class NasSync {
         if(device==null){device=java.util.UUID.randomUUID().toString().replace("-","");prefs(c).edit().putString(preference,device).commit();}
         return device;
     }
-    public static void pair(Context c,String cookie,Done done){
+    public static void pair(Context c,Done done){
+        final String mobileToken=io.stridehub.app.NativeSession.token(c);
+        if(mobileToken.isEmpty()){done.done("请先登录 StrideHub，再配对 NAS。称重仍可离线使用。");return;}
+        final long sessionGeneration=io.stridehub.app.NativeSession.generation();
         final String generation=java.util.UUID.randomUUID().toString();
         final String destination=server(c).baseUrl();
         final String username=c.getSharedPreferences("connection",0).getString("username","");
@@ -81,10 +84,10 @@ public final class NasSync {
         WORK.execute(()->{
             try{
                 ServerAddress s=ServerAddress.parse(destination,c.getSharedPreferences("connection",0).getBoolean("http",false));
-                JSONObject csrf=request(s,"GET","/admin/health/api/collection/csrf",null,cookie,null,null);
-                JSONObject device=request(s,"POST","/admin/health/api/collection/devices",new JSONObject().put("name","StrideHub Android").put("deviceId",deviceId).toString(),cookie,csrf.getString("csrfToken"),null);
+                JSONObject device=request(s,"POST","/mobile/v1/collection/devices",new JSONObject().put("name","StrideHub Android").put("deviceId",deviceId).toString(),mobileToken);
+                if(!deviceId.equals(device.optString("deviceId")) || device.optString("token").isEmpty())throw new Exception("服务器返回的设备配对信息不一致");
                 synchronized(NasSync.class){
-                    if(!generation.equals(prefs(c).getString("attempt",""))||!destination.equals(server(c).baseUrl())||!username.equals(c.getSharedPreferences("connection",0).getString("username","")))throw new Exception("连接已取消，请重新配对");
+                    if(sessionGeneration!=io.stridehub.app.NativeSession.generation()||!generation.equals(prefs(c).getString("attempt",""))||!destination.equals(server(c).baseUrl())||!username.equals(c.getSharedPreferences("connection",0).getString("username","")))throw new Exception("连接已取消，请重新配对");
                     prefs(c).edit().putString("server",destination).putString("binding",device.getString("deviceId")).putString("username",username).putString("token",seal(device.getString("token"))).commit();
                 }
                 try(LocalStore store=new LocalStore(c)){
@@ -245,7 +248,7 @@ public final class NasSync {
                 try{
                     // Claim is the send boundary. Deletion after this point is explicitly in-flight.
                     if(!b.equals(binding(c))){release(db,row.id,"pending","连接已暂停");return false;}
-                    JSONObject response=request(destination,"PUT","/device/v1/weight/"+row.uuid,row.payload,null,null,credential);
+                    JSONObject response=request(destination,"PUT","/device/v1/weight/"+row.uuid,row.payload,credential);
                     validateReceipt(response,row.uuid,b);
                     String projection=response.getJSONObject("projection").getString("status");
                     release(db,row.id,projection.equals("manual_conflict")?"manual_conflict":"synced",projection);
@@ -317,14 +320,12 @@ public final class NasSync {
             code=c;
         }
     }
-    private static JSONObject request(ServerAddress server,String method,String path,String body,String cookie,String csrf,String bearer)throws Exception{
+    private static JSONObject request(ServerAddress server,String method,String path,String body,String bearer)throws Exception{
         HttpURLConnection c=(HttpURLConnection)new URL(server.route(path)).openConnection();
         c.setInstanceFollowRedirects(false);
         c.setConnectTimeout(10000);
         c.setReadTimeout(15000);
         c.setRequestMethod(method);
-        if(cookie!=null)c.setRequestProperty("Cookie",cookie);
-        if(csrf!=null)c.setRequestProperty("X-CSRF-Token",csrf);
         if(bearer!=null)c.setRequestProperty("Authorization","Bearer "+bearer);
         try{
             if(body!=null){

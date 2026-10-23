@@ -57,7 +57,9 @@ import java.util.Map;
 import java.util.Collections;
 
 public final class WeighingActivity extends Activity implements ScaleClient.Listener {
-    private static final int PAPER=0xfff6f7f2, INK=0xff203d31, MUTED=0xff59665d, GREEN=0xff326f57, SOFT=0xffe8efe7, LINE=0xffe3e8df;
+    private int PAPER=0xfff2f5f9, INK=0xff132b46, MUTED=0xff57657a, GREEN=0xff4666ed, SOFT=0xffe8ecfc, LINE=0xffe1e5ef;
+    private int SURFACE=Color.WHITE, ON_ACCENT=Color.WHITE;
+    private final int[] pageScroll=new int[4];
     private static final int PERMISSIONS=51, ENABLE_BT=52, EXPORT=53, IMPORT=54;
     private LocalStore store;
     private ScaleClient client;
@@ -83,7 +85,11 @@ public final class WeighingActivity extends Activity implements ScaleClient.List
     private final LinkedHashMap<String,ScaleClient.Device> found=new LinkedHashMap<>();
 
     @Override public void onCreate(Bundle saved) {
+        boolean dark=(getResources().getConfiguration().uiMode & android.content.res.Configuration.UI_MODE_NIGHT_MASK)==android.content.res.Configuration.UI_MODE_NIGHT_YES;
+        if(dark)setTheme(android.R.style.Theme_Material_NoActionBar);
         super.onCreate(saved);
+        if(dark){ON_ACCENT=0xff132b46;PAPER=0xff101822;INK=0xffe4ecf7;MUTED=0xffa4b0c2;GREEN=0xffa6b7ff;SOFT=0xff273658;LINE=0xff354258;SURFACE=0xff1b2634;}
+        if(saved!=null){int[] positions=saved.getIntArray("pageScroll");if(positions!=null)System.arraycopy(positions,0,pageScroll,0,Math.min(4,positions.length));}
         if(saved!=null) { page=saved.getInt("page"); days=saved.getInt("days",30); try{selectedMetric=Metric.valueOf(saved.getString("metric","WEIGHT"));}catch(IllegalArgumentException ignored){} forcePicker=saved.getBoolean("forcePicker"); exportKind=saved.getString("exportKind","csv"); }
         if(saved!=null) {int average=saved.getInt("weightAverageDays",0);weightAverageDays=average==7||average==30?average:0;}
         io.stridehub.app.sync.NasSync.initialize(this);
@@ -93,11 +99,13 @@ public final class WeighingActivity extends Activity implements ScaleClient.List
         if(sessionFinished)status="测量完成，已保存到本机。";
         else if(!autoResume)status="已暂停接收；点击开始等待即可继续。";
         buildShell(); render();
+        scroll.post(()->scroll.scrollTo(0,pageScroll[page]));
         if(saved!=null&&saved.getBoolean("manualOpen"))showManual(saved);
     }
     private void buildShell() {
         getWindow().setStatusBarColor(PAPER); getWindow().setNavigationBarColor(PAPER);
-        getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
+        boolean dark=(getResources().getConfiguration().uiMode & android.content.res.Configuration.UI_MODE_NIGHT_MASK)==android.content.res.Configuration.UI_MODE_NIGHT_YES;
+        getWindow().getDecorView().setSystemUiVisibility(dark?0:View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
         shell=column(); shell.setBackgroundColor(PAPER);
         shell.setOnApplyWindowInsetsListener((view,insets)-> {
             if(Build.VERSION.SDK_INT>=35) { android.graphics.Insets system=insets.getInsets(WindowInsets.Type.systemBars()); view.setPadding(system.left,system.top,system.right,system.bottom); }
@@ -108,17 +116,17 @@ public final class WeighingActivity extends Activity implements ScaleClient.List
         brand.addView(back,new LinearLayout.LayoutParams(-2,-2));
         TextView name=text("身体记录",20,INK,true);name.setGravity(Gravity.END);brand.addView(name,new LinearLayout.LayoutParams(0,-2,1));
         shell.addView(brand);
+        nav=row(); nav.setPadding(dp(12),dp(4),dp(12),dp(4)); nav.setBackgroundColor(PAPER); shell.addView(nav);
         scroll=new ScrollView(this); scroll.setFillViewport(true); scroll.setClipToPadding(false);
         content=column(); content.setPadding(dp(24),dp(10),dp(24),dp(24)); scroll.addView(content);
         shell.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
-        nav=row(); nav.setPadding(dp(12),dp(8),dp(12),dp(8)); nav.setBackgroundColor(PAPER); shell.addView(nav);
         setContentView(shell);
     }
     private void render() {
         records=store.all(); content.removeAllViews(); statusLabel=null; stageTitle=null; measureButton=null; liveValue=null; liveCaption=null; liveFat=null; liveBmi=null; liveSource=null;liveDetail=null;
         if(page==0) renderHome(); else if(page==1) renderTrend(); else if(page==2) renderHistory(); else renderSettings();
         nav.removeAllViews(); String[] titles={"称重","趋势","记录","设置"};
-        for(int i=0;i<titles.length;i++) { final int target=i; Button item=button(titles[i],false); item.setTextColor(page==i?GREEN:MUTED); item.setBackground(interactive(page==i?SOFT:PAPER,16)); item.setTypeface(null,page==i?Typeface.BOLD:Typeface.NORMAL);item.setSelected(page==i);item.setContentDescription(titles[i]+(page==i?"，当前页面":"")); LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,-2,1); p.setMargins(dp(2),0,dp(2),0); nav.addView(item,p); item.setOnClickListener(v->{page=target;render();scroll.scrollTo(0,0);maybeAutoStart();}); }
+        for(int i=0;i<titles.length;i++) { final int target=i; Button item=button(titles[i],false); item.setTextColor(page==i?GREEN:MUTED); item.setBackground(interactive(page==i?SOFT:PAPER,16)); item.setTypeface(null,page==i?Typeface.BOLD:Typeface.NORMAL);item.setSelected(page==i);item.setContentDescription(titles[i]+(page==i?"，当前页面":"")); LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,-2,1); p.setMargins(dp(2),0,dp(2),0); nav.addView(item,p); item.setOnClickListener(v->{pageScroll[page]=scroll.getScrollY();page=target;render();scroll.post(()->scroll.scrollTo(0,pageScroll[page]));maybeAutoStart();}); }
     }
     private void intro(String title,String subtitle) { content.addView(text(title,29,INK,true)); TextView sub=text(subtitle,13,MUTED,false); sub.setLineSpacing(dp(3),1); add(content,sub,7,22); }
     private void renderHome() {
@@ -152,7 +160,7 @@ public final class WeighingActivity extends Activity implements ScaleClient.List
         if(latest!=null && (saved==null || latest.id!=saved.id)){
             final Measurement previous=latest;LinearLayout history=card();history.addView(text("最近已保存 · "+formatTime(latest.measuredAt),12,MUTED,false));
             add(history,text(format(latest.weightKg)+" kg",26,INK,true),9,6);history.addView(text(sourceLabel(latest)+" · "+io.stridehub.app.sync.NasSync.rowStatus(store,latest.id),12,MUTED,false));
-            history.setBackground(interactive(Color.WHITE,22));history.setClickable(true);history.setFocusable(true);history.setContentDescription("查看最近已保存记录，"+format(latest.weightKg)+" 千克，"+formatTime(latest.measuredAt));history.setOnClickListener(v->showDetail(previous));add(content,history,0,12);
+            history.setBackground(interactive(SURFACE,22));history.setClickable(true);history.setFocusable(true);history.setContentDescription("查看最近已保存记录，"+format(latest.weightKg)+" 千克，"+formatTime(latest.measuredAt));history.setOnClickListener(v->showDetail(previous));add(content,history,0,12);
         }
         Button sync=button("查看同步与备份",false);content.addView(sync);sync.setOnClickListener(v->{page=3;render();scroll.scrollTo(0,0);});
     }
@@ -280,7 +288,7 @@ public final class WeighingActivity extends Activity implements ScaleClient.List
         String day="";
         for(int i=0;i<Math.min(historyLimit,records.size());i++) { Measurement m=records.get(i); if(!m.localDay.equals(day)) { day=m.localDay; add(content,text(day,12,MUTED,true),23,10); }
             LinearLayout r=card(); r.setPadding(dp(17),dp(15),dp(17),dp(15)); LinearLayout top=row(); TextView weight=text(format(m.weightKg)+" kg",23,INK,true); top.addView(weight,new LinearLayout.LayoutParams(0,-2,1)); TextView body=text(m.bodyFatPercent==null?"体脂 —":format(m.bodyFatPercent)+" %",16,m.bodyFatPercent==null?MUTED:GREEN,true); top.addView(body); r.addView(top);
-            add(r,text(new SimpleDateFormat("HH:mm",Locale.CHINA).format(m.measuredAt)+"  ·  "+sourceLabel(m)+"   ›",12,MUTED,false),7,0);add(r,text("本机已保存 · "+io.stridehub.app.sync.NasSync.rowStatus(store,m.id),12,MUTED,false),6,0);r.setBackground(interactive(Color.WHITE,22)); r.setClickable(true); r.setFocusable(true); r.setContentDescription(formatTime(m.measuredAt)+"，体重 "+format(m.weightKg)+" 千克，"+(m.bodyFatPercent==null?"体脂未知":"体脂率 "+format(m.bodyFatPercent)+"%，")+"本机已保存，"+io.stridehub.app.sync.NasSync.rowStatus(store,m.id)+"，查看详情"); r.setOnClickListener(v->showDetail(m)); add(content,r,0,9);
+            add(r,text(new SimpleDateFormat("HH:mm",Locale.CHINA).format(m.measuredAt)+"  ·  "+sourceLabel(m)+"   ›",12,MUTED,false),7,0);add(r,text("本机已保存 · "+io.stridehub.app.sync.NasSync.rowStatus(store,m.id),12,MUTED,false),6,0);r.setBackground(interactive(SURFACE,22)); r.setClickable(true); r.setFocusable(true); r.setContentDescription(formatTime(m.measuredAt)+"，体重 "+format(m.weightKg)+" 千克，"+(m.bodyFatPercent==null?"体脂未知":"体脂率 "+format(m.bodyFatPercent)+"%，")+"本机已保存，"+io.stridehub.app.sync.NasSync.rowStatus(store,m.id)+"，查看详情"); r.setOnClickListener(v->showDetail(m)); add(content,r,0,9);
         }
         if(historyLimit<records.size()) { Button more=button("继续查看更早记录",false); content.addView(more); more.setOnClickListener(v->{int y=scroll.getScrollY();historyLimit+=50;render();scroll.post(()->scroll.scrollTo(0,y));}); }
     }
@@ -289,11 +297,11 @@ public final class WeighingActivity extends Activity implements ScaleClient.List
         LinearLayout syncStatus=card();syncStatus.addView(text("NAS 同步",18,INK,true));add(syncStatus,text(io.stridehub.app.sync.NasSync.status(this),13,MUTED,false),10,0);add(content,syncStatus,0,12);
         Button pairNas=button("配对 NAS 并上传本机历史",false);content.addView(pairNas);
         pairNas.setOnClickListener(v->{try {
+            if(!io.stridehub.app.NativeSession.signedIn(this)){toast("请先登录 StrideHub，再配对 NAS。称重仍可离线使用。");return;}
             String destination=io.stridehub.app.sync.NasSync.server(this).baseUrl();
-            new AlertDialog.Builder(this).setTitle("上传到 NAS？").setMessage("目的地："+destination+"\n将上传未绑定的全部本机稳定测量及导入历史到当前网页登录账号。同服务器及同登录名会更新原设备凭据并恢复待同步；其他绑定的记录不会自动转移。请确认网页登录账号正确。")
+            new AlertDialog.Builder(this).setTitle("上传到 NAS？").setMessage("目的地："+destination+"\n将上传未绑定的全部本机稳定测量及导入历史到当前 App 登录账号。同服务器及同登录名会更新原设备凭据并恢复待同步；其他绑定的记录不会自动转移。请确认当前账号正确。")
             .setNegativeButton("取消",null).setPositiveButton("确认配对并上传",(d,w)->{
-                String cookie=android.webkit.CookieManager.getInstance().getCookie(io.stridehub.app.sync.NasSync.server(this).route("/admin/health/api/collection/csrf"));
-                io.stridehub.app.sync.NasSync.pair(this,cookie,message->runOnUiThread(()->{if(!isFinishing()&&!isDestroyed()){toast(message);render();}}));
+                io.stridehub.app.sync.NasSync.pair(this,message->runOnUiThread(()->{if(!isFinishing()&&!isDestroyed()){toast(message);render();}}));
             }).show();
         }catch(Exception e){toast("请返回 StrideHub 设置服务器并登录");}});
         Button syncNas=button("同步 / 网络恢复后重试",false);content.addView(syncNas);syncNas.setOnClickListener(v->io.stridehub.app.sync.NasSync.sync(this,message->runOnUiThread(()->{if(!isFinishing()&&!isDestroyed()){toast(message);render();}})));
@@ -599,13 +607,13 @@ public final class WeighingActivity extends Activity implements ScaleClient.List
         updateAwake();super.onStop();
     }
     @Override protected void onDestroy(){client.stop();store.close();super.onDestroy();}
-    @Override protected void onSaveInstanceState(Bundle out){super.onSaveInstanceState(out);out.putInt("page",page);out.putInt("days",days);out.putString("metric",selectedMetric.name());out.putInt("weightAverageDays",weightAverageDays);out.putBoolean("forcePicker",forcePicker);out.putString("exportKind",exportKind);out.putLong("lastSavedId",lastSavedId);out.putBoolean("autoResume",autoResume);out.putBoolean("externalSettings",externalSettings);out.putBoolean("permissionPending",permissionPending);out.putBoolean("sessionFinished",sessionFinished);if(manualDialog!=null&&manualDialog.isShowing()){out.putBoolean("manualOpen",true);out.putString("manualWeight",manualWeight.getText().toString());out.putString("manualFat",manualFat.getText().toString());out.putLong("manualTime",manualTime.getTimeInMillis());}}
+    @Override protected void onSaveInstanceState(Bundle out){super.onSaveInstanceState(out);pageScroll[page]=scroll.getScrollY();out.putIntArray("pageScroll",pageScroll);out.putInt("page",page);out.putInt("days",days);out.putString("metric",selectedMetric.name());out.putInt("weightAverageDays",weightAverageDays);out.putBoolean("forcePicker",forcePicker);out.putString("exportKind",exportKind);out.putLong("lastSavedId",lastSavedId);out.putBoolean("autoResume",autoResume);out.putBoolean("externalSettings",externalSettings);out.putBoolean("permissionPending",permissionPending);out.putBoolean("sessionFinished",sessionFinished);if(manualDialog!=null&&manualDialog.isShowing()){out.putBoolean("manualOpen",true);out.putString("manualWeight",manualWeight.getText().toString());out.putString("manualFat",manualFat.getText().toString());out.putLong("manualTime",manualTime.getTimeInMillis());}}
     private LinearLayout column(){LinearLayout v=new LinearLayout(this);v.setOrientation(LinearLayout.VERTICAL);return v;}
     private LinearLayout row(){LinearLayout v=new LinearLayout(this);v.setOrientation(LinearLayout.HORIZONTAL);return v;}
     private TextView text(String value,float size,int color,boolean bold){TextView v=new TextView(this);v.setText(value);v.setTextSize(size);v.setTextColor(color);v.setIncludeFontPadding(false);v.setLineSpacing(dp(3),1);if(bold)v.setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL));return v;}
-    private Button button(String label,boolean primary){Button b=new Button(this);b.setText(label);b.setTextSize(14);b.setAllCaps(false);b.setMinWidth(0);b.setMinimumWidth(0);b.setMinHeight(dp(48));b.setMinimumHeight(dp(48));b.setPadding(dp(12),dp(7),dp(12),dp(7));b.setTextColor(primary?Color.WHITE:GREEN);b.setBackground(interactive(primary?GREEN:SOFT,14));b.setStateListAnimator(null);return b;}
-    private Button choice(String title,boolean selected,Runnable action){Button b=button(title,false);b.setTextColor(selected?Color.WHITE:MUTED);b.setBackground(interactive(selected?GREEN:PAPER,14));b.setSelected(selected);b.setOnClickListener(v->action.run());return b;}
-    private LinearLayout card(){LinearLayout v=column();v.setPadding(dp(20),dp(20),dp(20),dp(20));v.setBackground(shape(Color.WHITE,22));return v;}
+    private Button button(String label,boolean primary){Button b=new Button(this);b.setText(label);b.setTextSize(14);b.setAllCaps(false);b.setMinWidth(0);b.setMinimumWidth(0);b.setMinHeight(dp(48));b.setMinimumHeight(dp(48));b.setPadding(dp(12),dp(7),dp(12),dp(7));b.setTextColor(primary?ON_ACCENT:GREEN);b.setBackground(interactive(primary?GREEN:SOFT,14));b.setStateListAnimator(null);return b;}
+    private Button choice(String title,boolean selected,Runnable action){Button b=button(title,false);b.setTextColor(selected?ON_ACCENT:MUTED);b.setBackground(interactive(selected?GREEN:PAPER,14));b.setSelected(selected);b.setOnClickListener(v->action.run());return b;}
+    private LinearLayout card(){LinearLayout v=column();v.setPadding(dp(20),dp(20),dp(20),dp(20));v.setBackground(shape(SURFACE,22));return v;}
     private GradientDrawable shape(int color,float radius){GradientDrawable d=new GradientDrawable();d.setColor(color);d.setCornerRadius(dp(radius));return d;}
     private RippleDrawable interactive(int color,float radius){return new RippleDrawable(ColorStateList.valueOf(0x33326f57),shape(color,radius),shape(Color.WHITE,radius));}
     private void add(LinearLayout parent,View child,int top,int bottom){LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2);p.setMargins(0,dp(top),0,dp(bottom));parent.addView(child,p);}

@@ -38,7 +38,7 @@ public final class ServerAddress {
         if (uri.getRawQuery() != null || uri.getRawFragment() != null) {
             throw invalid("请填写服务器根地址或安装子目录，不要附带查询参数或锚点");
         }
-        // WebView serializes Unicode paths as UTF-8 percent escapes.
+        // HTTP clients serialize Unicode paths as UTF-8 percent escapes.
         return new ServerAddress(parseUri(uri.toASCIIString()));
     }
 
@@ -113,7 +113,7 @@ public final class ServerAddress {
     private static void validateHost(String rawHost) {
         String host = rawHost.toLowerCase(Locale.ROOT);
         if (host.startsWith("[") && host.endsWith("]")) {
-            // URI has already validated the IPv6 literal. Zone IDs are not portable to WebView.
+            // URI has already validated the IPv6 literal. Zone IDs are not portable between Android HTTP clients.
             if (host.indexOf('%') >= 0) throw invalid("服务器地址不支持带区域标识的 IPv6 地址");
             return;
         }

@@ -1,18 +1,16 @@
 package io.stridehub.app;
-
 import android.app.Activity;
 import android.app.Instrumentation;
 import android.content.Intent;
 import android.test.ActivityInstrumentationTestCase2;
 import io.stridehub.app.scale.WeighingActivity;
-import java.lang.reflect.Field;
 
-/** The launcher action must reach local weighing without restoring a NAS webpage behind it. */
+/** Launcher action works even with legacy connection preferences and no native credential. */
 @SuppressWarnings("deprecation")
 public final class WeighingShortcutTest extends ActivityInstrumentationTestCase2<MainActivity> {
     public WeighingShortcutTest(){super(MainActivity.class);}
-
-    public void testShortcutDefersWebSessionUntilReturningToMain() throws Throwable {
+    public void testShortcutOpensNativeWeighingWithoutLogin() throws Throwable {
+        NativeSession.clear(getInstrumentation().getTargetContext());
         getInstrumentation().getTargetContext().getSharedPreferences("connection",0).edit().clear()
             .putString("server","https://shortcut.invalid").putBoolean("remember",true).commit();
         setActivityIntent(new Intent().setAction(WeighingShortcut.ACTION));
@@ -23,10 +21,8 @@ public final class WeighingShortcutTest extends ActivityInstrumentationTestCase2
             weighing=monitor.waitForActivityWithTimeout(5000);
             assertNotNull("Shortcut opens native weighing",weighing);
             getInstrumentation().waitForIdleSync();
-            runTestOnUiThread(()->{
-                assertNull("No WebView may restore an expired login in the background",read(main,"browser"));
-                assertEquals(Boolean.TRUE,read(main,"awaitingWeighing"));
-            });
+            runTestOnUiThread(()->assertFalse(NativeUiTestSupport.containsWebSurface(main.getWindow().getDecorView())));
+            assertFalse(NativeSession.signedIn(main));
         } finally {
             getInstrumentation().getTargetContext().getSharedPreferences("connection",0).edit().clear().commit();
             if(weighing!=null){Activity local=weighing;getInstrumentation().runOnMainSync(local::finish);}
@@ -34,6 +30,4 @@ public final class WeighingShortcutTest extends ActivityInstrumentationTestCase2
             getInstrumentation().waitForIdleSync();
         }
     }
-
-    private static Object read(Object target,String name){try{Field field=target.getClass().getDeclaredField(name);field.setAccessible(true);return field.get(target);}catch(Exception error){throw new AssertionError(error);}}
 }

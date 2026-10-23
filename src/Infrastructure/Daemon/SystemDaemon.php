@@ -9,6 +9,7 @@ use App\Console\Health\SyncZeppConsoleCommand;
 use App\Console\Health\SyncZeppWorkoutsConsoleCommand;
 use App\Console\Import\RunAutomationRulesBackfillConsoleCommand;
 use App\Console\Import\RunFileImportConsoleCommand;
+use App\Console\Mobile\RunMobileWorkflowsConsoleCommand;
 use App\Console\Strava\ProcessStravaWebhooksConsoleCommand;
 use App\Domain\Import\ImportMode;
 use App\Domain\Settings\SettingsRepository;
@@ -95,6 +96,26 @@ final class SystemDaemon implements Daemon
         }
 
         $extraConfiguredCronActionsOutput = [];
+
+        // Mobile requests enqueue durable work. The worker exits immediately when
+        // empty and owns its locks, so slow source requests never block HTTP or overlap.
+        $extraConfiguredCronActionsOutput[] = '<info> - mobileWorkflows: * * * * *</info>';
+        $actions[] = new Action(
+            key: 'mobileWorkflows',
+            mutexTtl: 60,
+            expression: '* * * * *',
+            performer: function (): PromiseInterface {
+                $process = new CronProcess(
+                    cronActionId: 'mobileWorkflows',
+                    clock: $this->clock,
+                    output: $this->getConsoleOutput(),
+                    command: sprintf('bin/console %s --limit=10', RunMobileWorkflowsConsoleCommand::NAME),
+                );
+                $process->start();
+
+                return resolve(true);
+            }
+        );
 
         // The explicit server-side Zepp connection opts into hourly refreshes. Without
         // a credential file this command exits without contacting Zepp or storing state.
