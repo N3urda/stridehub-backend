@@ -25,8 +25,15 @@ class WeighingThemePreferenceTest {
                 ActivityScenario.launch(WeighingActivity::class.java).use {scenario->scenario.onActivity {activity->
                     val paper=WeighingActivity::class.java.getDeclaredField("PAPER").apply {isAccessible=true}.getInt(activity)
                     assertEquals(if(dark) 0xff101822.toInt() else 0xfff2f5f9.toInt(),paper)
-                    assertEquals(paper,activity.window.statusBarColor)
-                    assertEquals(paper,activity.window.navigationBarColor)
+                    val shell=WeighingActivity::class.java.getDeclaredField("shell").apply {isAccessible=true}.get(activity) as android.view.View
+                    assertEquals("Real content background follows the selected palette",paper,(shell.background as android.graphics.drawable.ColorDrawable).color)
+                    if(android.os.Build.VERSION.SDK_INT>=35) {
+                        assertEquals("Edge-to-edge system status bar is transparent",android.graphics.Color.TRANSPARENT,activity.window.statusBarColor)
+                        assertEquals("Edge-to-edge navigation bar is transparent",android.graphics.Color.TRANSPARENT,activity.window.navigationBarColor)
+                    } else {
+                        assertEquals(paper,activity.window.statusBarColor)
+                        assertEquals(paper,activity.window.navigationBarColor)
+                    }
                     val lightIcons=activity.window.decorView.systemUiVisibility and View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
                     assertEquals(if(dark) 0 else View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR,lightIcons)
                 }}
