@@ -35,11 +35,36 @@ public final class ServerAddress {
         if ("http".equalsIgnoreCase(uri.getScheme()) && !allowHttp) {
             throw invalid("请使用 HTTPS，或明确开启 HTTP 连接");
         }
+        uri = installationUri(uri);
         if (uri.getRawQuery() != null || uri.getRawFragment() != null) {
             throw invalid("请填写服务器根地址或安装子目录，不要附带查询参数或锚点");
         }
         // HTTP clients serialize Unicode paths as UTF-8 percent escapes.
         return new ServerAddress(parseUri(uri.toASCIIString()));
+    }
+
+    /** Recognize copied app pages only after validating the complete URL and path. */
+    private static URI installationUri(URI uri) {
+        String path = uri.getRawPath();
+        int marker = path.lastIndexOf("/admin");
+        String[] pages = {"login", "insights", "app", "training", "running", "health", "nutrition", "weight", "plans", "activities", "settings", "upload", "importStatus"};
+        while (marker >= 0) {
+            String page = path.substring(marker);
+            boolean known = page.equals("/admin") || page.equals("/admin/");
+            for (String name : pages) {
+                String prefix = "/admin/" + name;
+                if (page.equals(prefix) || page.startsWith(prefix + "/")) {
+                    known = true;
+                    break;
+                }
+            }
+            if (known) {
+                // Navigation filters/fragments belong to the page, never to API requests.
+                return parseUri(uri.getScheme() + "://" + uri.getRawAuthority() + path.substring(0, marker));
+            }
+            marker = path.lastIndexOf("/admin", marker - 1);
+        }
+        return uri;
     }
 
     public String baseUrl() { return baseUrl; }

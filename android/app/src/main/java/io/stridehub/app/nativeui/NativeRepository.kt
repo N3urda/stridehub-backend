@@ -9,6 +9,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import okhttp3.*
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
@@ -68,12 +69,12 @@ class NativeRepository(private val context: Context, val server: ServerAddress, 
     val cache = NativeDatabase.get(context).cache()
     private val client = OkHttpClient.Builder().connectTimeout(20,TimeUnit.SECONDS).readTimeout(45,TimeUnit.SECONDS)
         .followRedirects(false).followSslRedirects(false).cache(null).build()
-    private suspend fun execute(request: Request, requireCurrent:Boolean=true): String = suspendCancellableCoroutine { continuation ->
+    private suspend fun execute(request: Request, requireCurrent:Boolean=true, expectJson:Boolean=true): String = suspendCancellableCoroutine { continuation ->
         if(requireCurrent) assertActive()
         val call=client.newCall(request)
         continuation.invokeOnCancellation { call.cancel() }
         call.enqueue(object: Callback {
-            override fun onFailure(call: Call,e: java.io.IOException) { if(continuation.isActive) continuation.resumeWithException(e) }
+            override fun onFailure(call: Call,e: java.io.IOException) { if(continuation.isActive) continuation.resumeWithException(NativeApiResponse.networkFailure(e)) }
             override fun onResponse(call: Call,response: Response) { try { response.use {
                 val source=it.body?.source()
                 val limit=16L*1024*1024
@@ -82,17 +83,9 @@ class NativeRepository(private val context: Context, val server: ServerAddress, 
                 val body=source?.readUtf8().orEmpty()
                 if(!continuation.isActive) return
                 try {if(requireCurrent) assertActive()} catch(e:Exception) {if(e is kotlinx.coroutines.CancellationException) continuation.cancel() else continuation.resumeWithException(e);return}
-                if(!it.isSuccessful) {
-                    val message=runCatching { val j=JSONObject(body); j.optJSONObject("error")?.optString("message") ?: j.optString("message") }.getOrNull().orEmpty()
-                    continuation.resumeWithException(ApiFailure(it.code, when(it.code) {
-                        401 -> "登录已过期，请重新连接。"
-                        404 -> message.ifBlank { "服务器缺少此移动接口，请升级 StrideHub 后端。" }
-                        409,428 -> message.ifBlank { "记录已改变。草稿已保留，请核对服务器最新内容后再保存。" }
-                        429 -> "请求过于频繁，请稍后重试。"
-                        else -> message.ifBlank { "服务器返回 ${it.code}，请重试。" }
-                    }))
-                } else continuation.resume(body)
-            }} catch(e:Exception) {if(continuation.isActive) continuation.resumeWithException(e)} }
+                val login = request.method == "POST" && request.url == server.route("/mobile/v1/sessions").toHttpUrl()
+                continuation.resume(NativeApiResponse.read(it.code,it.header("Content-Type"),body,login,expectJson))
+            }} catch(e:Exception) {if(continuation.isActive) continuation.resumeWithException(if(e is java.io.IOException) NativeApiResponse.networkFailure(e) else e)} }
         })
     }
     private fun request(path: String): Request.Builder {
@@ -102,7 +95,7 @@ class NativeRepository(private val context: Context, val server: ServerAddress, 
     }
     suspend fun raw(path: String): ByteArray = withContext(Dispatchers.IO) {
         // Exports use the same cancellable request path; all current export formats are UTF-8.
-        execute(request(path).get().build()).toByteArray()
+        execute(request(path).get().build(),expectJson=false).toByteArray()
     }
     suspend fun get(path: String, refresh: Boolean = true): NativeResult {
         val previous=cache.response(account,path)
@@ -151,8 +144,7 @@ class NativeRepository(private val context: Context, val server: ServerAddress, 
         suspend fun login(context: Context,address: String,user: String,password: String,http: Boolean,remember: Boolean): NativeRepository {
             val server=ServerAddress.parse(address,http)
             val temporary=NativeRepository(context,server,user,"")
-            val result=try {temporary.mutate("/mobile/v1/sessions","POST",JSONObject().put("username",user).put("password",password).put("deviceName","Android ${android.os.Build.MODEL}"))}
-            catch(e:ApiFailure) {if(e.status==404) throw ApiFailure(404,"服务器尚未提供原生移动登录，请升级 StrideHub 后端。") else throw e}
+            val result=temporary.mutate("/mobile/v1/sessions","POST",JSONObject().put("username",user).put("password",password).put("deviceName","Android ${android.os.Build.MODEL}"))
             require(result.optInt("apiVersion")==1 && result.optJSONArray("capabilities")?.let { a -> (0 until a.length()).any { a.optString(it)=="mobile-workflows" } } ==true) { "服务器移动接口版本不兼容，请升级 StrideHub 后端。" }
             val token=result.getString("token");val identity=result.getString("username")
             temporary.assertActive()
