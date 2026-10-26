@@ -257,6 +257,16 @@ class NativeUi:
         if not self.visible(heading):
             raise SafeFailure('Expected native page heading was not found toward the top')
 
+    @staticmethod
+    def editable_value(node,label):
+        text=node.get('text','')
+        # Legacy WeighingActivity.showManual EditText exposes its empty hint as text in
+        # UIAutomator. Recognize only the two exact native numeric field/hint pairs.
+        hints={'体重（kg）':'例如 65.4','体脂率（% · 选填）':'未知时留空'}
+        if (node.get('class')=='android.widget.EditText' and node.get('content-desc')==label
+                and label in hints and text==hints[label]):return ''
+        return text
+
     def fill(self, label, value):
         if not value.isascii():
             raise SafeFailure('This ADB harness requires ASCII fixture input; do not change a production password')
@@ -282,7 +292,7 @@ class NativeUi:
         focused = [node for node in fields(self.tree()) if node.get('focused') == 'true']
         if len(focused) != 1:
             raise SafeFailure('Expected native input did not receive unambiguous focus')
-        old_length = len(focused[0].get('text','').encode('utf-16-le'))//2
+        old_length = len(self.editable_value(focused[0],label).encode('utf-16-le'))//2
         if old_length > 16384:
             raise SafeFailure('Native input exceeds the bounded fixture replacement size')
         self.adb('shell', 'input', 'keyevent', '123')  # MOVE_END, no Ctrl chord needed.
@@ -295,7 +305,7 @@ class NativeUi:
                 self.adb('shell','input','keyevent',*([key]*count))
                 remaining -= count
         cleared = [node for node in fields(self.tree()) if node.get('focused') == 'true']
-        if len(cleared) != 1 or cleared[0].get('text','') != '':
+        if len(cleared) != 1 or self.editable_value(cleared[0],label) != '':
             raise SafeFailure('Native input could not be fully cleared; replacement was not entered')
         for index, part in enumerate(value.split('%')):
             if index:

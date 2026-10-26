@@ -50,6 +50,16 @@ class InputUi(nas.NativeUi):
         return b''
 
 
+class NumericHintUi(InputUi):
+    def __init__(self,label,old,hint,**kwargs):
+        super().__init__(label,old,**kwargs);self.hint=hint
+    def tree(self):
+        root=super().tree();field=next(root.iter('node'))
+        field.set('content-desc',self.label)
+        if not self.value:field.set('text',self.hint)
+        return root
+
+
 class HarnessGuardsTest(unittest.TestCase):
     def test_only_exact_public_https_fixture_root_is_accepted(self):
         value='https://nas-fixture.example'+nas.PREFIX
@@ -227,6 +237,25 @@ class HarnessGuardsTest(unittest.TestCase):
         ui.tap=tap;ui.scroll_to_top=lambda heading:events.append(('top',heading))
         ui.tab('运动')
         self.assertEqual([('tap','运动'),('tap','返回'),('tap','返回'),('top','每一次运动')],events)
+
+    def test_legacy_empty_numeric_hint_is_not_a_value_but_written_value_is_exact(self):
+        for old in ('','71.7'):
+            with self.subTest(old=old):
+                ui=NumericHintUi('体重（kg）',old,'例如 65.4')
+                with patch.object(nas.time,'sleep'):ui.fill('体重（kg）','71.4')
+                self.assertEqual('71.4',ui.value)
+        ui=NumericHintUi('体脂率（% · 选填）','','未知时留空')
+        with patch.object(nas.time,'sleep'):ui.fill('体脂率（% · 选填）','18.5')
+        self.assertEqual('18.5',ui.value)
+
+    def test_hint_exception_is_limited_to_exact_native_numeric_field_and_still_checks_readback(self):
+        ui=NumericHintUi('用户名','','例如 65.4')
+        with patch.object(nas.time,'sleep'),self.assertRaises(nas.SafeFailure):ui.fill('用户名','fixture')
+        ui=NumericHintUi('体重（kg）','','例如 65.4',corrupt_input=True)
+        with patch.object(nas.time,'sleep'),self.assertRaises(nas.SafeFailure):ui.fill('体重（kg）','71.4')
+        ui=NumericHintUi('体重（kg）','70.1','例如 65.4',ignore_delete=True)
+        with patch.object(nas.time,'sleep'),self.assertRaises(nas.SafeFailure):ui.fill('体重（kg）','71.4')
+        self.assertEqual('70.1',ui.value)
 
     def test_offline_context_restores_both_original_network_states_after_failure(self):
         calls=[]
