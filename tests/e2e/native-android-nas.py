@@ -207,6 +207,16 @@ class NativeUi:
             time.sleep(.35)
         raise SafeFailure('Expected native screen/state did not appear before timeout')
 
+    def scroll_to_top(self, heading, attempts=45):
+        # Native pages deliberately restore scroll position. Seek their first content heading
+        # by moving toward the top, without tapping data, resetting drafts or changing tabs.
+        for _ in range(attempts):
+            if self.visible(heading):return
+            self.adb('shell','input','swipe','540','600','540','1600','220')
+            time.sleep(.2)
+        if not self.visible(heading):
+            raise SafeFailure('Expected native page heading was not found toward the top')
+
     def fill(self, label, value):
         if not value.isascii():
             raise SafeFailure('This ADB harness requires ASCII fixture input; do not change a production password')
@@ -287,6 +297,8 @@ class NativeUi:
         self.tap(label)
         for _ in range(15):
             if not self.visible('返回'):
+                headings={'总览':'最近的真实记录','身体':'身体与恢复','运动':'每一次运动','计划':'计划与日常'}
+                if label in headings:self.scroll_to_top(headings[label])
                 return
             self.tap('返回')
         raise SafeFailure('Native tab history did not return to its root')
@@ -538,12 +550,12 @@ class NasAcceptance:
         analysis = detail.get('analysis',{})
         if not analysis.get('timeline') or not analysis.get('scatter') or not analysis.get('zones') or not detail.get('splits'):
             raise SafeFailure('Imported run fixture lacks the required measured analysis outputs')
-        self.ui.tab('运动'); self.ui.tap('跑步分析'); self.ui.wait('跑步复盘')
+        self.ui.tab('运动'); self.ui.tap('跑步分析'); self.ui.scroll_to_top('跑步复盘'); self.ui.wait('跑步复盘')
         self.ui.tap('全部历史')
         self.ui.wait('周跑量 · km'); self.ui.screenshot('running-weekly')
         self.ui.tap('跑步活动日历',scroll=True); self.ui.screenshot('running-calendar')
         self.ui.tap('已计算的最佳片段',scroll=True); self.ui.screenshot('running-best-efforts')
-        self.ui.tap(self.run['name'],scroll=True); self.ui.wait(self.run['name'])
+        self.ui.tap(self.run['name'],scroll=True); self.ui.scroll_to_top(self.run['name']); self.ui.wait(self.run['name'])
         self.capture_running_sections()
         self.report['running'] = {'realImportedFixture': True, 'timelineSamples':len(analysis.get('timeline',[])),
                                   'scatterPoints':len(analysis.get('scatter',[])), 'zones':len(analysis.get('zones',[])),
@@ -560,7 +572,7 @@ class NasAcceptance:
             self.ui.screenshot(filename)
 
     def dates(self):
-        self.ui.tab('运动'); self.ui.tap('跑步分析'); self.ui.wait('跑步复盘')
+        self.ui.tab('运动'); self.ui.tap('跑步分析'); self.ui.scroll_to_top('跑步复盘'); self.ui.wait('跑步复盘')
         starts = [text for text in self.ui.texts() if re.fullmatch(r'起 \d{4}-\d{2}-\d{2}',text)]
         if not starts:
             raise SafeFailure('Native running range selector could not be inspected')
@@ -609,7 +621,7 @@ class NasAcceptance:
         require_empty_pairing_history(self.ui.local_state())
         before_collection=self.collection_records()
         before_daily=self.api.request('/api/v1/health/weight')
-        self.ui.tap('设置');self.ui.wait('NAS 同步')
+        self.ui.tap('设置');self.ui.scroll_to_top('NAS 同步');self.ui.wait('NAS 同步')
         require_empty_pairing_history(self.ui.local_state())
         self.ui.tap('配对 NAS 并上传本机历史',scroll=True)
         self.ui.wait('上传到 NAS？')
@@ -635,7 +647,7 @@ class NasAcceptance:
             if len(queue)!=1 or queue[0]['uuid']!=measurement['upload_uuid'] or queue[0]['server']!=self.base:
                 raise SafeFailure('The one manual record did not enter only its guarded public queue')
             frozen=queue[0]['payload'];binding=queue[0]['binding']
-            self.ui.tap('设置');self.ui.wait('NAS 同步')
+            self.ui.tap('设置');self.ui.scroll_to_top('NAS 同步');self.ui.wait('NAS 同步')
             for _ in range(2):self.ui.tap('同步 / 网络恢复后重试');time.sleep(.5)
             deadline=time.monotonic()+45
             while time.monotonic()<deadline:

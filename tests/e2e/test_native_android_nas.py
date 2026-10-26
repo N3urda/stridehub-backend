@@ -169,6 +169,38 @@ class HarnessGuardsTest(unittest.TestCase):
         self.assertIn('running-coverage',run.ui.shots)
         self.assertEqual('running-splits',run.ui.shots[-1])
 
+    def test_top_seek_reveals_restored_offscreen_heading_without_tapping(self):
+        ui=nas.NativeUi.__new__(nas.NativeUi);position=[3];calls=[]
+        ui.visible=lambda label:position[0]==0 and label=='跑步复盘'
+        def adb(*args):
+            calls.append(args)
+            if args[:3]==('shell','input','swipe'):position[0]=max(0,position[0]-1)
+            return b''
+        ui.adb=adb
+        with patch.object(nas.time,'sleep'):ui.scroll_to_top('跑步复盘')
+        self.assertEqual(0,position[0])
+        self.assertEqual(3,len(calls))
+        self.assertTrue(all(call==('shell','input','swipe','540','600','540','1600','220') for call in calls))
+        with patch.object(nas.time,'sleep'):ui.scroll_to_top('跑步复盘')
+        self.assertEqual(3,len(calls))
+
+    def test_top_seek_is_bounded_if_expected_page_never_appears(self):
+        ui=nas.NativeUi.__new__(nas.NativeUi);calls=[]
+        ui.visible=lambda label:False;ui.adb=lambda *args:calls.append(args)
+        with patch.object(nas.time,'sleep'),self.assertRaises(nas.SafeFailure):
+            ui.scroll_to_top('跑步复盘',attempts=2)
+        self.assertEqual(2,len(calls))
+
+    def test_tab_resume_returns_to_root_and_top_heading(self):
+        ui=nas.NativeUi.__new__(nas.NativeUi);events=[];depth=[2]
+        ui.visible=lambda label:label=='返回' and depth[0]>0
+        def tap(label):
+            events.append(('tap',label))
+            if label=='返回':depth[0]-=1
+        ui.tap=tap;ui.scroll_to_top=lambda heading:events.append(('top',heading))
+        ui.tab('运动')
+        self.assertEqual([('tap','运动'),('tap','返回'),('tap','返回'),('top','每一次运动')],events)
+
     def test_offline_context_restores_both_original_network_states_after_failure(self):
         calls=[]
         class Ui:
