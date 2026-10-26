@@ -17,6 +17,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
@@ -31,6 +32,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.SavedStateHandle
@@ -135,15 +138,16 @@ class AppModel(app:Application, private val state:SavedStateHandle):AndroidViewM
     // Password is intentionally never saved through process recreation.
     var password by remember { mutableStateOf("") };var allowHttp by rememberSaveable {mutableStateOf(false)};var remember by rememberSaveable {mutableStateOf(true)}
     var error by remember {mutableStateOf<String?>(null)};var loading by remember {mutableStateOf(false)};val scope=rememberCoroutineScope()
+    var showPassword by remember {mutableStateOf(false)}
     Column(Modifier.verticalScroll(rememberScrollState()).padding(24.dp).padding(bottom=80.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
         Text("你的身体与运动记录",style=MaterialTheme.typography.headlineMedium,fontWeight=FontWeight.Bold)
         if(NativeSession.server(context)!=null && !prefs.getBoolean("nativeLoginUsed",false)) InfoCard("全原生版本需要重新登录","服务器地址与账号已保留。输入密码建立移动会话后，即可继续使用全部原生页面。")
         Text("连接自己的服务器后，查看趋势、管理计划和记录日常。离线称重随时可用。",color=MaterialTheme.colorScheme.onSurfaceVariant)
-        OutlinedTextField(server,{server=it},label={Text("服务器地址")},placeholder={Text("https://stridehub.example.com")},singleLine=true,modifier=Modifier.fillMaxWidth())
-        OutlinedTextField(username,{username=it},label={Text("用户名")},singleLine=true,modifier=Modifier.fillMaxWidth())
-        OutlinedTextField(password,{password=it},label={Text("密码")},visualTransformation=PasswordVisualTransformation(),singleLine=true,modifier=Modifier.fillMaxWidth())
-        Row(verticalAlignment=Alignment.CenterVertically) {Checkbox(allowHttp,{allowHttp=it});Text("明确允许此连接使用 HTTP（局域网）")}
-        Row(verticalAlignment=Alignment.CenterVertically) {Checkbox(remember,{remember=it});Text("保持登录，最多七天")}
+        OutlinedTextField(server,{server=it},label={Text("服务器地址")},placeholder={Text("https://stridehub.example.com")},supportingText={Text("可直接粘贴 StrideHub 网页地址")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Uri),enabled=!loading,singleLine=true,modifier=Modifier.fillMaxWidth())
+        OutlinedTextField(username,{username=it},label={Text("用户名")},supportingText={Text("使用网页版的账号和密码")},enabled=!loading,singleLine=true,modifier=Modifier.fillMaxWidth())
+        OutlinedTextField(password,{password=it},label={Text("密码")},visualTransformation=if(showPassword) VisualTransformation.None else PasswordVisualTransformation(),keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Password),trailingIcon={IconButton(onClick={showPassword=!showPassword},enabled=!loading){Icon(if(showPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility,if(showPassword) "隐藏密码" else "显示密码")}},enabled=!loading,singleLine=true,modifier=Modifier.fillMaxWidth())
+        Row(verticalAlignment=Alignment.CenterVertically) {Checkbox(allowHttp,{allowHttp=it},enabled=!loading);Text("明确允许此连接使用 HTTP（局域网）")}
+        Row(verticalAlignment=Alignment.CenterVertically) {Checkbox(remember,{remember=it},enabled=!loading);Text("保持登录，最多七天")}
         error?.let { ErrorCard(it) }
         Button(enabled=!loading && server.isNotBlank() && username.isNotBlank() && password.isNotBlank(),onClick={ loading=true;error=null;scope.launch {
             try { val repo=NativeRepository.login(context,server,username,password,allowHttp,remember);password="";vm.loggedIn(repo) } catch(e:Exception) { error=e.message ?: "连接失败" } finally {loading=false}
