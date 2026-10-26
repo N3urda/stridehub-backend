@@ -149,25 +149,52 @@ class HarnessGuardsTest(unittest.TestCase):
         self.assertEqual([('tab','总览'),('wait','最近的真实记录'),('identity','checked'),
                           ('screenshot','login-public-https')],events)
 
-    def test_running_coverage_uses_section_and_merged_metric_label_without_exact_row_match(self):
+    def test_running_capture_aligns_each_actual_section_before_its_screenshot(self):
+        events=[]
         class Ui:
-            def __init__(self):self.shots=[];self.coverage_seen=False;self.metric_seen=False
-            def tap(self,label,scroll=False,partial=False):
-                if label=='数据覆盖与记录缺口':self.coverage_seen=True
-                elif label=='记录断档':
-                    self.assert_coverage_order=self.coverage_seen
-                    if not partial or not self.coverage_seen:raise nas.SafeFailure('Merged coverage label was not discoverable')
-                    # A native merged row includes the value after its label.
-                    if label not in '记录断档 秒, 0':raise nas.SafeFailure('Expected coverage metric absent')
-                    self.metric_seen=True
-                elif label=='记录断档 秒':raise nas.SafeFailure('Exact row is unavailable in merged semantics')
-            def screenshot(self,name):self.shots.append(name)
+            def show_section(self,label):events.append(('aligned',label))
+            def screenshot(self,name):events.append(('screenshot',name))
         run=nas.NasAcceptance.__new__(nas.NasAcceptance);run.ui=Ui()
         run.capture_running_sections()
-        self.assertTrue(run.ui.metric_seen)
-        self.assertTrue(run.ui.assert_coverage_order)
-        self.assertIn('running-coverage',run.ui.shots)
-        self.assertEqual('running-splits',run.ui.shots[-1])
+        self.assertEqual(('aligned','配速与心率'),events[0])
+        self.assertEqual(('aligned','数据覆盖与记录缺口'),events[6])
+        self.assertEqual(('screenshot','running-coverage'),events[7])
+        self.assertEqual(('aligned','公里分段与 GAP'),events[8])
+        self.assertEqual(('screenshot','running-splits'),events[9])
+
+    def scroll_fixture(self,position,target,maximum=9000):
+        ui=nas.NativeUi.__new__(nas.NativeUi);ui.legacy=nas.legacy_ui_module();state=[position];calls=[]
+        def tree():
+            root=ET.Element('hierarchy')
+            ET.SubElement(root,'node',{'text':'viewport '+str(state[0]),'bounds':'[0,240][1080,2100]'})
+            relative=target-state[0]+240
+            if 240<=relative<=2000:
+                ET.SubElement(root,'node',{'text':'short heading','bounds':f'[50,{relative}][900,{relative+60}]'})
+            return root
+        def adb(*args):
+            calls.append(args)
+            if args[:3]==('shell','input','swipe'):
+                delta=int(args[4])-int(args[6]);state[0]=min(maximum,max(0,state[0]+delta))
+            return b''
+        ui.tree=tree;ui.adb=adb
+        return ui,state,calls
+
+    def test_slow_search_reverses_once_from_unchanging_bottom_to_short_heading(self):
+        ui,state,calls=self.scroll_fixture(9000,8000)
+        with patch.object(nas.time,'sleep'):node=ui.seek('short heading')
+        self.assertEqual('short heading',node.get('text'))
+        self.assertLess(len(calls),10)
+        self.assertTrue(all(call[-1]=='650' for call in calls))
+        deltas=[int(call[4])-int(call[6]) for call in calls]
+        self.assertEqual(1,sum(left>0 and right<0 for left,right in zip(deltas,deltas[1:])))
+
+    def test_section_capture_moves_short_heading_up_with_chart_space_below(self):
+        ui,state,calls=self.scroll_fixture(0,1600)
+        with patch.object(nas.time,'sleep'):ui.show_section('short heading')
+        node=ui.matches(ui.tree(),'short heading')[0]
+        bounds=list(map(int,nas.re.findall(r'\d+',node.get('bounds'))))
+        self.assertLessEqual((bounds[1]+bounds[3])//2,620)
+        self.assertTrue(all(abs(int(call[4])-int(call[6]))<=400 for call in calls))
 
     def test_top_seek_reveals_restored_offscreen_heading_without_tapping(self):
         ui=nas.NativeUi.__new__(nas.NativeUi);position=[3];calls=[]

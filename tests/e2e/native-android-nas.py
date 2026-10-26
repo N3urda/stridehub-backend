@@ -157,18 +157,58 @@ class NativeUi:
     def visible(self, label, partial=False):
         return bool(self.matches(self.tree(), label, partial))
 
+    def scroll_signature(self,root):
+        # Use visible content, excluding changing status-bar clocks/network indicators.
+        return tuple((node.get('text',''),node.get('content-desc',''),node.get('bounds',''))
+                     for node in root.iter('node')
+                     if node.get('package') in (None,PACKAGE))
+
+    def slow_scroll(self,direction,distance=400):
+        start,end=('1500',str(1500-distance)) if direction=='down' else ('1000',str(1000+distance))
+        self.adb('shell','input','swipe','540',start,'540',end,'650')
+        time.sleep(.25)
+
+    def seek(self,label,partial=False,attempts=90):
+        # A long fast fling can skip a short heading entirely. Scan small overlapping
+        # viewports, detect an unchanged boundary, then search back exactly once.
+        for direction in ('down','up'):
+            previous=None;unchanged=0
+            for _ in range(attempts):
+                root=self.tree()
+                found=[node for node in self.matches(root,label,partial) if node.get('enabled','true')!='false']
+                if found:return found[-1]
+                signature=self.scroll_signature(root)
+                unchanged=unchanged+1 if signature==previous else 0
+                if unchanged>=2:break
+                previous=signature
+                self.slow_scroll(direction)
+        raise SafeFailure('Expected native control was not found after a bounded reversible scroll search')
+
+    def show_section(self,label):
+        # A heading near the bottom is insufficient screenshot evidence for its chart.
+        # Bring it into the upper content area using slow, bounded adjustments.
+        node=self.seek(label)
+        for _ in range(8):
+            _,top,_,bottom=map(int,re.findall(r'\d+',node.get('bounds','')))
+            center=(top+bottom)//2
+            if center<=620:return
+            self.slow_scroll('down',min(400,max(120,center-420)))
+            node=self.seek(label)
+        raise SafeFailure('Native section could not be aligned with its content visible')
+
     def tap(self, label, scroll=False, partial=False, attempts=None):
-        for _ in range(attempts or (45 if scroll else 5)):
-            matches = self.matches(self.tree(), label, partial)
-            matches = [node for node in matches if node.get('enabled', 'true') != 'false']
+        if scroll:
+            node=self.seek(label,partial,attempts or 90)
+            self.adb('shell','input','tap',*self.legacy.point(node))
+            time.sleep(.4)
+            return
+        for _ in range(attempts or 5):
+            matches=[node for node in self.matches(self.tree(),label,partial) if node.get('enabled','true')!='false']
             if matches:
-                self.adb('shell', 'input', 'tap', *self.legacy.point(matches[-1]))
+                self.adb('shell','input','tap',*self.legacy.point(matches[-1]))
                 time.sleep(.4)
                 return
-            if scroll:
-                self.adb('shell', 'input', 'swipe', '540', '1600', '540', '600', '220')
-            else:
-                time.sleep(.3)
+            time.sleep(.3)
         raise SafeFailure('Expected native control was not actionable at the current step')
 
     def tap_any(self, labels, scroll=False):
@@ -178,7 +218,7 @@ class NativeUi:
                 if self.matches(root, label):
                     return self.tap(label)
             if scroll:
-                self.adb('shell', 'input', 'swipe', '540', '1600', '540', '600', '220')
+                self.slow_scroll('down')
             else:
                 time.sleep(.25)
         raise SafeFailure('Expected native dialog action was not visible')
@@ -564,11 +604,7 @@ class NasAcceptance:
     def capture_running_sections(self):
         for label, filename in [('配速与心率','running-scatter'),('训练心率区间 · 分钟','running-zones'),('心率分布 · 分钟','running-distribution'),('数据覆盖与记录缺口','running-coverage'),('公里分段与 GAP','running-splits')]:
             self.ui.last_stage=filename
-            self.ui.tap(label,scroll=True)
-            if filename=='running-coverage':
-                # Metrics cards may expose a merged label/value accessibility node. Locate
-                # the standalone section first so a single-direction search cannot skip it.
-                self.ui.tap('记录断档',partial=True,scroll=True)
+            self.ui.show_section(label)
             self.ui.screenshot(filename)
 
     def dates(self):
