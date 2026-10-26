@@ -210,8 +210,8 @@ class NativeUi:
     def fill(self, label, value):
         if not value.isascii():
             raise SafeFailure('This ADB harness requires ASCII fixture input; do not change a production password')
-        # Reuse the established field visibility/focus locator; replace only its text injection
-        # to shell-quote special characters and preserve literal percent-s in fixture passwords.
+        # Reuse native label/focus lookup, but do not rely on Ctrl+A: some Android/IME
+        # combinations ignore it. Every replacement is cleared and read back before submit.
         def fields(root):
             return [node for node in root.iter('node') if node.get('class') == 'android.widget.EditText'
                     and (node.get('content-desc') == label or any(label == child.get('text') for child in node))]
@@ -229,16 +229,57 @@ class NativeUi:
         else:
             raise SafeFailure('Expected native input could not be placed fully on screen')
         self.adb('shell', 'input', 'tap', *self.legacy.point(field))
-        if not any(node.get('focused') == 'true' for node in fields(self.tree())):
-            raise SafeFailure('Expected native input did not receive focus')
-        self.adb('shell', 'input', 'keycombination', '113', '29')
-        self.adb('shell', 'input', 'keyevent', '67')
+        focused = [node for node in fields(self.tree()) if node.get('focused') == 'true']
+        if len(focused) != 1:
+            raise SafeFailure('Expected native input did not receive unambiguous focus')
+        old_length = len(focused[0].get('text','').encode('utf-16-le'))//2
+        if old_length > 16384:
+            raise SafeFailure('Native input exceeds the bounded fixture replacement size')
+        self.adb('shell', 'input', 'keyevent', '123')  # MOVE_END, no Ctrl chord needed.
+        # Delete both sides of the cursor. This also handles a multiline field where MOVE_END
+        # means end of the current line. Batching avoids one ADB process per character.
+        for key in ('67','112'):  # DEL, FORWARD_DEL
+            remaining = old_length+8
+            while remaining:
+                count = min(remaining,128)
+                self.adb('shell','input','keyevent',*([key]*count))
+                remaining -= count
+        cleared = [node for node in fields(self.tree()) if node.get('focused') == 'true']
+        if len(cleared) != 1 or cleared[0].get('text','') != '':
+            raise SafeFailure('Native input could not be fully cleared; replacement was not entered')
         for index, part in enumerate(value.split('%')):
             if index:
                 self.adb('shell', 'input text ' + shlex.quote('%'))
             if part:
                 self.adb('shell', 'input text ' + shlex.quote(part.replace(' ', '%s')))
         time.sleep(.35)
+        if label == '密码':
+            # Exact comparison needs the native visibility toggle, not bullet-count guessing.
+            # The synthetic value stays in memory; immediately mask again and remove the
+            # transient hierarchy file, even when validation fails. No screenshot occurs here.
+            root = self.tree()
+            show = self.matches(root,'显示密码')
+            if len(show) != 1:
+                raise SafeFailure('Native password must start masked with its visibility control available')
+            toggle = self.legacy.point(show[0])
+            self.adb('shell','input','tap',*toggle)
+            try:
+                time.sleep(.2)
+                entered = fields(self.tree())
+                if len(entered) != 1 or entered[0].get('text','') != value:
+                    raise SafeFailure('Native input readback did not equal its intended fixture value')
+            finally:
+                try:
+                    self.adb('shell','input','tap',*toggle)
+                    time.sleep(.2)
+                finally:
+                    self.adb('shell','rm','-f','/sdcard/stridehub-native.xml')
+            if not self.matches(self.tree(),'显示密码'):
+                raise SafeFailure('Native password masking was not restored after private validation')
+        else:
+            entered = fields(self.tree())
+            if len(entered) != 1 or entered[0].get('text','') != value:
+                raise SafeFailure('Native input readback did not equal its intended fixture value')
         if 'mInputShown=true' in self.adb('shell', 'dumpsys', 'input_method').decode(errors='replace'):
             self.adb('shell', 'input', 'keyevent', '4')
 
@@ -410,12 +451,18 @@ class NasAcceptance:
         self.ui.adb('shell', 'am', 'start', '-n', PACKAGE+'/io.stridehub.app.MainActivity')
         time.sleep(1)
         if self.ui.visible('连接并登录') or self.ui.visible('服务器地址') or self.ui.visible('连接 StrideHub'):
-            self.ui.fill('服务器地址', self.base)
+            # Reproduce the user's copied web URL; native normalization must remove /admin/app.
+            self.ui.fill('服务器地址', self.base+'/admin/app')
             self.ui.fill('用户名', self.credentials['username'])
-            self.ui.fill('密码', self.credentials['password'])
+            self.ui.fill('密码', self.credentials['password']+'-deliberately-invalid')
             self.ui.checkbox('明确允许此连接使用 HTTP（局域网）',False)
             self.ui.checkbox('保持登录，最多七天',True)
             self.ui.tap('连接并登录', scroll=True)
+            self.ui.wait('用户名或密码错误',timeout=self.args.http_timeout+20,partial=True)
+            self.ui.fill('密码', self.credentials['password'])
+            self.ui.tap('连接并登录', scroll=True)
+            self.report['loginInput']={'copiedAdminAppAddress':True,'friendlyInvalidPasswordShown':True,
+                                       'exactFieldValuesVerified':True,'passwordRemasked':True}
         self.ui.wait('最近的真实记录')
         self.ensure_ui_identity()
         self.ui.screenshot('login-public-https')

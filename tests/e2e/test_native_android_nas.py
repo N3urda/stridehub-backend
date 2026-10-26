@@ -3,7 +3,10 @@ import importlib.util
 import copy
 from pathlib import Path
 import subprocess
+import shlex
+import xml.etree.ElementTree as ET
 import sys
+import types
 import unittest
 from unittest.mock import patch
 
@@ -12,6 +15,39 @@ spec=importlib.util.spec_from_file_location('native_android_nas_tested',SOURCE)
 nas=importlib.util.module_from_spec(spec)
 sys.modules[spec.name]=nas
 spec.loader.exec_module(nas)
+
+
+class InputUi(nas.NativeUi):
+    """Stateful Android input fixture: selection chord is deliberately unsupported."""
+    def __init__(self,label,old,ignore_delete=False,corrupt_input=False):
+        self.label=label;self.value=old;self.cursor=2;self.focus=False;self.masked=True
+        self.ignore_delete=ignore_delete;self.corrupt_input=corrupt_input;self.calls=[]
+        self.legacy=nas.legacy_ui_module()
+        self.legacy.point=lambda node: ('900','350') if node.get('content-desc') in ('显示密码','隐藏密码') else ('500','350')
+    def tree(self):
+        root=ET.Element('hierarchy')
+        field=ET.SubElement(root,'node',{'class':'android.widget.EditText','bounds':'[100,300][1000,450]',
+            'focused':str(self.focus).lower(),'text':'•'*len(self.value) if self.label=='密码' and self.masked else self.value})
+        ET.SubElement(field,'node',{'text':self.label})
+        if self.label=='密码':ET.SubElement(root,'node',{'content-desc':'显示密码' if self.masked else '隐藏密码'})
+        return root
+    def adb(self,*args,**kwargs):
+        self.calls.append(args)
+        if args[:3]==('shell','input','tap'):
+            if args[3]=='900':self.masked=not self.masked
+            else:self.focus=True
+        elif args[:3]==('shell','input','keyevent'):
+            for key in args[3:]:
+                if key=='123':self.cursor=len(self.value)
+                elif key=='67' and not self.ignore_delete and self.cursor:
+                    self.value=self.value[:self.cursor-1]+self.value[self.cursor:];self.cursor-=1
+                elif key=='112' and not self.ignore_delete:
+                    self.value=self.value[:self.cursor]+self.value[self.cursor+1:]
+        elif len(args)==2 and args[1].startswith('input text '):
+            text=shlex.split(args[1])[2].replace('%s',' ')
+            if self.corrupt_input:text+='unexpected'
+            self.value=self.value[:self.cursor]+text+self.value[self.cursor:];self.cursor+=len(text)
+        return b''
 
 
 class HarnessGuardsTest(unittest.TestCase):
@@ -41,6 +77,63 @@ class HarnessGuardsTest(unittest.TestCase):
         with patch.object(subprocess,'check_output',side_effect=subprocess.CalledProcessError(1,['input',secret],output=secret.encode())):
             with self.assertRaises(nas.SafeFailure) as error:ui.adb('shell','input text '+secret)
         self.assertNotIn(secret,str(error.exception))
+
+    def test_fill_replaces_old_url_without_supported_selection_shortcut_and_reads_exact_value(self):
+        ui=InputUi('服务器地址','http://127.0.0.1:8086')
+        target='https://nas-fixture.example:1999'+nas.PREFIX
+        with patch.object(nas.time,'sleep'):ui.fill('服务器地址',target)
+        self.assertEqual(target,ui.value)
+        self.assertFalse(any('keycombination' in call for call in ui.calls))
+        self.assertTrue(any(call[:3]==('shell','input','keyevent') and '67' in call for call in ui.calls))
+
+    def test_fill_refuses_to_append_when_clearing_did_not_work(self):
+        ui=InputUi('服务器地址','old value',ignore_delete=True)
+        with patch.object(nas.time,'sleep'),self.assertRaises(nas.SafeFailure):
+            ui.fill('服务器地址','new-value')
+        self.assertFalse(any(len(call)==2 and call[1].startswith('input text ') for call in ui.calls))
+        self.assertEqual('old value',ui.value)
+
+    def test_password_exact_readback_handles_percent_s_and_restores_mask_without_output(self):
+        secret='fixture%s $value&'
+        ui=InputUi('密码','old-password')
+        with patch.object(nas.time,'sleep'):ui.fill('密码',secret)
+        self.assertEqual(secret,ui.value)
+        self.assertTrue(ui.masked)
+        self.assertIn(('shell','rm','-f','/sdcard/stridehub-native.xml'),ui.calls)
+
+    def test_password_readback_mismatch_fails_redacted_and_restores_mask(self):
+        secret='fixture-secret'
+        ui=InputUi('密码','old-password',corrupt_input=True)
+        with patch.object(nas.time,'sleep'),self.assertRaises(nas.SafeFailure) as error:
+            ui.fill('密码',secret)
+        self.assertNotIn(secret,str(error.exception))
+        self.assertNotIn('unexpected',str(error.exception))
+        self.assertTrue(ui.masked)
+        self.assertIn(('shell','rm','-f','/sdcard/stridehub-native.xml'),ui.calls)
+
+    def test_login_exercises_copied_web_address_and_friendly_wrong_password_before_valid_login(self):
+        class Ui:
+            def __init__(self):self.fills=[];self.waits=[];self.buttons=[]
+            def adb(self,*args,**kwargs):return b''
+            def visible(self,label):return label=='连接并登录'
+            def fill(self,label,value):self.fills.append((label,value))
+            def checkbox(self,*args):pass
+            def tap(self,label,**kwargs):self.buttons.append(label)
+            def wait(self,label,**kwargs):self.waits.append(label)
+            def screenshot(self,label):pass
+        run=nas.NasAcceptance.__new__(nas.NasAcceptance)
+        run.ui=Ui();run.base='https://nas-fixture.example'+nas.PREFIX
+        run.credentials={'username':'synthetic','password':'synthetic-secret'}
+        run.args=types.SimpleNamespace(http_timeout=45);run.report={}
+        identity=[];run.ensure_ui_identity=lambda:identity.append(True)
+        with patch.object(nas.time,'sleep'):run.login()
+        self.assertEqual(('服务器地址',run.base+'/admin/app'),run.ui.fills[0])
+        passwords=[value for label,value in run.ui.fills if label=='密码']
+        self.assertEqual([run.credentials['password']+'-deliberately-invalid',run.credentials['password']],passwords)
+        self.assertEqual(['用户名或密码错误','最近的真实记录'],run.ui.waits)
+        self.assertEqual(['连接并登录','连接并登录'],run.ui.buttons)
+        self.assertEqual([True],identity)
+        self.assertTrue(run.report['loginInput']['friendlyInvalidPasswordShown'])
 
     def test_offline_context_restores_both_original_network_states_after_failure(self):
         calls=[]
