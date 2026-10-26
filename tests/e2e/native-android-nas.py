@@ -463,6 +463,10 @@ class NasAcceptance:
             self.ui.tap('连接并登录', scroll=True)
             self.report['loginInput']={'copiedAdminAppAddress':True,'friendlyInvalidPasswordShown':True,
                                        'exactFieldValuesVerified':True,'passwordRemasked':True}
+        else:
+            # Resume from any native detail without logging out or changing its account.
+            # The destination/account is still checked in settings before business actions.
+            self.ui.tab('总览')
         self.ui.wait('最近的真实记录')
         self.ensure_ui_identity()
         self.ui.screenshot('login-public-https')
@@ -540,11 +544,20 @@ class NasAcceptance:
         self.ui.tap('跑步活动日历',scroll=True); self.ui.screenshot('running-calendar')
         self.ui.tap('已计算的最佳片段',scroll=True); self.ui.screenshot('running-best-efforts')
         self.ui.tap(self.run['name'],scroll=True); self.ui.wait(self.run['name'])
-        for label, filename in [('配速与心率','running-scatter'),('训练心率区间 · 分钟','running-zones'),('心率分布 · 分钟','running-distribution'),('记录断档 秒','running-coverage'),('公里分段与 GAP','running-splits')]:
-            self.ui.tap(label,scroll=True); self.ui.screenshot(filename)
+        self.capture_running_sections()
         self.report['running'] = {'realImportedFixture': True, 'timelineSamples':len(analysis.get('timeline',[])),
                                   'scatterPoints':len(analysis.get('scatter',[])), 'zones':len(analysis.get('zones',[])),
                                   'splits':len(detail.get('splits',[])), 'containsHealthPayload':False}
+
+    def capture_running_sections(self):
+        for label, filename in [('配速与心率','running-scatter'),('训练心率区间 · 分钟','running-zones'),('心率分布 · 分钟','running-distribution'),('数据覆盖与记录缺口','running-coverage'),('公里分段与 GAP','running-splits')]:
+            self.ui.last_stage=filename
+            self.ui.tap(label,scroll=True)
+            if filename=='running-coverage':
+                # Metrics cards may expose a merged label/value accessibility node. Locate
+                # the standalone section first so a single-direction search cannot skip it.
+                self.ui.tap('记录断档',partial=True,scroll=True)
+            self.ui.screenshot(filename)
 
     def dates(self):
         self.ui.tab('运动'); self.ui.tap('跑步分析'); self.ui.wait('跑步复盘')

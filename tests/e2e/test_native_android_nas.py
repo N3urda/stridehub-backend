@@ -135,6 +135,40 @@ class HarnessGuardsTest(unittest.TestCase):
         self.assertEqual([True],identity)
         self.assertTrue(run.report['loginInput']['friendlyInvalidPasswordShown'])
 
+    def test_logged_in_detail_resume_navigates_overview_then_checks_existing_identity(self):
+        events=[]
+        class Ui:
+            def adb(self,*args,**kwargs):return b''
+            def visible(self,label):return False
+            def tab(self,label):events.append(('tab',label))
+            def wait(self,label):events.append(('wait',label))
+            def screenshot(self,label):events.append(('screenshot',label))
+        run=nas.NasAcceptance.__new__(nas.NasAcceptance);run.ui=Ui()
+        run.ensure_ui_identity=lambda:events.append(('identity','checked'))
+        with patch.object(nas.time,'sleep'):run.login()
+        self.assertEqual([('tab','总览'),('wait','最近的真实记录'),('identity','checked'),
+                          ('screenshot','login-public-https')],events)
+
+    def test_running_coverage_uses_section_and_merged_metric_label_without_exact_row_match(self):
+        class Ui:
+            def __init__(self):self.shots=[];self.coverage_seen=False;self.metric_seen=False
+            def tap(self,label,scroll=False,partial=False):
+                if label=='数据覆盖与记录缺口':self.coverage_seen=True
+                elif label=='记录断档':
+                    self.assert_coverage_order=self.coverage_seen
+                    if not partial or not self.coverage_seen:raise nas.SafeFailure('Merged coverage label was not discoverable')
+                    # A native merged row includes the value after its label.
+                    if label not in '记录断档 秒, 0':raise nas.SafeFailure('Expected coverage metric absent')
+                    self.metric_seen=True
+                elif label=='记录断档 秒':raise nas.SafeFailure('Exact row is unavailable in merged semantics')
+            def screenshot(self,name):self.shots.append(name)
+        run=nas.NasAcceptance.__new__(nas.NasAcceptance);run.ui=Ui()
+        run.capture_running_sections()
+        self.assertTrue(run.ui.metric_seen)
+        self.assertTrue(run.ui.assert_coverage_order)
+        self.assertIn('running-coverage',run.ui.shots)
+        self.assertEqual('running-splits',run.ui.shots[-1])
+
     def test_offline_context_restores_both_original_network_states_after_failure(self):
         calls=[]
         class Ui:
