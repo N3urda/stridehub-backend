@@ -7,11 +7,13 @@ A matching public instance marker AND authenticated fixture marker are required 
 from __future__ import annotations
 
 import argparse
+import hashlib
 from contextlib import contextmanager
 from datetime import date, timedelta
 import ast
 import types
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -32,7 +34,7 @@ PREFIX = '/__stridehub_e2e_20261026'
 SERIAL = 'emulator-5556'
 AVD = 'stridehub_native'
 PACKAGE = 'io.stridehub.app.debug'
-SCENARIOS = ('navigation', 'meal', 'plans', 'running', 'dates', 'draft', 'offline', 'sync', 'logout')
+SCENARIOS = ('navigation', 'meal', 'plans', 'running', 'dates', 'draft', 'weighing', 'offline', 'sync', 'logout')
 
 
 class SafeFailure(RuntimeError):
@@ -255,7 +257,7 @@ class NativeUi:
         path.chmod(0o600)
         return path.name
 
-    def local_snapshot(self):
+    def local_state(self):
         # Android may use WAL. Copy its journal as well, but never retain any raw local DB
         # in the report. A torn copy is retried rather than interpreted as missing rows.
         for attempt in range(3):
@@ -270,16 +272,23 @@ class NativeUi:
                     Path(str(path)+'-wal').write_bytes(journal)
                 try:
                     db = sqlite3.connect(path)
+                    db.row_factory = sqlite3.Row
                     try:
                         if db.execute('PRAGMA integrity_check').fetchone()[0] != 'ok':
                             raise sqlite3.DatabaseError()
-                        return db.execute('SELECT id,weight,upload_uuid FROM measurements ORDER BY id').fetchall()
+                        return {
+                            'measurements':[dict(row) for row in db.execute('SELECT id,weight,upload_uuid,local_day,source FROM measurements ORDER BY id')],
+                            'queue':[dict(row) for row in db.execute('SELECT measurement_id,uuid,binding,server,payload,status FROM sync_queue ORDER BY measurement_id')]
+                        }
                     finally:
                         db.close()
                 except sqlite3.Error:
                     if attempt == 2:
                         raise SafeFailure('A consistent private local weighing snapshot could not be read') from None
             time.sleep(.2)
+
+    def local_snapshot(self):
+        return [(row['id'],row['weight'],row['upload_uuid']) for row in self.local_state()['measurements']]
 
 
 @contextmanager
@@ -303,6 +312,29 @@ def android_offline(ui):
                 failures.append(service)
         if failures:
             raise SafeFailure('Android network restoration failed; restore Wi-Fi/data before continuing')
+
+
+def require_empty_pairing_history(state):
+    if state.get('measurements') != [] or state.get('queue') != []:
+        raise SafeFailure('Weighing pairing requires empty local measurements AND queue; refusing any history upload or deletion')
+
+
+def exact_weight(actual,expected):
+    return isinstance(actual,(int,float)) and not isinstance(actual,bool) and math.isfinite(actual) and abs(actual-expected)<=1e-9
+
+
+def require_single_manual_measurement(state,weight):
+    rows=state.get('measurements',[])
+    if len(rows)!=1 or not exact_weight(rows[0].get('weight'),weight) or rows[0].get('source') not in ('manual','手工录入') or not re.fullmatch(r'[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}',rows[0].get('upload_uuid','')):
+        raise SafeFailure('Expected exactly one new manual fixture measurement with its stable UUID')
+    return rows[0]
+
+
+def require_unique_server_capture(rows,measurement_id,weight,device_id):
+    matches=[row for row in rows if row.get('measurementId')==measurement_id]
+    if len(matches)!=1 or matches[0].get('deleted') is not False or matches[0].get('deviceId')!=device_id or not exact_weight(matches[0].get('capture',{}).get('weightKg'),weight):
+        raise SafeFailure('Public collection readback did not match one exact live measurement UUID/device/weight')
+    return matches[0]
 
 
 class NasAcceptance:
@@ -500,6 +532,113 @@ class NasAcceptance:
         self.ui.screenshot('draft-process-restored')
         self.ui.tap('返回'); self.ui.wait('新增饮食记录')
 
+    def collection_records(self):
+        rows=[];offset=0
+        for _ in range(20):
+            page=self.api.request('/api/v1/health/collection/weight?offset='+str(offset)+'&limit=100')
+            current=page.get('records',[]);rows.extend(current);offset+=len(current)
+            if offset>=page.get('total',0):return rows
+            if not current:break
+        raise SafeFailure('Disposable collection pagination exceeded its bounded test size')
+
+    def weighing(self):
+        # Pairing UI can enqueue history by design. Never press it unless the history AND queue
+        # are provably empty; then create just one manual fixture while Android is offline.
+        self.ui.last_stage='weighing-empty-history-pair'
+        self.ui.tab('总览');self.ui.tap('开始称重');self.ui.wait('身体记录')
+        require_empty_pairing_history(self.ui.local_state())
+        before_collection=self.collection_records()
+        before_daily=self.api.request('/api/v1/health/weight')
+        self.ui.tap('设置');self.ui.wait('NAS 同步')
+        require_empty_pairing_history(self.ui.local_state())
+        self.ui.tap('配对 NAS 并上传本机历史',scroll=True)
+        self.ui.wait('上传到 NAS？')
+        if not any(self.base in text for text in self.ui.texts()):
+            raise SafeFailure('Native weighing confirmation does not name the guarded public destination')
+        # Recheck after the dialog, immediately before the sole pairing action.
+        require_empty_pairing_history(self.ui.local_state())
+        self.ui.tap('确认配对并上传')
+        self.ui.wait('NAS '+self.base,timeout=self.args.http_timeout+20,partial=True)
+        require_empty_pairing_history(self.ui.local_state())
+        if len(self.collection_records())!=len(before_collection):
+            raise SafeFailure('Pairing an empty history unexpectedly created a server measurement')
+        self.ui.screenshot('weighing-native-paired-empty-history')
+        fixture_weight=71.4
+        measurement=None;frozen=None;binding=None
+        self.ui.last_stage='weighing-offline-single-manual'
+        with android_offline(self.ui):
+            self.ui.tap('称重');self.ui.tap('手工记录',scroll=True)
+            self.ui.fill('体重（kg）',str(fixture_weight));self.ui.tap('保存到本机')
+            self.ui.wait('已保存',partial=True)
+            local=self.ui.local_state();measurement=require_single_manual_measurement(local,fixture_weight)
+            queue=[row for row in local['queue'] if row['measurement_id']==measurement['id']]
+            if len(queue)!=1 or queue[0]['uuid']!=measurement['upload_uuid'] or queue[0]['server']!=self.base:
+                raise SafeFailure('The one manual record did not enter only its guarded public queue')
+            frozen=queue[0]['payload'];binding=queue[0]['binding']
+            self.ui.tap('设置');self.ui.wait('NAS 同步')
+            for _ in range(2):self.ui.tap('同步 / 网络恢复后重试');time.sleep(.5)
+            deadline=time.monotonic()+45
+            while time.monotonic()<deadline:
+                local=self.ui.local_state()
+                queue=[row for row in local['queue'] if row['measurement_id']==measurement['id']]
+                if len(queue)==1 and queue[0]['status']=='pending':break
+                time.sleep(.4)
+            else:raise SafeFailure('Offline weighing did not remain pending for safe retry')
+            if queue[0]['payload']!=frozen or queue[0]['uuid']!=measurement['upload_uuid']:
+                raise SafeFailure('Offline retry changed the frozen payload or stable UUID')
+            if any(row.get('measurementId')==measurement['upload_uuid'] for row in self.collection_records()):
+                raise SafeFailure('Android was not truly offline during the weighing retry')
+            self.ui.screenshot('weighing-offline-single-pending-record')
+        self.ui.last_stage='weighing-public-device-receipt'
+        self.ui.tap('同步 / 网络恢复后重试')
+        deadline=time.monotonic()+self.args.weighing_timeout
+        acknowledged=None
+        while time.monotonic()<deadline:
+            local=self.ui.local_state();require_single_manual_measurement(local,fixture_weight)
+            queue=[row for row in local['queue'] if row['measurement_id']==measurement['id']]
+            records=self.collection_records()
+            if len(queue)==1 and queue[0]['status'] in ('synced','manual_conflict'):
+                acknowledged=require_unique_server_capture(records,measurement['upload_uuid'],fixture_weight,binding)
+                break
+            time.sleep(1)
+        if acknowledged is None:raise SafeFailure('Public weighing upload did not receive a confirmed device receipt')
+        if queue[0]['payload']!=frozen or len(records)!=len(before_collection)+1:
+            raise SafeFailure('Public weighing acknowledgement changed a payload or created extra captures')
+        self.ui.last_stage='weighing-deduplication-projection'
+        # Repeated user retry must not create another capture for this already acknowledged UUID.
+        self.ui.tap('同步 / 网络恢复后重试');time.sleep(2)
+        repeated=self.collection_records()
+        require_unique_server_capture(repeated,measurement['upload_uuid'],fixture_weight,binding)
+        if len(repeated)!=len(records):raise SafeFailure('Post-acknowledgement retry duplicated the fixture capture')
+        local_date=measurement['local_day']
+        daily=self.api.request('/api/v1/health/weight')
+        baseline=next((row for row in before_daily.get('records',[]) if row.get('date')==local_date),None)
+        projected=next((row for row in daily.get('records',[]) if row.get('date')==local_date),None)
+        conflict=queue[0]['status']=='manual_conflict'
+        if self.fixtures.get('expectWeighingConflict') is True and not conflict:
+            raise SafeFailure('The requested manual-conflict fixture did not produce its expected protected conflict')
+        if conflict:
+            if baseline is None or projected!=baseline:
+                raise SafeFailure('The existing manual daily weight was not preserved during the collection conflict')
+            self.ui.wait('NAS 日记录冲突',partial=True)
+            self.ui.screenshot('weighing-manual-conflict-shown')
+        else:
+            if projected is None or not exact_weight(projected.get('weightKg'),fixture_weight):
+                raise SafeFailure('Confirmed collection did not produce the exact expected daily weight projection')
+            self.ui.wait('NAS 已确认',partial=True)
+            self.ui.screenshot('weighing-public-acknowledged')
+        read_model=self.api.request('/api/v1/health/collected/weight?from='+local_date+'&to='+local_date+'&limit=100')
+        if sum(row.get('measurementId')==measurement['upload_uuid'] for row in read_model.get('records',[]))!=1:
+            raise SafeFailure('Public collected-weight read model lost or duplicated the exact captured UUID')
+        self.report['weighing']={
+            'manualEntryNotBle':True,'historyAndQueueEmptyBeforePair':True,'pairedThroughNativeUi':True,
+            'newLocalRows':1,'exactUuidAndWeightReadBack':True,'offlinePendingRetries':2,
+            'frozenPayloadPreserved':True,'postAckRetryDidNotDuplicate':True,'serverNewCaptures':1,
+            'manualConflictShown':conflict,'serverManualValuePreserved':conflict,
+            'lostReceiptInjectionTested':False,
+            'measurementIdentitySha256':hashlib.sha256(measurement['upload_uuid'].encode()).hexdigest()}
+        self.ui.tap('返回 StrideHub');self.ui.wait('最近的真实记录')
+
     def offline(self):
         self.ui.tab('总览'); self.ui.wait('最近的真实记录')
         local_before = None; local_after = None
@@ -508,12 +647,19 @@ class NasAcceptance:
             self.ui.screenshot('offline-timestamped-cache')
             self.ui.tap('开始称重'); self.ui.wait('身体记录')
             local_before = self.ui.local_snapshot()
-            self.ui.tap('手工记录',scroll=True); self.ui.fill('体重（kg）','71.3')
-            self.ui.tap('保存到本机'); self.ui.wait('已保存',partial=True)
-            local_after = self.ui.local_snapshot()
-            new = [row for row in local_after if row[0] not in {row[0] for row in local_before}]
-            if len(new) != 1 or abs(new[0][1]-71.3) > .001 or not new[0][2]:
-                raise SafeFailure('Offline native weighing did not create exactly one local record with stable identity')
+            reused_weighing = bool(self.report.get('weighing'))
+            if reused_weighing:
+                if len(local_before)!=1:raise SafeFailure('The single earlier manual fixture was not retained for offline access')
+                self.ui.tap('记录');self.ui.wait('71.4 kg')
+                local_after = self.ui.local_snapshot()
+                if local_after!=local_before:raise SafeFailure('Reading offline weighing history unexpectedly changed the saved row')
+            else:
+                self.ui.tap('手工记录',scroll=True); self.ui.fill('体重（kg）','71.3')
+                self.ui.tap('保存到本机'); self.ui.wait('已保存',partial=True)
+                local_after = self.ui.local_snapshot()
+                new = [row for row in local_after if row[0] not in {row[0] for row in local_before}]
+                if len(new) != 1 or abs(new[0][1]-71.3) > .001 or not new[0][2]:
+                    raise SafeFailure('Offline native weighing did not create exactly one local record with stable identity')
             self.ui.screenshot('offline-weighing-saved')
             self.ui.tap('返回 StrideHub'); self.ui.wait('最近的真实记录')
         self.ui.tap('刷新')
@@ -525,7 +671,7 @@ class NasAcceptance:
             time.sleep(.4)
         else:
             raise SafeFailure('Restored Android networking did not yield a freshly confirmed public response')
-        self.report['offline'] = {'networkRestored':True,'timestampedCache':True,'localWeighingCommitted':True,
+        self.report['offline'] = {'networkRestored':True,'timestampedCache':True,'localWeighingCommitted':not reused_weighing,'priorManualFixtureReadable':reused_weighing,
                                   'newLocalRows':len(local_after)-len(local_before),'weighingUploadClaimed':False}
 
     def sync(self):
@@ -611,7 +757,7 @@ def parse_args(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--base',required=True,help='Public HTTPS installation root with exact disposable-instance prefix')
     parser.add_argument('--credentials',required=True,type=Path,help='Private JSON: username/password/instanceId')
-    parser.add_argument('--fixtures',type=Path,help='Optional private JSON: planId/sessionId/runActivityId/timezone')
+    parser.add_argument('--fixtures',type=Path,help='Optional private JSON: planId/sessionId/runActivityId/timezone/expectWeighingConflict')
     parser.add_argument('--report-dir',required=True,type=Path)
     parser.add_argument('--adb',type=Path,default=Path(os.environ.get('ANDROID_HOME',''))/'platform-tools/adb')
     parser.add_argument('--version-code',type=int,default=5)
@@ -619,6 +765,7 @@ def parse_args(argv=None):
     parser.add_argument('--http-timeout',type=int,default=45)
     parser.add_argument('--offline-timeout',type=int,default=75)
     parser.add_argument('--job-timeout',type=int,default=240)
+    parser.add_argument('--weighing-timeout',type=int,default=120)
     return parser.parse_args(argv)
 
 

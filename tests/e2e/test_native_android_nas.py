@@ -1,5 +1,6 @@
 """Offline tests of the public NAS harness guards; no devices or network are contacted."""
 import importlib.util
+import copy
 from pathlib import Path
 import subprocess
 import sys
@@ -60,6 +61,52 @@ class HarnessGuardsTest(unittest.TestCase):
         with self.assertRaises(nas.SafeFailure):
             with nas.android_offline(Ui()):self.fail('must not enter')
         self.assertFalse(any(args[:2]==('shell','svc') for args in calls))
+
+    def test_pairing_fails_closed_for_any_history_or_queue_and_missing_snapshot(self):
+        nas.require_empty_pairing_history({'measurements':[],'queue':[]})
+        for state in ({'measurements':[{'id':1}],'queue':[]},
+                      {'measurements':[],'queue':[{'measurement_id':1}]}, {},
+                      {'measurements':[]}, {'queue':[]}):
+            with self.subTest(state=state),self.assertRaises(nas.SafeFailure):
+                nas.require_empty_pairing_history(state)
+
+    def test_weighing_scenario_aborts_before_pairing_or_server_reads_when_history_exists(self):
+        class Ui:
+            def __init__(self):self.taps=[]
+            def tab(self,label):pass
+            def tap(self,label,**kwargs):self.taps.append(label)
+            def wait(self,label,**kwargs):pass
+            def local_state(self):return {'measurements':[{'id':5}],'queue':[]}
+        run=nas.NasAcceptance.__new__(nas.NasAcceptance);run.ui=Ui()
+        # No API attribute exists: reaching any API request would fail this safety test.
+        with self.assertRaises(nas.SafeFailure):run.weighing()
+        self.assertEqual(['开始称重'],run.ui.taps)
+
+    def test_only_one_exact_manual_record_with_canonical_uuid_is_accepted(self):
+        row={'id':1,'weight':71.4,'source':'手工录入',
+             'upload_uuid':'12345678-1234-1234-1234-123456789abc'}
+        self.assertEqual(row,nas.require_single_manual_measurement({'measurements':[row]},71.4))
+        invalid=[[],[row,row]]
+        for field,value in [('weight',71.3),('weight',float('nan')),('weight','71.4'),
+                            ('source','BLE'),('upload_uuid','-'*36)]:
+            changed=dict(row);changed[field]=value;invalid.append([changed])
+        for rows in invalid:
+            with self.subTest(rows=rows),self.assertRaises(nas.SafeFailure):
+                nas.require_single_manual_measurement({'measurements':rows},71.4)
+
+    def test_public_capture_readback_rejects_duplicate_deleted_wrong_device_or_weight(self):
+        identity='12345678-1234-1234-1234-123456789abc'
+        row={'measurementId':identity,'deviceId':'test-device','deleted':False,
+             'capture':{'weightKg':71.4}}
+        self.assertEqual(row,nas.require_unique_server_capture([row],identity,71.4,'test-device'))
+        invalid=[[],[row,row]]
+        for field,value in [('deleted',True),('deleted',None),('deviceId','different-device')]:
+            changed=copy.deepcopy(row);changed[field]=value;invalid.append([changed])
+        for weight in (71.3,None,'71.4',float('nan')):
+            changed=copy.deepcopy(row);changed['capture']['weightKg']=weight;invalid.append([changed])
+        for rows in invalid:
+            with self.subTest(rows=rows),self.assertRaises(nas.SafeFailure):
+                nas.require_unique_server_capture(rows,identity,71.4,'test-device')
 
     def test_redirect_handler_never_replays_bearer_to_a_redirect_target(self):
         self.assertIsNone(nas.NoRedirect().redirect_request(None,None,302,'','', 'https://other.example'))

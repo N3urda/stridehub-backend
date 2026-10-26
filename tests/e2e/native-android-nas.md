@@ -52,9 +52,12 @@ STRIDEHUB_NATIVE_E2E:<instanceId>
   "planId": "native-demo-plan",
   "sessionId": "native-demo-session",
   "runActivityId": "实际导入的运动 ID",
-  "timezone": "Asia/Shanghai"
+  "timezone": "Asia/Shanghai",
+  "expectWeighingConflict": true
 }
 ```
+
+若要强制验证称重日记录冲突，设置 `expectWeighingConflict:true`，并在模拟器当前本地日期预置不同于 71.4kg 的手工日体重（例如70.5kg）；否则脚本接受正常投影或受保护的手工冲突。冲突时只检查提示及原值完整保留，不执行覆盖。
 
 ## 模拟器与运行
 
@@ -70,7 +73,7 @@ python3 tests/e2e/native-android-nas.py \
   --scenarios all
 ```
 
-每次运行生成独立的时间戳目录。`--scenarios` 支持 `navigation,meal,plans,running,dates,draft,offline,sync,logout`，或 `all`。公开实例、认证背景和合成 profile 守卫及原生登录始终先执行。若 App 已登录其他服务器/账号，脚本拒绝继续，不自动注销或切换原目的地。
+每次运行生成独立的时间戳目录。`--scenarios` 支持 `navigation,meal,plans,running,dates,draft,weighing,offline,sync,logout`，或 `all`。公开实例、认证背景和合成 profile 守卫及原生登录始终先执行。若 App 已登录其他服务器/账号，脚本拒绝继续，不自动注销或切换原目的地。
 
 ## 实际断言
 
@@ -81,11 +84,13 @@ python3 tests/e2e/native-android-nas.py \
 - 跑步复盘的周趋势、日历、最佳片段入口及真实导入详情：散点、区间、心率分布、记录缺口、GAP 分段均可达。
 - 原生日期选择器实际更改查询起点。
 - 未保存饮食草稿：后台 `am kill` 后重新进入，确认 PID 改变、草稿内容恢复，并确认没有服务器新增记录。
-- Android Wi-Fi/移动数据关闭后，缓存显示离线时间；原生手工称重准确新增一条本机记录且有稳定 UUID。只读 SQLite 快照连同 WAL 在临时目录核对，不写入报告。网络状态在 `finally` 中恢复到原值，再确认公网刷新清除离线/待核对标识。
+- `weighing`：先只读确认本机 measurements 和 sync_queue 均为空，再原生配对。此时配对虽然按钮叫“上传本机历史”，实际无任何历史可上传；配对前后均复核本机为空和服务器采集数不变。任何旧记录或旧队列都立即停止，不清理、不上传。
+- 配对后关闭 Android Wi-Fi/移动数据，原生新增唯一 71.4kg 手工 DEMO 测量，检查稳定 UUID 和冻结上传载荷；连续两次点网络恢复重试后仍待上传，公网观察会话确认此 UUID 尚未到达服务器。恢复网络后等候真实设备回执，通过公网移动会话读取 collection/weight，逐项核对 UUID、设备和精确体重；再次重试后服务器采集数仍仅增加一条，日期采集视图也仅出现一次。默认等候120秒，可用 `--weighing-timeout` 调整。
+- `offline`：缓存显示离线时间；若前面已完成 weighing，离线读取同一条手工历史，不新增第二条。如果单独运行 offline，则只新增一条本机手工记录，不声称上传。只读 SQLite 快照连同 WAL 在临时目录核对，不保留原始库或载荷。网络状态在 `finally` 中恢复到原值，再确认公网刷新清除离线/待核对标识。
 - 原生提交同步任务；不操作 NAS worker，最多默认等候240秒，确认其进入 failed/not_configured，App 显示真实终态。
 - 退出后仍可打开离线称重，再回到连接页。
 
-离线称重只断言本机保存，不宣称该记录已配对/上传或经过物理 BLE；本脚本不点击“上传全部本机历史”。配对、日记录冲突和真实手机蓝牙需在各自受控验收中另外报告。
+称重上传场景只适用于全新专用 App 的空历史/空队列；重复运行前需由部署方另行准备隔离环境，脚本绝不删除历史。手工录入并非物理 BLE 实秤；报告明确 `manualEntryNotBle:true`。重复重试验证的是断网待上传及已确认后的幂等性，未注入“服务器已收但回执丢失”故障，也不声称经过此边界。真实手机蓝牙仍需单独验收。
 
 ## 报告与失败停点
 
@@ -100,4 +105,4 @@ python3 -m unittest discover -s tests/e2e -p test_native_android_nas.py -v
 python3 -m py_compile tests/e2e/native-android-nas.py
 ```
 
-自检仅验证目的地守卫、重定向禁止、日志脱敏、UI helper 隔离及断网恢复的 `finally` 行为，不访问网络或模拟器。
+自检仅验证目的地守卫、重定向禁止、日志脱敏、UI helper 隔离、断网恢复的 `finally` 行为，以及空历史配对、单一手工 UUID、采集读回去重/设备/精确体重守卫，不访问网络或模拟器。
