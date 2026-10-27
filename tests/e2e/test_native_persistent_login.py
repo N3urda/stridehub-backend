@@ -108,6 +108,40 @@ class PersistentAcceptanceTest(unittest.TestCase):
         with patch.object(m.time,'sleep'),self.assertRaises(m.Failure):run.device_logout()
         self.assertEqual([('shell','svc','wifi','enable'),('shell','svc','data','disable')],calls[-2:])
 
+    def overview_tree(self,banner=None,progress=False,extra=None):
+        root=ET.Element('hierarchy')
+        ET.SubElement(root,'node',{'text':'最近的真实记录'})
+        if banner:ET.SubElement(root,'node',{'text':banner})
+        if progress:ET.SubElement(root,'node',{'class':'android.widget.ProgressBar'})
+        if extra:ET.SubElement(root,'node',{'text':extra})
+        return root
+
+    def test_online_snapshot_rejects_cache_preview_offline_and_progress_indicators(self):
+        for tree in (self.overview_tree('缓存预览，正在核对'),self.overview_tree('离线缓存'),
+                     self.overview_tree(progress=True),self.overview_tree(extra='连接并登录')):
+            self.assertFalse(m.online_overview_snapshot(tree)[0])
+        self.assertTrue(m.online_overview_snapshot(self.overview_tree())[0])
+
+    def test_idle_wait_does_not_accept_old_ready_frame_before_loading_and_requires_two_new_stable_polls(self):
+        run=m.Acceptance.__new__(m.Acceptance);run.args=types.SimpleNamespace(timeout=10)
+        frames=[self.overview_tree(),self.overview_tree(progress=True),self.overview_tree('缓存预览，正在核对'),
+                self.overview_tree(extra='updated'),self.overview_tree(extra='updated')]
+        seen=[]
+        def tree():seen.append(True);return frames.pop(0)
+        run.ui=types.SimpleNamespace(tree=tree)
+        with patch.object(m.time,'sleep'):run.wait_online_idle()
+        self.assertEqual(5,len(seen));self.assertFalse(frames)
+
+    def test_signed_in_ui_waits_for_idle_after_refresh_and_after_return_from_settings(self):
+        run=m.Acceptance.__new__(m.Acceptance);run.package='io.stridehub.app';run.base='https://nas-fixture.example'+m.nas.PREFIX
+        run.credentials={'username':'demo'};events=[]
+        run.ui=types.SimpleNamespace(adb=lambda *args:b'',visible=lambda label:False,
+            tab=lambda label:None,wait=lambda label:None,texts=lambda:[run.base,'demo'],
+            tap=lambda label:events.append(label))
+        run.wait_online_idle=lambda:events.append('idle-two-polls')
+        with patch.object(m.time,'sleep'):run.signed_in_ui()
+        self.assertEqual(['刷新','idle-two-polls','设置与更多','返回','idle-two-polls'],events)
+
     def test_android_package_identity_accepts_app_id_or_legacy_user_id(self):
         run=m.Acceptance.__new__(m.Acceptance);run.package='io.stridehub.app'
         run.args=types.SimpleNamespace(package='release')

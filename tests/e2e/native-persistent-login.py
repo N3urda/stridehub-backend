@@ -120,6 +120,19 @@ def require_logout_progress(state,identity,previous_tombstones,drained=False):
     else:require(set(state['pending'])=={identity},'Expected exactly this round one encrypted logout intent')
 
 
+def online_overview_snapshot(root):
+    values=tuple(node.get('text') or node.get('content-desc') for node in root.iter('node')
+                 if node.get('text') or node.get('content-desc'))
+    blocked=('离线缓存','缓存预览','正在核对','正在加载','正在刷新','加载中','刷新中')
+    loading=any(node.get('class')=='android.widget.ProgressBar' for node in root.iter('node'))
+    loading=loading or any(value.lower() in ('loading','refreshing') for value in values)
+    ready='最近的真实记录' in values and '连接并登录' not in values and not loading
+    ready=ready and not any(marker in value for marker in blocked for value in values)
+    # Compare body text between polls, excluding the changing system clock. No content is logged.
+    signature=tuple(value for value in values if not re.fullmatch(r'[0-9]{1,2}:[0-9]{2}',value))
+    return ready,signature
+
+
 class Api(nas.HttpsApi):
     def exchange(self,path,method='GET',body=None,token=None,expected=200):
         headers={'Accept':'application/json','Cache-Control':'no-store'}
@@ -310,22 +323,28 @@ class Acceptance:
         require(current==baseline['scale'],'Upgrade/restart/logout changed saved weighing rows, UUIDs, derivations, imports or queue')
         return current
 
+    def wait_online_idle(self):
+        deadline=time.monotonic()+self.args.timeout
+        previous=None;stable=0
+        while True:
+            ready,signature=online_overview_snapshot(self.ui.tree())
+            stable=stable+1 if ready and signature==previous else 1 if ready else 0
+            previous=signature if ready else None
+            if stable>=2:return
+            require(time.monotonic()<deadline,'App overview did not become online and idle for two stable polls')
+            time.sleep(.6)
+
     def signed_in_ui(self):
         self.ui.adb('shell','am','start','-n',self.package+'/io.stridehub.app.MainActivity')
         time.sleep(1)
         require(not self.ui.visible('连接并登录'),'App unexpectedly requires login')
         self.ui.tab('总览');self.ui.wait('最近的真实记录')
-        self.ui.tap('刷新');self.ui.wait('最近的真实记录')
-        deadline=time.monotonic()+self.args.timeout
-        while True:
-            visible=self.ui.texts()
-            if not any('离线缓存' in value or '缓存预览，正在核对' in value for value in visible):break
-            require(time.monotonic()<deadline,'App refresh remained offline or unconfirmed')
-            time.sleep(.4)
+        self.ui.tap('刷新');self.wait_online_idle()
         self.ui.tap('设置与更多');self.ui.wait('连接与账号')
         texts=self.ui.texts()
         require(self.base in texts and self.credentials['username'] in texts,'Native UI does not show exact fixture destination/account')
         self.ui.tap('返回')
+        self.wait_online_idle()
 
     def device_before(self):
         require(not self.baseline_path().exists(),'Upgrade baseline exists; refusing to overwrite preservation evidence')
