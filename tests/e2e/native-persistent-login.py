@@ -13,6 +13,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shlex
 import sqlite3
 import subprocess
 import sys
@@ -247,12 +248,33 @@ class Acceptance:
     def private(self,relative,optional=False):
         require(relative in ('shared_prefs/connection.xml','shared_prefs/native_session.xml','shared_prefs/native_revocations.xml',
                             'databases/tinyyumi.db','databases/tinyyumi.db-wal'),'Unapproved private read')
+        prefix=('exec-out','run-as',self.package) if self.args.package=='debug' else ('exec-out','su','0')
+        target=relative if self.args.package=='debug' else '/data/data/'+self.package+'/'+relative
         try:
-            if self.args.package=='debug':return self.ui.adb('exec-out','run-as',self.package,'cat',relative)
-            return self.ui.adb('exec-out','su','0','cat','/data/data/'+self.package+'/'+relative)
+            if not optional:return self.ui.adb(*prefix,'cat',target)
+            # Some su wrappers return exit0 with cat diagnostics in stdout. Check existence
+            # and read in the SAME shell; a unique footer proves the actual read completed.
+            marker='STRIDEHUB_PRIVATE_'+os.urandom(16).hex()
+            footer=lambda state:('\n'+marker+'_'+state+'\n').encode()
+            fail="printf '\\n"+marker+"_ERROR\\n'; exit 74"
+            present="printf '\\n"+marker+"_PRESENT\\n'"
+            absent="printf '\\n"+marker+"_ABSENT\\n'"
+            script=("task_file="+shlex.quote(target)+"; task_parent="+shlex.quote(str(Path(target).parent))+"; "
+                'if [ ! -d "$task_parent" ] || [ ! -r "$task_parent" ] || [ ! -x "$task_parent" ]; then '+fail+'; fi; '
+                'if [ -L "$task_file" ]; then '+fail+'; '
+                'elif [ -f "$task_file" ]; then '
+                'if [ ! -r "$task_file" ]; then '+fail+'; fi; '
+                'if cat "$task_file"; then '+present+'; else '+fail+'; fi; '
+                'elif [ -e "$task_file" ]; then '+fail+'; '
+                'else '+absent+'; fi')
+            raw=self.ui.adb(*prefix,'sh','-c',shlex.quote(script))
+            if raw==footer('ABSENT'):return b''
+            require(raw.endswith(footer('PRESENT')),'Owned optional file read did not complete successfully')
+            payload=raw[:-len(footer('PRESENT'))]
+            require(bool(payload) or not relative.endswith('.xml'),'Owned preference file exists but is empty/corrupt')
+            return payload
         except Failure:
-            if optional:return b''
-            raise Failure('Owned app private read failed; release needs read-only su0 on this dedicated emulator') from None
+            raise Failure('Owned app private read failed; missing optional file is allowed, permission/read failures are not') from None
 
     def package_info(self):
         raw=self.ui.adb('shell','dumpsys','package',self.package).decode(errors='replace')

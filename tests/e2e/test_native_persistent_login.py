@@ -2,6 +2,9 @@
 import importlib.util
 import base64
 import json
+import shlex
+import subprocess
+import tempfile
 import xml.etree.ElementTree as ET
 from pathlib import Path
 import sys
@@ -141,6 +144,51 @@ class PersistentAcceptanceTest(unittest.TestCase):
         run.wait_online_idle=lambda:events.append('idle-two-polls')
         with patch.object(m.time,'sleep'):run.signed_in_ui()
         self.assertEqual(['刷新','idle-two-polls','设置与更多','返回','idle-two-polls'],events)
+
+    def test_optional_private_reads_check_file_and_cat_in_same_release_or_debug_shell(self):
+        for package in ('release','debug'):
+            with self.subTest(package=package),tempfile.TemporaryDirectory() as directory:
+                root=Path(directory);(root/'shared_prefs').mkdir();(root/'databases').mkdir()
+                run=m.Acceptance.__new__(m.Acceptance);run.package='io.stridehub.app'+('.debug' if package=='debug' else '')
+                run.args=types.SimpleNamespace(package=package);run.base='https://nas-fixture.example'+m.nas.PREFIX;run.credentials={'username':'demo'}
+                calls=[]
+                def adb(*args):
+                    calls.append(args)
+                    prefix=('exec-out','run-as',run.package) if package=='debug' else ('exec-out','su','0')
+                    self.assertEqual(prefix,args[:3]);self.assertEqual(('sh','-c'),args[3:5])
+                    script=shlex.split(args[-1])[0]
+                    self.assertIn('[ -f "$task_file" ]',script);self.assertIn('cat "$task_file"',script)
+                    if package=='release':script=script.replace('/data/data/'+run.package+'/',str(root)+'/')
+                    result=subprocess.run(['sh','-c',script],cwd=root,capture_output=True)
+                    # Deliberately simulate a su wrapper that discards the inner exit status.
+                    return result.stdout+result.stderr
+                run.ui=types.SimpleNamespace(adb=adb)
+                self.assertEqual(b'',run.private('shared_prefs/native_revocations.xml',optional=True))
+                (root/'shared_prefs/native_revocations.xml').write_bytes(b'<map/>')
+                self.assertEqual(b'<map/>',run.private('shared_prefs/native_revocations.xml',optional=True))
+                self.assertEqual(b'',run.private('databases/tinyyumi.db-wal',optional=True))
+                binary=b'\x00\xffWAL\n\x00\xfe';(root/'databases/tinyyumi.db-wal').write_bytes(binary)
+                self.assertEqual(binary,run.private('databases/tinyyumi.db-wal',optional=True))
+                (root/'shared_prefs/native_revocations.xml').write_bytes(b'')
+                with self.assertRaises(m.Failure):run.private('shared_prefs/native_revocations.xml',optional=True)
+                (root/'shared_prefs/native_revocations.xml').write_bytes(b'broken XML')
+                with self.assertRaises(m.Failure):run.revocation_snapshot()
+                (root/'shared_prefs/native_revocations.xml').unlink()
+                (root/'shared_prefs/native_revocations.xml').symlink_to(root/'databases/tinyyumi.db-wal')
+                with self.assertRaises(m.Failure):run.private('shared_prefs/native_revocations.xml',optional=True)
+                self.assertEqual(7,len(calls))
+
+    def test_optional_private_does_not_swallow_permission_transport_or_unframed_su_error(self):
+        for package in ('release','debug'):
+            run=m.Acceptance.__new__(m.Acceptance);run.package='io.stridehub.app'+('.debug' if package=='debug' else '')
+            run.args=types.SimpleNamespace(package=package)
+            for raw in (b'cat: permission denied',b'cat: no such file',b'\nSTRIDEHUB_PRIVATE_'+b'78'*16+b'_ERROR\n'):
+                run.ui=types.SimpleNamespace(adb=lambda *args:raw)
+                with self.subTest(package=package,raw_length=len(raw)),patch.object(m.os,'urandom',return_value=b'x'*16),self.assertRaises(m.Failure):
+                    run.private('shared_prefs/native_revocations.xml',optional=True)
+            def denied(*args):raise m.Failure('transport failure')
+            run.ui=types.SimpleNamespace(adb=denied)
+            with self.assertRaises(m.Failure):run.private('databases/tinyyumi.db-wal',optional=True)
 
     def test_android_package_identity_accepts_app_id_or_legacy_user_id(self):
         run=m.Acceptance.__new__(m.Acceptance);run.package='io.stridehub.app'
