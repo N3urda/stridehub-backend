@@ -31,7 +31,7 @@ class NativeApiResponseTest {
         assertEquals(401,login.status)
         assertTrue(login.message!!.contains("用户名或密码"))
         assertFalse(login.message!!.contains("过期"))
-        assertTrue(expired.message!!.contains("过期"))
+        assertTrue(expired.message!!.contains("失效"))
     }
     @Test fun genuineServer500AndSafeReasonRemainVisibleWhileSensitiveContextIsRedacted() {
         val body="""{"message":"Database unavailable at https://private.example:1999/install?token=secret; Authorization: Bearer shmobile_abc123"}"""

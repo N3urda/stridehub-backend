@@ -8,7 +8,6 @@ import android.util.Base64;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyStore;
 import java.time.Instant;
-import java.time.OffsetDateTime;
 import javax.crypto.Cipher;
 import javax.crypto.KeyGenerator;
 import javax.crypto.SecretKey;
@@ -28,7 +27,41 @@ public final class NativeSession {
 
     public static synchronized String token(Context context) {
         load(context);
-        return current != null && current.expiresAt.isAfter(Instant.now()) ? current.token : "";
+        return current != null && current.lifetime.isUsableAt(Instant.now()) ? current.token : "";
+    }
+
+    /** An expired legacy credential may ONLY be sent to the authoritative upgrade endpoint. */
+    public static synchronized String candidateToken(Context context) {
+        load(context);
+        return current!=null ? current.token : "";
+    }
+    public static synchronized boolean isPersistent(Context context) {
+        load(context);
+        return current!=null && current.lifetime.persistent();
+    }
+    public static synchronized boolean promotePersistent(Context context,String token,long expectedGeneration) {
+        load(context);
+        if(generation!=expectedGeneration || current==null || !current.token.equals(token)
+                || !matchesConnection(context,current.server,current.username))return false;
+        if(current.lifetime.persistent())return true;
+        SharedPreferences prefs=context.getSharedPreferences(PREFERENCES,Context.MODE_PRIVATE);
+        // Keep an existing encrypted token byte-for-byte; only session metadata changes.
+        String sealed=prefs.getString("token","");
+        if(!current.server.equals(prefs.getString("server","")) || !current.username.equals(prefs.getString("username","")) || sealed.isEmpty()) {
+            try{sealed=encrypt(token,current.server,current.username);}
+            catch(Exception error){throw new IllegalStateException("无法安全保存持久登录，请重试。",error);}
+        }
+        if(!prefs.edit().putString("server",current.server).putString("username",current.username)
+                .putString("token",sealed).putBoolean("persistent",true).remove("expiresAt").commit())
+            throw new IllegalStateException("无法保存持久登录，请重试。");
+        if(!context.getSharedPreferences("connection",Context.MODE_PRIVATE).edit().putBoolean("remember",true).commit())
+            throw new IllegalStateException("无法保存持久登录，请重试。");
+        current=new Session(current.server,current.username,token,SessionLifetime.from(true,null));
+        return true;
+    }
+    public static synchronized void rejectIfCurrent(Context context,String token,long expectedGeneration) {
+        load(context);
+        if(generation==expectedGeneration && current!=null && current.token.equals(token))clear(context);
     }
 
     public static boolean signedIn(Context context) { return !token(context).isEmpty(); }
@@ -46,17 +79,23 @@ public final class NativeSession {
     /** Called only after the native connection form validated the explicit HTTP choice. */
     public static synchronized void save(Context context, String address, String username, String token,
                                          boolean remember, String expiresAt) {
+        save(context,address,username,token,remember,expiresAt,false);
+    }
+
+    public static synchronized void save(Context context, String address, String username, String token,
+                                         boolean remember, String expiresAt, boolean persistent) {
         ServerAddress server = ServerAddress.parse(address, true);
-        Instant expiry = OffsetDateTime.parse(expiresAt).toInstant();
+        SessionLifetime lifetime=SessionLifetime.from(persistent,expiresAt);
+        remember=remember || persistent;
         if (token == null || token.isEmpty() || token.indexOf('\n') >= 0 || token.indexOf('\r') >= 0
-                || username == null || username.isEmpty() || !expiry.isAfter(Instant.now())) {
+                || username == null || username.isEmpty() || !lifetime.isUsableAt(Instant.now())) {
             throw new IllegalArgumentException("服务器返回的登录凭据无效，请重新登录。");
         }
         // Prepare encryption first. A Keystore failure must not leave a half-switched account.
         String sealed = "";
         if (remember) {
             try { sealed = encrypt(token, server.baseUrl(), username); }
-            catch (Exception error) { throw new IllegalStateException("无法安全保存登录，请关闭保持登录后重试。", error); }
+            catch (Exception error) { throw new IllegalStateException("无法安全保存登录，请检查设备安全存储后重试。", error); }
         }
         SharedPreferences connection = context.getSharedPreferences("connection", Context.MODE_PRIVATE);
         generation++;
@@ -65,8 +104,11 @@ public final class NativeSession {
             io.stridehub.app.sync.NasSync.disconnect(context);
         }
         SharedPreferences.Editor persisted = context.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE).edit().clear();
-        if (remember) persisted.putString("server", server.baseUrl()).putString("username", username)
-                .putString("token", sealed).putString("expiresAt", expiresAt);
+        if (remember) {
+            persisted.putString("server", server.baseUrl()).putString("username", username)
+                .putString("token", sealed).putBoolean("persistent",persistent);
+            if(!persistent)persisted.putString("expiresAt",expiresAt);
+        }
         if (!persisted.commit()) throw new IllegalStateException("无法保存登录状态，请重试。");
         if (!connection.edit().putString("server", server.baseUrl()).putString("username", username)
                 .putBoolean("http", server.isHttp()).putBoolean("remember", remember).commit()) {
@@ -75,7 +117,7 @@ public final class NativeSession {
             loaded = true;
             throw new IllegalStateException("无法保存服务器地址，请重试。");
         }
-        current = new Session(server.baseUrl(), username, token, expiry);
+        current = new Session(server.baseUrl(), username, token, lifetime);
         loaded = true;
     }
 
@@ -98,9 +140,15 @@ public final class NativeSession {
         String server = prefs.getString("server", ""), username = prefs.getString("username", "");
         if (!matchesConnection(context, server, username) || server.isEmpty() || username.isEmpty()) return;
         try {
-            Instant expiry = OffsetDateTime.parse(prefs.getString("expiresAt", "")).toInstant();
-            if (expiry.isAfter(Instant.now())) current = new Session(server, username,
-                    decrypt(prefs.getString("token", ""), server, username), expiry);
+            boolean persistent=prefs.contains("persistent") && prefs.getBoolean("persistent",false);
+            SessionLifetime lifetime=SessionLifetime.from(persistent,prefs.getString("expiresAt",null));
+            String token=decrypt(prefs.getString("token", ""),server,username);
+            if(token.isEmpty() || token.indexOf('\n')>=0 || token.indexOf('\r')>=0)throw new IllegalArgumentException("Invalid credential");
+            if(NativeRevocations.wasLoggedOut(context,server,username,token)) {
+                prefs.edit().clear().commit();
+                return;
+            }
+            current=new Session(server,username,token,lifetime);
         } catch (Exception unusable) {
             // Keystore invalidation and damaged preferences require native sign-in, never a web fallback.
             prefs.edit().clear().commit();
@@ -112,7 +160,7 @@ public final class NativeSession {
         return server.equals(connection.getString("server", "")) && username.equals(connection.getString("username", ""));
     }
 
-    private static SecretKey key() throws Exception {
+    private static synchronized SecretKey key() throws Exception {
         KeyStore store = KeyStore.getInstance("AndroidKeyStore");
         store.load(null);
         if (!store.containsAlias(KEY)) {
@@ -124,7 +172,7 @@ public final class NativeSession {
         return (SecretKey) store.getKey(KEY, null);
     }
 
-    private static String encrypt(String token, String server, String username) throws Exception {
+    static String encrypt(String token, String server, String username) throws Exception {
         Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
         cipher.init(Cipher.ENCRYPT_MODE, key());
         cipher.updateAAD((server + "\n" + username).getBytes(StandardCharsets.UTF_8));
@@ -132,7 +180,7 @@ public final class NativeSession {
                 + Base64.encodeToString(cipher.doFinal(token.getBytes(StandardCharsets.UTF_8)), Base64.NO_WRAP);
     }
 
-    private static String decrypt(String sealed, String server, String username) throws Exception {
+    static String decrypt(String sealed, String server, String username) throws Exception {
         String[] parts = sealed.split(":", -1);
         if (parts.length != 2) throw new IllegalArgumentException("Invalid credential envelope");
         Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
@@ -143,9 +191,9 @@ public final class NativeSession {
 
     private static final class Session {
         final String server, username, token;
-        final Instant expiresAt;
-        Session(String server, String username, String token, Instant expiresAt) {
-            this.server = server; this.username = username; this.token = token; this.expiresAt = expiresAt;
+        final SessionLifetime lifetime;
+        Session(String server, String username, String token, SessionLifetime lifetime) {
+            this.server = server; this.username = username; this.token = token; this.lifetime = lifetime;
         }
     }
 }

@@ -50,6 +50,52 @@ public final class NativeSessionTest extends AndroidTestCase {
         getContext().getSharedPreferences("native_session",0).edit().putString("token","invalid").commit();
         processRestart();assertFalse(NativeSession.signedIn(getContext()));
     }
+    public void testPersistentCredentialRestoresWithoutExpiryAndExplicitMetadataIsRequired() throws Exception {
+        NativeSession.save(getContext(),"https://nas.example/install","alice","shmobile_persistent",true,null,true);
+        assertTrue(NativeSession.isPersistent(getContext()));
+        assertFalse(getContext().getSharedPreferences("native_session",0).contains("expiresAt"));
+        processRestart();assertEquals("shmobile_persistent",NativeSession.token(getContext()));
+        assertTrue(NativeSession.isPersistent(getContext()));
+        getContext().getSharedPreferences("native_session",0).edit().remove("persistent").commit();
+        processRestart();assertEquals("",NativeSession.candidateToken(getContext()));
+    }
+    public void testLegacyMetadataUpgradeKeepsCipherGenerationAccountAndWeighingBinding() throws Exception {
+        NativeSession.save(getContext(),"https://nas.example/install","alice","shmobile_legacy",true,expiry());
+        getContext().getSharedPreferences("nas_sync",0).edit().putString("binding","retained-device").putString("server","https://nas.example/install").putString("username","alice").commit();
+        String sealed=getContext().getSharedPreferences("native_session",0).getString("token","");
+        long before=NativeSession.generation();
+        assertTrue(NativeSession.promotePersistent(getContext(),"shmobile_legacy",before));
+        assertEquals(before,NativeSession.generation());
+        assertEquals(sealed,getContext().getSharedPreferences("native_session",0).getString("token",""));
+        assertEquals("retained-device",NasSync.binding(getContext()));
+        processRestart();assertTrue(NativeSession.isPersistent(getContext()));
+        assertEquals("shmobile_legacy",NativeSession.token(getContext()));
+    }
+    public void testExpiredLegacyCandidateSurvivesOnlyForAuthoritativeUpgradeAndLateUpgradeCannotUndoLogout() throws Exception {
+        NativeSession.save(getContext(),"https://nas.example/install","alice","shmobile_pending_upgrade",true,expiry());
+        getContext().getSharedPreferences("native_session",0).edit().putString("expiresAt","2020-01-01T00:00:00Z").commit();
+        processRestart();assertFalse(NativeSession.signedIn(getContext()));
+        assertEquals("shmobile_pending_upgrade",NativeSession.candidateToken(getContext()));
+        long before=NativeSession.generation();
+        assertTrue(NativeSession.promotePersistent(getContext(),"shmobile_pending_upgrade",before));
+        assertEquals("shmobile_pending_upgrade",NativeSession.token(getContext()));
+        NativeSession.clear(getContext());
+        assertFalse(NativeSession.promotePersistent(getContext(),"shmobile_pending_upgrade",before));
+        assertEquals("",NativeSession.candidateToken(getContext()));
+        assertTrue(getContext().getSharedPreferences("native_session",0).getAll().isEmpty());
+    }
+
+    public void testAuthoritativeRejectionClearsExpiredCandidateButLateOldRejectionCannotTouchNewAccount() throws Exception {
+        NativeSession.save(getContext(),"https://nas.example/install","alice","shmobile_invalid",true,expiry());
+        long before=NativeSession.generation();
+        NativeSession.rejectIfCurrent(getContext(),"shmobile_invalid",before);
+        assertEquals("",NativeSession.candidateToken(getContext()));
+        assertTrue(getContext().getSharedPreferences("native_session",0).getAll().isEmpty());
+        NativeSession.save(getContext(),"https://nas.example/install","bob","shmobile_replacement",true,null,true);
+        NativeSession.rejectIfCurrent(getContext(),"shmobile_invalid",before);
+        assertEquals("shmobile_replacement",NativeSession.token(getContext()));
+    }
+
     public void testSwitchAndLogoutPreserveScaleIdentityAndOriginalQueue() throws Exception {
         NasSync.initialize(getContext());
         NativeSession.save(getContext(),"https://nas.example/install","alice","shmobile_one",false,expiry());

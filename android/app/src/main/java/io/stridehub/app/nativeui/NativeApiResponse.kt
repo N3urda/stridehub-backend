@@ -35,12 +35,12 @@ object NativeApiResponse {
             val source = json.optJSONObject("error")?.opt("message") ?: json.opt("message")
             val message = if (source is String) safeMessage(source) else ""
             throw ApiFailure(status, when (status) {
-                401 -> if (login) "用户名或密码错误，请核对后重试。" else "登录已过期，请重新连接。"
+                401 -> if (login) "用户名或密码错误，请核对后重试。" else "登录已失效，请重新连接。"
                 404 -> if (login) "服务器未提供移动登录接口（HTTP 404）。请检查公网代理转发、服务器地址和后端版本。" else message.ifBlank { "服务器缺少此移动接口（HTTP 404），请检查地址或后端版本。" }
                 409, 428 -> message.ifBlank { "记录已改变。草稿已保留，请核对服务器最新内容后再保存。" }
                 429 -> "请求过于频繁（HTTP 429），请稍后重试。"
                 else -> "服务器返回 HTTP $status。" + message.takeIf { it.isNotBlank() }?.let { " $it" }.orEmpty()
-            })
+            }, authenticationRejected=status==401 && json.optString("error") in setOf("invalid_token","invalid_credentials","unauthorized"))
         }
         return body
     }

@@ -18,6 +18,7 @@
         android:supportsRtl="true"
         android:theme="@style/AppTheme"
         android:usesCleartextTraffic="true">
+        <service android:name=".NativeRevocationJob" android:permission="android.permission.BIND_JOB_SERVICE" android:exported="false" />
         <service android:name=".sync.SyncJob" android:permission="android.permission.BIND_JOB_SERVICE" android:exported="false" />
         <activity android:name=".scale.WeighingActivity" android:exported="false" android:windowSoftInputMode="adjustResize" />
         <!-- HTTP is gated by the per-server native opt-in; never bypass TLS errors. -->
