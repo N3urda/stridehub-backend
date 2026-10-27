@@ -13,6 +13,14 @@ m=importlib.util.module_from_spec(spec);sys.modules[spec.name]=m;spec.loader.exe
 
 
 class PersistentAcceptanceTest(unittest.TestCase):
+    def test_android_package_identity_accepts_app_id_or_legacy_user_id(self):
+        run=m.Acceptance.__new__(m.Acceptance);run.package='io.stridehub.app'
+        run.args=types.SimpleNamespace(package='release')
+        for key in ('userId','appId'):
+            raw=f'{key}=10209\nversionCode=5 minSdk=26\n'.encode()
+            run.ui=types.SimpleNamespace(adb=lambda *args:raw)
+            self.assertEqual({'versionCode':5,'uid':'10209'},run.package_info())
+
     def metadata(self):return {'apiVersion':1,'capabilities':[m.CAPABILITY],'persistent':True,'expiresAt':None}
 
     def test_permanent_identity_requires_explicit_boolean_null_and_capability(self):

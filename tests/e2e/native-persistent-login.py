@@ -195,7 +195,7 @@ class Acceptance:
 
     def package_info(self):
         raw=self.ui.adb('shell','dumpsys','package',self.package).decode(errors='replace')
-        version=re.search(r'\bversionCode=(\d+)\s',raw);uid=re.search(r'\buserId=(\d+)',raw)
+        version=re.search(r'\bversionCode=(\d+)\s',raw);uid=re.search(r'\b(?:userId|appId)=(\d+)',raw)
         require(version is not None and uid is not None,'Expected installed owned app package was not found')
         require(('DEBUGGABLE' in raw)==(self.args.package=='debug'),'Package build type does not match requested release/debug scope')
         return {'versionCode':int(version.group(1)),'uid':uid.group(1)}

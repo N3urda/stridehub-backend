@@ -56,6 +56,7 @@ fun JSONArray.objects():List<JSONObject> = (0 until length()).mapNotNull { optJS
 fun encoded(value:String)=URLEncoder.encode(value,"UTF-8").replace("+","%20")
 fun route(type:String,kind:String="",id:String="",payload:JSONObject?=null,title:String="",path:String=""):String=JSONObject().put("type",type).put("kind",kind).put("id",id).put("payload",payload).put("title",title).put("path",path).apply {if(type=="activityForm" && id.isBlank()) put("draftId",java.util.UUID.randomUUID().toString())}.toString()
 class AppModel(app:Application, private val state:SavedStateHandle):AndroidViewModel(app) {
+    init { io.stridehub.app.NativeRevocations.schedulePending(app) }
     var repository by mutableStateOf(NativeRepository.current(app));private set
     var tab by mutableIntStateOf(state["tab"] ?: 0);private set
     var revision by mutableIntStateOf(0);private set
@@ -74,11 +75,15 @@ class AppModel(app:Application, private val state:SavedStateHandle):AndroidViewM
     fun action(block:suspend (NativeRepository)->Unit) { if(busy) return;val repo=repository ?: return;busy=true;viewModelScope.launch { try { block(repo);revision++ } catch(e:Exception) { if(e is kotlinx.coroutines.CancellationException) throw e;message=e.message ?: "操作失败，请重试。" } finally { busy=false } } }
     fun logout() {
         val repo=repository ?: return
+        try { repo.prepareLogout() } catch(e:Exception) {
+            message="无法安全保存退出请求，请重试。登录状态未改变。"
+            return
+        }
         NativeSession.clear(getApplication());repo.cancel();repository=null;authEpoch++;resetNavigation()
         viewModelScope.launch {
             repo.forget()
             val revoked=runCatching {repo.revokeAfterLogout()}.isSuccess
-            message=if(revoked) "已退出登录" else "本机已退出。服务器暂不可达，远端凭据将在有效期内失效。"
+            message=if(revoked) "已退出登录" else "本机已退出，联网后将自动撤销服务器会话。"
         }
     }
 
@@ -136,7 +141,7 @@ class AppModel(app:Application, private val state:SavedStateHandle):AndroidViewM
     val context=LocalContext.current;val prefs=context.getSharedPreferences("native-ui",Context.MODE_PRIVATE)
     var server by rememberSaveable { mutableStateOf(prefs.getString("server",NativeSession.server(context)?.baseUrl() ?: "").orEmpty()) };var username by rememberSaveable { mutableStateOf(prefs.getString("username",NativeSession.username(context)).orEmpty()) }
     // Password is intentionally never saved through process recreation.
-    var password by remember { mutableStateOf("") };var allowHttp by rememberSaveable {mutableStateOf(false)};var remember by rememberSaveable {mutableStateOf(true)}
+    var password by remember { mutableStateOf("") };var allowHttp by rememberSaveable {mutableStateOf(false)}
     var error by remember {mutableStateOf<String?>(null)};var loading by remember {mutableStateOf(false)};val scope=rememberCoroutineScope()
     var showPassword by remember {mutableStateOf(false)}
     Column(Modifier.verticalScroll(rememberScrollState()).padding(24.dp).padding(bottom=80.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
@@ -147,10 +152,10 @@ class AppModel(app:Application, private val state:SavedStateHandle):AndroidViewM
         OutlinedTextField(username,{username=it},label={Text("用户名")},supportingText={Text("使用网页版的账号和密码")},enabled=!loading,singleLine=true,modifier=Modifier.fillMaxWidth())
         OutlinedTextField(password,{password=it},label={Text("密码")},visualTransformation=if(showPassword) VisualTransformation.None else PasswordVisualTransformation(),keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Password),trailingIcon={IconButton(onClick={showPassword=!showPassword},enabled=!loading){Icon(if(showPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility,if(showPassword) "隐藏密码" else "显示密码")}},enabled=!loading,singleLine=true,modifier=Modifier.fillMaxWidth())
         Row(verticalAlignment=Alignment.CenterVertically) {Checkbox(allowHttp,{allowHttp=it},enabled=!loading);Text("明确允许此连接使用 HTTP（局域网）")}
-        Row(verticalAlignment=Alignment.CenterVertically) {Checkbox(remember,{remember=it},enabled=!loading);Text("保持登录，最多七天")}
+        Text("登录后会一直保持登录，无需定期输入密码。主动退出、修改密码或撤销会话后需要重新登录。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
         error?.let { ErrorCard(it) }
         Button(enabled=!loading && server.isNotBlank() && username.isNotBlank() && password.isNotBlank(),onClick={ loading=true;error=null;scope.launch {
-            try { val repo=NativeRepository.login(context,server,username,password,allowHttp,remember);password="";vm.loggedIn(repo) } catch(e:Exception) { error=e.message ?: "连接失败" } finally {loading=false}
+            try { val repo=NativeRepository.login(context,server,username,password,allowHttp,true);password="";vm.loggedIn(repo) } catch(e:Exception) { error=e.message ?: "连接失败" } finally {loading=false}
         }},modifier=Modifier.fillMaxWidth()) {if(loading) CircularProgressIndicator(Modifier.size(20.dp),strokeWidth=2.dp) else Text("连接并登录")}
         OutlinedButton(onClick={context.startActivity(Intent(context,WeighingActivity::class.java))},modifier=Modifier.fillMaxWidth()){Text("离线称重与本机历史")}
     }
@@ -230,6 +235,7 @@ class AppModel(app:Application, private val state:SavedStateHandle):AndroidViewM
     ActionRow("文件导入与处理结果",Icons.Default.UploadFile){vm.push(route("imports"))}
     ActionRow("运动记录管理",Icons.Default.DirectionsRun){vm.push(route("records","activities"))}
     val context=LocalContext.current
+    InfoCard("保持登录",if(NativeSession.isPersistent(context)) "已开启：无需定期登录。重启 App 或手机后仍可继续使用。" else "下次联网时会自动升级为长期登录，现有记录和称重队列保留。")
     ActionRow("称重、设备、权限与上传队列",Icons.Default.MonitorWeight){context.startActivity(Intent(context,WeighingActivity::class.java))}
     SectionTitle("外观")
     FlowRow(horizontalArrangement=Arrangement.spacedBy(8.dp)){listOf("system" to "跟随系统","light" to "浅色","dark" to "深色").forEach {(key,label)->FilterChip(theme==key,{onTheme(key)},label={Text(label)})}}
