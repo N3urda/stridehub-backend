@@ -1,5 +1,8 @@
 """No-device/no-network guard and contract tests for persistent acceptance."""
 import importlib.util
+import base64
+import json
+import xml.etree.ElementTree as ET
 from pathlib import Path
 import sys
 import types
@@ -13,6 +16,98 @@ m=importlib.util.module_from_spec(spec);sys.modules[spec.name]=m;spec.loader.exe
 
 
 class PersistentAcceptanceTest(unittest.TestCase):
+    def revocation_xml(self,pending=True,tomb=True,payload=None,kind='string',tomb_kind='boolean',tomb_value='true'):
+        self.base='https://nas-fixture.example'+m.nas.PREFIX
+        self.identity='a'*64
+        if payload is None:payload={'server':self.base,'username':'demo','token':base64.b64encode(b'i'*12).decode()+':'+base64.b64encode(b'c'*40).decode()}
+        root=ET.Element('map')
+        if pending:ET.SubElement(root,kind,{'name':self.identity}).text=json.dumps(payload)
+        if tomb:ET.SubElement(root,tomb_kind,{'name':'loggedout.'+self.identity,'value':tomb_value})
+        ET.SubElement(root,'long',{'name':'sequence','value':'1'})
+        if pending:ET.SubElement(root,'long',{'name':'order.'+self.identity,'value':'1'})
+        return ET.tostring(root)
+
+    def test_revocation_parser_proves_one_encrypted_intent_with_tombstone_without_returning_payload(self):
+        raw=self.revocation_xml();state=m.revocation_state(raw,self.base,'demo')
+        self.assertEqual({self.identity},set(state['pending']))
+        self.assertEqual({self.identity},state['tombstones'])
+        self.assertNotIn(self.base,repr(state));self.assertNotIn('demo',repr(state))
+        self.assertEqual(64,len(state['pending'][self.identity]))
+        drained=m.revocation_state(self.revocation_xml(pending=False),self.base,'demo')
+        m.require_logout_progress(drained,self.identity,set(),drained=True)
+
+    def test_revocation_parser_rejects_plaintext_wrong_destination_malformed_cipher_and_missing_tombstone(self):
+        self.revocation_xml()
+        for change in ({'token':'shmobile_plaintext'}, {'server':'https://production.invalid'},
+                       {'username':'another'}, {'password':'must-not-be-stored'}, {'token':'invalid:base64'}, {'token':'a:b'}):
+            payload={'server':self.base,'username':'demo','token':base64.b64encode(b'i'*12).decode()+':'+base64.b64encode(b'c'*40).decode()};payload.update(change)
+            with self.subTest(change=tuple(change)),self.assertRaises(m.Failure):
+                m.revocation_state(self.revocation_xml(payload=payload),self.base,'demo')
+        for options in ({'tomb':False},{'kind':'boolean'},{'tomb_kind':'string'},{'tomb_value':'false'}):
+            with self.subTest(options=options),self.assertRaises(m.Failure):
+                m.revocation_state(self.revocation_xml(**options),self.base,'demo')
+
+    def test_queue_completion_requires_original_and_new_tombstones_to_survive(self):
+        identity='a'*64;previous={'b'*64}
+        for state in ({'pending':{},'tombstones':previous},
+                      {'pending':{identity:'frozen'},'tombstones':previous|{identity}},
+                      {'pending':{},'tombstones':{identity}}):
+            with self.assertRaises(m.Failure):m.require_logout_progress(state,identity,previous,drained=True)
+        raw=self.revocation_xml(pending=False)
+        root=ET.fromstring(raw);ET.SubElement(root,'string',{'name':'corrupt-pending-key'}).text='opaque'
+        with self.assertRaises(m.Failure):m.revocation_state(ET.tostring(root),self.base,'demo')
+
+    def test_revocation_private_whitelist_and_new_phase_are_explicit(self):
+        run=m.Acceptance.__new__(m.Acceptance);run.package='io.stridehub.app.debug';run.args=types.SimpleNamespace(package='debug')
+        calls=[];run.ui=types.SimpleNamespace(adb=lambda *args:calls.append(args) or b'<map/>')
+        self.assertEqual(b'<map/>',run.private('shared_prefs/native_revocations.xml'))
+        with self.assertRaises(m.Failure):run.private('shared_prefs/unrelated.xml')
+        self.assertEqual(1,len(calls))
+        args=m.parse_args(['device-offline','--base','https://unused.invalid','--credentials','unused','--output','unused'])
+        self.assertEqual(90,args.offline_timeout);self.assertEqual(180,args.revocation_timeout)
+
+    def phase_fixture(self):
+        run=m.Acceptance.__new__(m.Acceptance);run.package='io.stridehub.app';run.args=types.SimpleNamespace(offline_timeout=1,revocation_timeout=10,timeout=1,package='release')
+        run.base='https://nas-fixture.example'+m.nas.PREFIX;run.credentials={'username':'demo','password':'synthetic-only'};run.report={}
+        run.guard_device=lambda:None;run.baseline=lambda:{'session':{'cipherSha256':'original'}}
+        run.signed_in_ui=lambda:None;run.verify_data=lambda baseline:None;run.session_snapshot=lambda persistent:{'cipherSha256':'original'}
+        run.private=lambda relative,optional=False:b'<map/>';run.passed=lambda name:None
+        calls=[]
+        def adb(*args):
+            calls.append(args)
+            if args[:3]==('shell','settings','get'):return b'1' if args[-1]=='wifi_on' else b'0'
+            return b''
+        run.ui=types.SimpleNamespace(adb=adb,visible=lambda label:False,tab=lambda label:None,tap=lambda *args,**kwargs:None,
+            wait=lambda *args,**kwargs:None,screenshot=lambda name:None,fill=lambda *args:None)
+        return run,calls
+
+    def test_offline_phase_restores_original_network_on_cache_assertion_failure(self):
+        run,calls=self.phase_fixture()
+        def wait(label,**kwargs):
+            if label=='离线缓存':raise m.Failure('fixture timeout')
+        run.ui.wait=wait
+        with patch.object(m.time,'sleep'),self.assertRaises(m.Failure):run.device_offline()
+        self.assertEqual([('shell','svc','wifi','enable'),('shell','svc','data','disable')],calls[-2:])
+
+    def test_offline_logout_observes_native_pending_then_drain_without_claiming_token401(self):
+        run,calls=self.phase_fixture();identity='a'*64;previous={'b'*64}
+        empty={'pending':{},'tombstones':previous}
+        pending={'pending':{identity:'frozen'},'tombstones':previous|{identity}}
+        drained={'pending':{},'tombstones':previous|{identity}}
+        states=iter([empty,pending,pending,pending,drained,drained]);run.revocation_snapshot=lambda:next(states)
+        with patch.object(m.time,'sleep'):run.device_logout()
+        self.assertTrue(run.report['logout']['nativeQueueDrainedAfterNetworkRestore'])
+        self.assertTrue(run.report['logout']['logoutTombstoneRetained'])
+        self.assertFalse(run.report['deviceOriginalTokenServer401Observed'])
+        self.assertIn(('shell','svc','wifi','enable'),calls)
+        self.assertFalse(any('cmd' in args or 'jobscheduler' in args for args in calls))
+
+    def test_failed_offline_logout_assertion_still_restores_both_original_network_states(self):
+        run,calls=self.phase_fixture();empty={'pending':{},'tombstones':set()}
+        run.revocation_snapshot=lambda:empty
+        with patch.object(m.time,'sleep'),self.assertRaises(m.Failure):run.device_logout()
+        self.assertEqual([('shell','svc','wifi','enable'),('shell','svc','data','disable')],calls[-2:])
+
     def test_android_package_identity_accepts_app_id_or_legacy_user_id(self):
         run=m.Acceptance.__new__(m.Acceptance);run.package='io.stridehub.app'
         run.args=types.SimpleNamespace(package='release')

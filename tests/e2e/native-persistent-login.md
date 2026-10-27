@@ -75,7 +75,17 @@ python3 tests/e2e/native-persistent-login.py device-restart \
 
 同两个API token须200且仍明确永久；App须无需输入密码即可刷新并显示原账号，称重数据保持原样。
 
-## 4. 退出不复活与重新登录
+## 4. 断网重开仍有身份，恢复公网刷新
+
+```sh
+python3 tests/e2e/native-persistent-login.py device-offline \
+  --base "$STRIDEHUB_E2E_PUBLIC_BASE" --credentials "$PERSISTENT_CREDENTIALS" \
+  --output "$PERSISTENT_OUT" --adb "$PERSISTENT_ADB" --apksigner "$PERSISTENT_APKSIGNER"
+```
+
+此阶段须在已升级登录的release上执行。先联网核对身份及原密文，再保存Wi-Fi/移动数据原状态并断网，强停重开，确认显示总览及真实离线缓存且没有登录表单，密文与称重四表均保持。`finally` 恢复原网络状态后，通过App重新刷新公网并再次核对。默认离线状态最多等待90秒，可传 `--offline-timeout`。
+
+## 5. 离线退出不复活，联网补撤销，再重新登录
 
 ```sh
 python3 tests/e2e/native-persistent-login.py device-logout \
@@ -85,9 +95,13 @@ python3 tests/e2e/native-persistent-login.py api-finish \
   --base "$STRIDEHUB_E2E_PUBLIC_BASE" --credentials "$PERSISTENT_CREDENTIALS" --output "$PERSISTENT_OUT"
 ```
 
-设备阶段点击原生退出，强停重开仍在登录页，本机token被清除、称重四表保留，然后通过原生表单重新登录并核对永久存储。API阶段撤销两个测试token，GET/PATCH均401，再验证新长期登录可用并清理观察身份。
+设备阶段先验证没有其他待撤销记录，然后断网点击原生退出。只读 `native_revocations.xml` 必须出现本轮唯一64hex String队列项，其JSON仅包含当前隔离服务器/合成账号与Keystore加密token，并具有 `loggedout.<id>` boolean true 墓碑；不把任意字符串或明文当加密证据。断网强停重开后仍在登录页，当前身份token为空，冻结队列载荷与墓碑均保留，称重四表不变。
 
-**证据界限：API observer不是App原token。** 正式包截图只能证明本地退出不复活和再登录；App原token服务端401须结合debug专项instrumentation或独立服务端原session撤销证据。不要把API observer的401当作正式App token的401。离线退出及恢复后的补撤销也必须单独证明。
+`finally` 恢复原Wi-Fi/数据状态后，仅通过正常App启动/系统网络Job自动补撤销，不强制Job、不直接提取token发DELETE、不修改队列。等待pending从1变0，原有及本轮墓碑仍保留、本地身份未复活，再原生重新永久登录并核对称重四表。默认补撤销最多等待180秒，可传 `--revocation-timeout`。
+
+队列消失依据已审查的原生实现：只有DELETE204或已验证的JSON无效凭据401才移除意图。脚本报告 `serverConfirmedViaNativeRevocationDrain:true`，但 `deviceOriginalTokenServer401Observed:false`；不声称抓到了原token的具体401响应。API阶段仍独立撤销两个观察测试token，GET/PATCH均401，再验证新长期登录可用并清理观察身份。
+
+**证据界限：API observer不是App原token。** 正式包离线场景通过持久队列从有到无及墓碑保留证明真实网络恢复后原生撤销路径已得到服务器确认；它没有直接读取原App token的401。若需具体401证据，仍须结合debug专项instrumentation或独立服务端证据。不要把API observer的401当作正式App token的401。
 
 `--package debug` 可用于已预先登录的对应debug基线，不会自动接管其账号，不创建/删除称重记录。正式包验收结束重新登录后已换token，不能继续拿旧before密文去断言device-restart；需保留旧证据，另建新输出目录定义新的验收轮次。
 

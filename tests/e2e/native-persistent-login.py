@@ -6,6 +6,7 @@ Execute one explicit phase at a time. Reports omit credentials and health conten
 """
 from __future__ import annotations
 import argparse
+import base64
 import hashlib
 import importlib.util
 import json
@@ -28,7 +29,7 @@ nas=importlib.util.module_from_spec(spec);sys.modules[spec.name]=nas;spec.loader
 Failure=nas.SafeFailure
 CAPABILITY='persistent-mobile-sessions'
 TABLES=('measurements','measurement_derivations','legacy_imports','sync_queue')
-PHASES=('api-begin','api-after-restart','api-finish','device-before','device-after','device-restart','device-logout')
+PHASES=('api-begin','api-after-restart','api-finish','device-before','device-after','device-restart','device-offline','device-logout')
 
 
 def require(condition,message):
@@ -70,6 +71,53 @@ def require_persistent_preferences(values):
             'App has not persisted explicit permanent-session metadata')
     require(bool(values.get('token')) and not values['token'].startswith('shmobile_'),
             'App session must remain encrypted in Android Keystore-backed storage')
+
+
+def revocation_state(raw,base,username):
+    """Inspect encrypted logout intent metadata in memory; never return raw tokens/payloads."""
+    if not raw:return {'pending':{},'tombstones':set()}
+    try:root=ET.fromstring(raw)
+    except (ValueError,ET.ParseError):raise Failure('Could not parse owned revocation preferences') from None
+    require(root.tag=='map','Expected owned Android revocation preferences map')
+    pending={};tombstones=set();seen=set()
+    for node in root:
+        key=node.get('name','')
+        require(key not in seen,'Duplicate revocation preference key');seen.add(key)
+        if re.fullmatch('[a-f0-9]{64}',key):
+            require(node.tag=='string' and bool(node.text),'Pending revocation must be a 64hex String preference')
+            try:payload=json.loads(node.text)
+            except (ValueError,TypeError):raise Failure('Pending revocation payload was not valid JSON') from None
+            require(isinstance(payload,dict) and set(payload)=={'server','username','token'},
+                    'Expected only server/account/encrypted-token fields in revocation payload')
+            require_connection(payload,base,username)
+            token=payload.get('token')
+            require(isinstance(token,str) and not token.startswith('shmobile_'),'Revocation token must be encrypted')
+            try:
+                parts=token.split(':')
+                require(len(parts)==2,'Expected encrypted revocation envelope')
+                iv=base64.b64decode(parts[0],validate=True);cipher=base64.b64decode(parts[1],validate=True)
+                require(len(iv)==12 and len(cipher)>16,'Invalid encrypted revocation envelope size')
+            except Failure:raise
+            except Exception:raise Failure('Invalid encrypted revocation envelope') from None
+            pending[key]=digest(payload)
+        elif key.startswith('loggedout.'):
+            identity=key.removeprefix('loggedout.')
+            require(re.fullmatch('[a-f0-9]{64}',identity) is not None and node.tag=='boolean' and node.get('value')=='true',
+                    'Logout tombstone must be a 64hex identity marked boolean true')
+            tombstones.add(identity)
+        elif key=='sequence' or key.startswith('order.'):
+            require((key=='sequence' or re.fullmatch('order[.][a-f0-9]{64}',key))
+                    and node.tag=='long' and re.fullmatch('[0-9]+',node.get('value','')) is not None,
+                    'Unexpected revocation ordering metadata')
+        else:raise Failure('Unrecognized revocation preference key; refusing to infer queue completion')
+    require(set(pending)<=tombstones,'Pending logout intent lost its durable no-resurrection tombstone')
+    return {'pending':pending,'tombstones':tombstones}
+
+
+def require_logout_progress(state,identity,previous_tombstones,drained=False):
+    require(previous_tombstones|{identity}<=state['tombstones'],'Logout tombstone disappeared across process/network recovery')
+    if drained:require(not state['pending'],'Native revocation queue has not received server confirmation')
+    else:require(set(state['pending'])=={identity},'Expected exactly this round one encrypted logout intent')
 
 
 class Api(nas.HttpsApi):
@@ -184,7 +232,7 @@ class Acceptance:
         self.state_path().unlink()
 
     def private(self,relative,optional=False):
-        require(relative in ('shared_prefs/connection.xml','shared_prefs/native_session.xml',
+        require(relative in ('shared_prefs/connection.xml','shared_prefs/native_session.xml','shared_prefs/native_revocations.xml',
                             'databases/tinyyumi.db','databases/tinyyumi.db-wal'),'Unapproved private read')
         try:
             if self.args.package=='debug':return self.ui.adb('exec-out','run-as',self.package,'cat',relative)
@@ -322,27 +370,90 @@ class Acceptance:
         self.ui.screenshot(self.args.package+'-force-stop-restored')
         self.passed('force-stop-relaunch-retains-persistent-identity-and-all-local-data')
 
-    def device_logout(self):
+    def revocation_snapshot(self):
+        return revocation_state(self.private('shared_prefs/native_revocations.xml',optional=True),
+                                self.base,self.credentials['username'])
+
+    def device_offline(self):
         self.guard_device();before=self.baseline();self.signed_in_ui()
-        self.ui.tap('设置与更多');self.ui.tap('退出 / 切换服务器或账号',scroll=True)
-        self.ui.wait('连接并登录')
-        self.ui.adb('shell','am','force-stop',self.package)
+        require(self.session_snapshot(True)['cipherSha256']==before['session']['cipherSha256'],
+                'Offline phase requires the unchanged upgraded original session')
+        self.verify_data(before)
+        with nas.android_offline(self.ui):
+            self.ui.adb('shell','am','force-stop',self.package)
+            self.ui.adb('shell','am','start','-n',self.package+'/io.stridehub.app.MainActivity')
+            time.sleep(1)
+            require(not self.ui.visible('连接并登录'),'Offline process restart unexpectedly requires login')
+            self.ui.tab('总览');self.ui.wait('最近的真实记录')
+            self.ui.tap('刷新');self.ui.wait('离线缓存',timeout=self.args.offline_timeout,partial=True)
+            require(not self.ui.visible('连接并登录'),'Offline cache discarded the persistent identity')
+            require(self.session_snapshot(True)['cipherSha256']==before['session']['cipherSha256'],
+                    'Offline process restart replaced the encrypted session')
+            self.verify_data(before)
+            self.ui.screenshot(self.args.package+'-offline-force-stop-cache')
+        self.signed_in_ui();self.verify_data(before)
+        require(self.session_snapshot(True)['cipherSha256']==before['session']['cipherSha256'],
+                'Network recovery replaced the original persistent session')
+        self.ui.screenshot(self.args.package+'-offline-network-restored')
+        self.passed('offline-force-stop-retains-cache-cipher-and-scale-data-then-public-refresh-recovers')
+        self.report['offline']={'originalNetworkStateRestored':True,'nativeOfflineCacheShown':True,
+                                'originalCipherUnchanged':True,'allScaleTablesUnchanged':True}
+
+    def device_logout(self):
+        self.guard_device();before=self.baseline();self.signed_in_ui();self.verify_data(before)
+        original=self.revocation_snapshot()
+        require(not original['pending'],'Resolve existing owned logout intents before testing one new offline logout')
+        with nas.android_offline(self.ui):
+            self.ui.tap('设置与更多');self.ui.tap('退出 / 切换服务器或账号',scroll=True)
+            self.ui.wait('连接并登录')
+            queued=self.revocation_snapshot()
+            require(len(queued['pending'])==1,'Offline logout did not persist exactly one encrypted intent')
+            identity=next(iter(queued['pending']))
+            require(identity not in original['tombstones'],'Expected a new logout intent for the currently signed-in session')
+            require_logout_progress(queued,identity,original['tombstones'])
+            frozen=queued['pending'][identity]
+            self.ui.adb('shell','am','force-stop',self.package)
+            self.ui.adb('shell','am','start','-n',self.package+'/io.stridehub.app.MainActivity')
+            self.ui.wait('连接并登录')
+            session=preference_values(self.private('shared_prefs/native_session.xml'))
+            require(not session.get('token'),'Offline logout left a reusable local mobile credential')
+            restored=self.revocation_snapshot();require_logout_progress(restored,identity,original['tombstones'])
+            require(restored['pending'][identity]==frozen,'Offline restart changed the frozen encrypted revocation payload')
+            self.verify_data(before)
+            self.ui.screenshot(self.args.package+'-offline-logout-not-resurrected')
+        # Normal app startup and the network-constrained JobScheduler perform the real drain.
+        # No forced test job, direct DELETE with this token, or queue edit is performed here.
         self.ui.adb('shell','am','start','-n',self.package+'/io.stridehub.app.MainActivity')
         self.ui.wait('连接并登录')
-        session=preference_values(self.private('shared_prefs/native_session.xml'))
-        require(not session.get('token'),'Logout left a reusable local mobile credential')
-        self.verify_data(before)
-        self.ui.screenshot(self.args.package+'-logout-not-resurrected')
-        self.passed('native-logout-and-process-restart-do-not-revive-identity-or-delete-weighing')
+        deadline=time.monotonic()+self.args.revocation_timeout
+        while True:
+            current=self.revocation_snapshot()
+            require(original['tombstones']|{identity}<=current['tombstones'],'Recovery lost durable logout tombstones')
+            if not current['pending']:
+                require_logout_progress(current,identity,original['tombstones'],drained=True);break
+            require_logout_progress(current,identity,original['tombstones'])
+            require(current['pending'][identity]==frozen,'Recovery changed the frozen revocation payload before confirmation')
+            require(time.monotonic()<deadline,'Native logout intent did not drain after network restoration')
+            time.sleep(1)
+        self.ui.wait('连接并登录');self.verify_data(before)
+        require(not preference_values(self.private('shared_prefs/native_session.xml')).get('token'),
+                'A drained logout intent resurrected the local login')
+        self.ui.screenshot(self.args.package+'-logout-drained-tombstone-retained')
+        self.passed('offline-logout-survives-force-stop-and-native-network-drain-retains-tombstone')
         self.ui.fill('服务器地址',self.base+'/admin/app')
         self.ui.fill('用户名',self.credentials['username'])
         self.ui.fill('密码',self.credentials['password'])
         self.ui.tap('连接并登录',scroll=True);self.ui.wait('最近的真实记录',timeout=self.args.timeout)
         self.signed_in_ui();self.session_snapshot(True);self.verify_data(before)
+        require_logout_progress(self.revocation_snapshot(),identity,original['tombstones'],drained=True)
         self.ui.screenshot(self.args.package+'-fresh-persistent-login')
-        self.passed('fresh-native-login-after-logout-is-persistent-and-preserves-weighing')
+        self.passed('fresh-native-login-after-offline-logout-is-persistent-and-preserves-weighing')
+        self.report['logout']={'originalNetworkStateRestored':True,'oneEncryptedIntentPersistedOffline':True,
+            'forceStopDidNotReviveIdentity':True,'nativeQueueDrainedAfterNetworkRestore':True,
+            'logoutTombstoneRetained':True,'serverConfirmedViaNativeRevocationDrain':True,
+            'drainConfirmationSemantics':'native intent is removed only after DELETE204 or verified JSON invalid-credential401'}
         self.report['deviceOriginalTokenServer401Observed']=False
-        self.report['requiredSeparateEvidence']='Debug instrumentation or server-side original-session DELETE/401 evidence; observer token is not the app token'
+        self.report['requiredSeparateEvidence']='No original-token401 was directly observed; native durable queue drain confirms logout through its validated server response path'
 
     def run(self):
         try:
@@ -375,6 +486,8 @@ def parse_args(argv=None):
     parser.add_argument('--timeout',type=int,default=60)
     parser.add_argument('--min-local-rows',type=int,default=1)
     parser.add_argument('--restarts',type=int,default=2)
+    parser.add_argument('--offline-timeout',type=int,default=90)
+    parser.add_argument('--revocation-timeout',type=int,default=180)
     return parser.parse_args(argv)
 
 
