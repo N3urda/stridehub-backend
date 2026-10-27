@@ -36,11 +36,15 @@ final readonly class MobileSessionRequestHandler
                 throw new TrainingError('Invalid username or password.', 401);
             }
 
-            return new JsonResponse($this->sessions->create($body['username'], $body['password'], $body['deviceName'], $request->getClientIp() ?? 'unknown'), 201);
+            if (array_key_exists('persistent', $body) && !is_bool($body['persistent'])) {
+                throw new TrainingError('persistent must be a boolean.');
+            }
+
+            return new JsonResponse($this->sessions->create($body['username'], $body['password'], $body['deviceName'], $request->getClientIp() ?? 'unknown', $body['persistent'] ?? false), 201);
         });
     }
 
-    #[Route('/mobile/v1/session', name: 'mobile_session_current', methods: ['GET', 'DELETE'], priority: 80)]
+    #[Route('/mobile/v1/session', name: 'mobile_session_current', methods: ['GET', 'PATCH', 'DELETE'], priority: 80)]
     public function current(Request $request): Response
     {
         return $this->respond(function () use ($request): Response {
@@ -49,6 +53,15 @@ final readonly class MobileSessionRequestHandler
                 $this->sessions->revoke($token);
 
                 return new Response(status: 204);
+            }
+
+            if ($request->isMethod('PATCH')) {
+                $body = $this->body($request);
+                if (['persistent'] !== array_keys($body) || true !== $body['persistent']) {
+                    throw new TrainingError('Only persistent: true can upgrade a mobile session.');
+                }
+
+                return new JsonResponse($this->sessions->promote($token));
             }
 
             return new JsonResponse($this->sessions->authenticate($token));

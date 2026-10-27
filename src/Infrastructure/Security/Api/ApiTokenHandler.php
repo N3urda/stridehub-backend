@@ -52,7 +52,7 @@ final readonly class ApiTokenHandler implements AccessTokenHandlerInterface
         $path = $request->getPathInfo();
         $method = $request->getMethod();
         $rules = [
-            '#^/mobile/v1/session$#D' => ['GET', 'DELETE'],
+            '#^/mobile/v1/session$#D' => ['GET', 'PATCH', 'DELETE'],
             '#^/mobile/v1/collection/devices$#D' => ['POST'],
             '#^/api/v1/mobile(?:/[^/]+)+$#D' => ['GET', 'POST', 'PUT', 'DELETE'],
             '#^/api/v1/health/(?:workspace|workouts|collected/(?:weight|zepp))$#D' => ['GET'],
