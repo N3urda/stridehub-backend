@@ -2,7 +2,6 @@
 import importlib.util
 import base64
 import json
-import shlex
 import subprocess
 import tempfile
 import xml.etree.ElementTree as ET
@@ -156,7 +155,7 @@ class PersistentAcceptanceTest(unittest.TestCase):
                     calls.append(args)
                     prefix=('exec-out','run-as',run.package) if package=='debug' else ('exec-out','su','0')
                     self.assertEqual(prefix,args[:3]);self.assertEqual(('sh','-c'),args[3:5])
-                    script=shlex.split(args[-1])[0]
+                    script=args[-1]
                     self.assertIn('[ -f "$task_file" ]',script);self.assertIn('cat "$task_file"',script)
                     if package=='release':script=script.replace('/data/data/'+run.package+'/',str(root)+'/')
                     result=subprocess.run(['sh','-c',script],cwd=root,capture_output=True)

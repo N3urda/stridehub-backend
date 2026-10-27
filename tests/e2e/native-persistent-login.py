@@ -267,7 +267,7 @@ class Acceptance:
                 'if cat "$task_file"; then '+present+'; else '+fail+'; fi; '
                 'elif [ -e "$task_file" ]; then '+fail+'; '
                 'else '+absent+'; fi')
-            raw=self.ui.adb(*prefix,'sh','-c',shlex.quote(script))
+            raw=self.ui.adb(*prefix,'sh','-c',script)
             if raw==footer('ABSENT'):return b''
             require(raw.endswith(footer('PRESENT')),'Owned optional file read did not complete successfully')
             payload=raw[:-len(footer('PRESENT'))]
