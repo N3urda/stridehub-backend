@@ -14,6 +14,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.font.FontWeight
 import org.json.JSONObject
 import org.json.JSONArray
 import java.time.LocalDate
@@ -57,18 +58,27 @@ object ChartData {
 }
 @Composable fun NativeLineChart(title:String,rows:List<JSONObject>,key:String,color:Color,expectedCadenceSeconds:Double?=null) {
     val values=remember(rows.toString(),key){ChartData.values(rows,key)}
-    val known=values.filterNotNull();var selected by remember {mutableIntStateOf(-1)}
-    Card(Modifier.fillMaxWidth()) {Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
-        Text(title,style=MaterialTheme.typography.titleMedium)
+    val known=values.filterNotNull();var selected by remember(rows.toString(),key) {mutableIntStateOf(-1)}
+    Card(Modifier.fillMaxWidth(),colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.surface)) {Column(Modifier.padding(18.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
+        Text(title,style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.SemiBold)
         if(known.isEmpty()) Text("暂无实际测量值",color=MaterialTheme.colorScheme.onSurfaceVariant)
         else {
             val min=known.min();val max=known.max();val low=if(min==max) min-1 else min;val high=if(min==max) max+1 else max
-            Text("${"%.1f".format(min)} – ${"%.1f".format(max)} · ${known.size} 个有效点",style=MaterialTheme.typography.labelMedium)
+            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(24.dp)) {
+                listOf("最低" to min,"最高" to max).forEach {(label,value)->Column(verticalArrangement=Arrangement.spacedBy(3.dp)) {
+                    Text(label,style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("%.1f".format(value),style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.SemiBold)
+                }}
+            }
             val grid=MaterialTheme.colorScheme.outlineVariant
             val xs=rows.mapIndexed {i,row->ChartData.x(row,i)};val xLow=xs.minOrNull() ?: 0.0;val xHigh=xs.maxOrNull()?.takeIf {it>xLow} ?: xLow+1
             Canvas(Modifier.fillMaxWidth().height(155.dp).semantics {contentDescription="$title，最低 ${"%.1f".format(min)}，最高 ${"%.1f".format(max)}，${known.size} 个有效测量点。缺失数据留空。"}.pointerInput(rows,key){detectTapGestures {point->val target=xLow+point.x/size.width*(xHigh-xLow);selected=xs.indices.minByOrNull {abs(xs[it]-target)} ?: -1}}) {
                 (0..3).forEach {i->val y=size.height*i/3;drawLine(grid,Offset(0f,y),Offset(size.width,y),1f)}
                 fun position(index:Int)=Offset(((xs[index]-xLow)/(xHigh-xLow)*size.width).toFloat(),(size.height-(values[index]!!-low)/(high-low)*size.height).toFloat())
+                if(selected in values.indices) {
+                    val selectedX=((xs[selected]-xLow)/(xHigh-xLow)*size.width).toFloat()
+                    drawLine(color.copy(alpha=.25f),Offset(selectedX,0f),Offset(selectedX,size.height),1.dp.toPx())
+                }
                 ChartData.plotSegments(rows,key,expectedCadenceSeconds).forEach {segment->
                     segment.zipWithNext().forEach {(a,b)->drawLine(color,position(a),position(b),3.dp.toPx())}
                     segment.forEach {index->
@@ -79,14 +89,14 @@ object ChartData {
 
             }
             if(selected in rows.indices) Text("${rows[selected].text("date",rows[selected].text("at",rows[selected].text("seconds","样本 ${selected+1}")))} · ${values[selected]?.let {"%.2f".format(it)} ?: "缺失"}",style=MaterialTheme.typography.bodySmall)
-            Text("点按查看测量值 · 缺失值保留空白",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("${known.size} 个有效点 · 点按查看 · 缺失值保留空白",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }}
 }
 data class RoutePoint(val latitude:Double,val longitude:Double)
 @Composable fun NativeRoute(points:List<RoutePoint>) {
     val color=MaterialTheme.colorScheme.primary;val muted=MaterialTheme.colorScheme.outlineVariant
-    Card {Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
+    Card(Modifier.fillMaxWidth(),colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.surface)) {Column(Modifier.padding(18.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
         Text("运动轨迹",style=MaterialTheme.typography.titleMedium)
         if(points.size<2) Text("此记录没有可显示的定位轨迹。") else {
             Text("${points.size} 个定位点 · 北向上",style=MaterialTheme.typography.bodySmall)

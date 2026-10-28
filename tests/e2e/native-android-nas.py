@@ -347,11 +347,42 @@ class NativeUi:
         self.tap(label)
         for _ in range(15):
             if not self.visible('返回'):
-                headings={'总览':'最近的真实记录','身体':'身体与恢复','运动':'每一次运动','计划':'计划与日常'}
+                headings={'总览':'身体近况','身体':'身体与恢复','运动':'每一次运动','计划':'计划与日常'}
                 if label in headings:self.scroll_to_top(headings[label])
                 return
             self.tap('返回')
         raise SafeFailure('Native tab history did not return to its root')
+
+    def open_weighing(self):
+        # The shared bottom destination and the native page title/tab all say 称重.
+        # Select the lowest visible match, where the persistent main navigation lives.
+        for _ in range(5):
+            candidates=[]
+            for node in self.matches(self.tree(),'称重'):
+                bounds=list(map(int,re.findall(r'\d+',node.get('bounds',''))))
+                if node.get('enabled','true')!='false' and len(bounds)==4:
+                    x,y,xx,yy=bounds
+                    if xx>x and yy>y:candidates.append(node)
+            if candidates:
+                target=max(candidates,key=lambda node:int(self.legacy.point(node)[1]))
+                self.adb('shell','input','tap',*self.legacy.point(target))
+                self.wait('本次测量')
+                return
+            time.sleep(.3)
+        raise SafeFailure('Native main weighing destination was not visible')
+
+    def weighing_page(self, label):
+        # Retained weighing subpages are native Buttons; Compose main tabs are Views.
+        for _ in range(5):
+            candidates=[node for node in self.matches(self.tree(),label)
+                        if node.get('class')=='android.widget.Button'
+                        and node.get('text')==label and node.get('enabled','true')!='false']
+            if len(candidates)==1:
+                self.adb('shell','input','tap',*self.legacy.point(candidates[0]))
+                time.sleep(.4)
+                return
+            time.sleep(.3)
+        raise SafeFailure('Native weighing subpage could not be selected unambiguously')
 
     def screenshot(self, name):
         # Screenshots are permitted only after both fixture identity guards passed.
@@ -529,12 +560,12 @@ class NasAcceptance:
             # Resume from any native detail without logging out or changing its account.
             # The destination/account is still checked in settings before business actions.
             self.ui.tab('总览')
-        self.ui.wait('最近的真实记录')
+        self.ui.wait('身体近况')
         self.ensure_ui_identity()
         self.ui.screenshot('login-public-https')
 
     def navigation(self):
-        for label, expected in [('总览','最近的真实记录'), ('身体','身体与恢复'), ('运动','每一次运动'), ('计划','计划与日常')]:
+        for label, expected in [('总览','身体近况'), ('身体','身体与恢复'), ('运动','每一次运动'), ('计划','计划与日常')]:
             self.ui.tab(label)
             self.ui.wait(expected)
             self.ui.screenshot('tab-'+{'总览':'overview','身体':'body','运动':'exercise','计划':'plans'}[label])
@@ -663,7 +694,7 @@ class NasAcceptance:
         # Pairing UI can enqueue history by design. Never press it unless the history AND queue
         # are provably empty; then create just one manual fixture while Android is offline.
         self.ui.last_stage='weighing-empty-history-pair'
-        self.ui.tab('总览');self.ui.tap('开始称重');self.ui.wait('身体记录')
+        self.ui.tab('总览');self.ui.open_weighing()
         require_empty_pairing_history(self.ui.local_state())
         before_collection=self.collection_records()
         before_daily=self.api.request('/api/v1/health/weight')
@@ -685,7 +716,7 @@ class NasAcceptance:
         measurement=None;frozen=None;binding=None
         self.ui.last_stage='weighing-offline-single-manual'
         with android_offline(self.ui):
-            self.ui.tap('称重');self.ui.tap('手工记录',scroll=True)
+            self.ui.weighing_page('称重');self.ui.tap('手工记录',scroll=True)
             self.ui.fill('体重（kg）',str(fixture_weight));self.ui.tap('保存到本机')
             self.ui.wait('已保存',partial=True)
             local=self.ui.local_state();measurement=require_single_manual_measurement(local,fixture_weight)
@@ -755,15 +786,15 @@ class NasAcceptance:
             'manualConflictShown':conflict,'serverManualValuePreserved':conflict,
             'lostReceiptInjectionTested':False,
             'measurementIdentitySha256':hashlib.sha256(measurement['upload_uuid'].encode()).hexdigest()}
-        self.ui.tap('返回 StrideHub');self.ui.wait('最近的真实记录')
+        self.ui.tap('返回');self.ui.wait('身体近况')
 
     def offline(self):
-        self.ui.tab('总览'); self.ui.wait('最近的真实记录')
+        self.ui.tab('总览'); self.ui.wait('身体近况')
         local_before = None; local_after = None
         with android_offline(self.ui):
             self.ui.tap('刷新'); self.ui.wait('离线缓存',timeout=self.args.offline_timeout,partial=True)
             self.ui.screenshot('offline-timestamped-cache')
-            self.ui.tap('开始称重'); self.ui.wait('身体记录')
+            self.ui.open_weighing()
             local_before = self.ui.local_snapshot()
             reused_weighing = bool(self.report.get('weighing'))
             if reused_weighing:
@@ -779,12 +810,12 @@ class NasAcceptance:
                 if len(new) != 1 or abs(new[0][1]-71.3) > .001 or not new[0][2]:
                     raise SafeFailure('Offline native weighing did not create exactly one local record with stable identity')
             self.ui.screenshot('offline-weighing-saved')
-            self.ui.tap('返回 StrideHub'); self.ui.wait('最近的真实记录')
+            self.ui.tap('返回'); self.ui.wait('身体近况')
         self.ui.tap('刷新')
         until = time.monotonic()+self.args.offline_timeout
         while time.monotonic() < until:
             visible = self.ui.texts()
-            if '最近的真实记录' in visible and not any('离线缓存' in text or '缓存预览，正在核对' in text for text in visible):
+            if '身体近况' in visible and not any('离线缓存' in text or '正在更新记录' in text for text in visible):
                 self.ui.screenshot('public-reconnected'); break
             time.sleep(.4)
         else:
@@ -818,8 +849,8 @@ class NasAcceptance:
     def logout(self):
         self.ui.tab('总览'); self.ui.tap('设置与更多')
         self.ui.tap('退出 / 切换服务器或账号',scroll=True); self.ui.wait('连接 StrideHub')
-        self.ui.tap('离线称重与本机历史',scroll=True); self.ui.wait('身体记录')
-        self.ui.screenshot('logged-out-offline-weighing'); self.ui.tap('返回 StrideHub')
+        self.ui.tap('离线称重与本机历史',scroll=True); self.ui.wait('本次测量')
+        self.ui.screenshot('logged-out-offline-weighing'); self.ui.tap('返回')
         self.ui.wait('连接 StrideHub')
 
     def run_step(self, name, action):

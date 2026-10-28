@@ -22,9 +22,13 @@ public final class TrendChart extends View {
     private List<Measurement> daily = new ArrayList<>();
     private Metric metric=Metric.WEIGHT;
     private int averageDays;
+    private int accent=0xff087f82,muted=0xff52656b,grid=0xffdce7e8,fill=0xffe3f3f1,surface=Color.WHITE;
     private Map<String,Double> averages=Collections.emptyMap();
     private final float density;
     public TrendChart(Context context) { super(context); density=getResources().getDisplayMetrics().density; setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_YES); }
+    public void setColors(int accent,int muted,int grid,int fill,int surface) {
+        this.accent=accent;this.muted=muted;this.grid=grid;this.fill=fill;this.surface=surface;invalidate();
+    }
     public void setData(List<Measurement> values, Metric selected) {
         setData(values,selected,values,0,System.currentTimeMillis());
     }
@@ -34,7 +38,7 @@ public final class TrendChart extends View {
         averageDays=selected==Metric.WEIGHT&&(windowDays==7||windowDays==30)?windowDays:0;
         averages=averageDays==0?Collections.emptyMap():WeightInsights.movingAverages(history,averageDays,now);
         int count=0;for(Measurement m:daily)if(valueFor(m,metric)!=null)count++;
-        setContentDescription(metric.title+"趋势图，"+count+" 个有效日期。"+(averageDays==0?"每日实测。":"绿色为 "+averageDays+" 日均线，灰色为每日实测。")+"每天取最后一条测量，缺测日期不补值。");
+        setContentDescription(metric.title+"趋势图，"+count+" 个有效日期。"+(averageDays==0?"每日实测。":"实线为 "+averageDays+" 日均线，虚线为每日实测。")+"每天取最后一条测量，缺测日期不补值。");
         invalidate();
     }
     private Double plottedValue(Measurement measurement) {
@@ -62,7 +66,7 @@ public final class TrendChart extends View {
             if(averageDays>0) { Double actual=valueFor(m,metric);if(actual!=null){minimum=Math.min(minimum,actual);maximum=Math.max(maximum,actual);} }
         }
         if (points.isEmpty()) {
-            paint.setColor(Color.rgb(111,122,115)); paint.setTextSize(dp(14)); paint.setTextAlign(Paint.Align.CENTER);
+            paint.setColor(muted); paint.setTextSize(dp(14)); paint.setTextAlign(Paint.Align.CENTER);
             canvas.drawText("这个时间段还没有"+metric.title+"记录",getWidth()/2f,getHeight()/2f,paint);
             return;
         }
@@ -73,15 +77,16 @@ public final class TrendChart extends View {
         float left=Math.max(dp(43),labelWidth+dp(12)),right=getWidth()-dp(15),top=dp(18),bottom=getHeight()-dp(34);
         for (int n=0;n<4;n++) {
             float y=top+(bottom-top)*n/3f;
-            paint.setColor(Color.rgb(231,235,227)); canvas.drawLine(left,y,right,y,paint);
-            paint.setColor(Color.rgb(119,131,123)); paint.setTextAlign(Paint.Align.RIGHT);
+            paint.setColor(grid); canvas.drawLine(left,y,right,y,paint);
+            paint.setColor(muted); paint.setTextAlign(Paint.Align.RIGHT);
             canvas.drawText(formatValue(maximum-(maximum-minimum)*n/3,metric),left-dp(8),y+dp(4),paint);
         }
         long start=LocalDate.parse(daily.get(0).localDay).toEpochDay();
         long end=LocalDate.parse(daily.get(daily.size()-1).localDay).toEpochDay();
         if(averageDays>0) {
             Path actualLine=new Path();boolean first=true;
-            paint.setColor(Color.rgb(178,187,180));paint.setStrokeWidth(dp(1.3f));paint.setStyle(Paint.Style.STROKE);
+            paint.setColor(muted);paint.setStrokeWidth(dp(1.3f));paint.setStyle(Paint.Style.STROKE);
+            paint.setPathEffect(new android.graphics.DashPathEffect(new float[]{dp(4),dp(4)},0));
             for(Measurement m:daily) {
                 Double value=valueFor(m,metric);if(value==null)continue;
                 long day=LocalDate.parse(m.localDay).toEpochDay();
@@ -90,7 +95,7 @@ public final class TrendChart extends View {
                 if(first){actualLine.moveTo(x,y);first=false;}else actualLine.lineTo(x,y);
                 canvas.drawCircle(x,y,dp(2),paint);
             }
-            canvas.drawPath(actualLine,paint);paint.setStyle(Paint.Style.FILL);
+            canvas.drawPath(actualLine,paint);paint.setPathEffect(null);paint.setStyle(Paint.Style.FILL);
         }
         float[] xs=new float[points.size()],ys=new float[points.size()];
         Path line=new Path();
@@ -104,17 +109,17 @@ public final class TrendChart extends View {
         }
         if(points.size()>1) {
             if(averageDays==0) {
-                Path fill=new Path(line); fill.lineTo(xs[xs.length-1],bottom); fill.lineTo(xs[0],bottom); fill.close();
-                paint.setColor(Color.rgb(233,243,237)); paint.setStyle(Paint.Style.FILL); canvas.drawPath(fill,paint);
+                Path area=new Path(line); area.lineTo(xs[xs.length-1],bottom); area.lineTo(xs[0],bottom); area.close();
+                paint.setColor(fill); paint.setStyle(Paint.Style.FILL); canvas.drawPath(area,paint);
             }
-            paint.setColor(Color.rgb(58,120,91)); paint.setStrokeWidth(dp(2.3f)); paint.setStyle(Paint.Style.STROKE); canvas.drawPath(line,paint);
+            paint.setColor(accent); paint.setStrokeWidth(dp(2.3f)); paint.setStyle(Paint.Style.STROKE); canvas.drawPath(line,paint);
         }
         paint.setStyle(Paint.Style.FILL);
         for(int i=0;i<xs.length;i++) {
-            paint.setColor(Color.WHITE); canvas.drawCircle(xs[i],ys[i],dp(4.4f),paint);
-            paint.setColor(Color.rgb(58,120,91)); canvas.drawCircle(xs[i],ys[i],dp(2.8f),paint);
+            paint.setColor(surface); canvas.drawCircle(xs[i],ys[i],dp(4.4f),paint);
+            paint.setColor(accent); canvas.drawCircle(xs[i],ys[i],dp(2.8f),paint);
         }
-        paint.setTextSize(dp(11)); paint.setColor(Color.rgb(119,131,123)); paint.setTextAlign(Paint.Align.LEFT);
+        paint.setTextSize(dp(11)); paint.setColor(muted); paint.setTextAlign(Paint.Align.LEFT);
         canvas.drawText(daily.get(0).localDay.substring(5).replace('-','/'),left,bottom+dp(24),paint);
         if(end!=start) { paint.setTextAlign(Paint.Align.RIGHT); canvas.drawText(daily.get(daily.size()-1).localDay.substring(5).replace('-','/'),right,bottom+dp(24),paint); }
     }

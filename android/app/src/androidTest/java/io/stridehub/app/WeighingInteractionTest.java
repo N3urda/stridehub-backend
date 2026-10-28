@@ -109,6 +109,8 @@ public final class WeighingInteractionTest extends ActivityInstrumentationTestCa
             invoke(activity,"render");
             assertEquals("—",((TextView)read(activity,"liveValue")).getText().toString());
             assertTrue(((TextView)read(activity,"liveCaption")).getText().toString().contains("等待读数"));
+            assertEquals("Saved history must not expose an empty current-reading panel",View.GONE,((View)read(activity,"liveReading")).getVisibility());
+            assertEquals("No current reading offers preparation guidance",View.VISIBLE,((View)read(activity,"preparation")).getVisibility());
         });
     }
 
@@ -117,6 +119,8 @@ public final class WeighingInteractionTest extends ActivityInstrumentationTestCa
         runTestOnUiThread(()->{
             activity.onStateChanged(ScaleClient.State.MEASURING,"正在称重");
             activity.onLiveWeight(69.3);
+            assertEquals("A new live reading is visible immediately",View.VISIBLE,((View)read(activity,"liveReading")).getVisibility());
+            assertEquals("Preparation guidance is replaced by the live reading",View.GONE,((View)read(activity,"preparation")).getVisibility());
             write(activity,"page",1);invoke(activity,"render");
             write(activity,"page",0);invoke(activity,"render");
             assertEquals("69.3",((TextView)read(activity,"liveValue")).getText().toString());

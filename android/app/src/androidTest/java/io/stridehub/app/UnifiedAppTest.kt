@@ -3,13 +3,10 @@ package io.stridehub.app
 import android.app.Instrumentation
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ActivityScenario
-import androidx.test.espresso.Espresso.onView
-import androidx.test.espresso.action.ViewActions.click
-import androidx.test.espresso.matcher.ViewMatchers.withText
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.stridehub.app.scale.WeighingActivity
@@ -40,21 +37,23 @@ class UnifiedAppTest {
                 scenario.onActivity { main ->
                     assertFalse("Main app must contain only native UI", NativeUiTestSupport.containsWebSurface(main.window.decorView))
                 }
-                compose.onNodeWithText("离线称重与本机历史")
-                    .performScrollTo()
+                val offlineEntry = compose.onNodeWithText("离线称重与本机历史")
                     .assertIsDisplayed()
-                    .performClick()
+                assertTrue("Offline weighing is visible before the connection form",
+                    offlineEntry.fetchSemanticsNode().boundsInRoot.bottom <
+                        compose.onNodeWithText("服务器地址").fetchSemanticsNode().boundsInRoot.top)
+                offlineEntry.performClick()
                 weighing = monitor.waitForActivityWithTimeout(5000) as? WeighingActivity
                 assertNotNull("Offline weighing must open without NAS login", weighing)
                 instrumentation.runOnMainSync {
                     assertFalse("Weighing must contain only native UI", NativeUiTestSupport.containsWebSurface(weighing!!.window.decorView))
                 }
-                onView(withText("返回 StrideHub")).perform(click())
+                compose.onNodeWithContentDescription("返回").assertIsDisplayed().performClick()
                 compose.waitForIdle()
                 instrumentation.waitForIdleSync()
                 assertTrue("Weighing returns to the same native connection screen", weighing!!.isFinishing)
                 compose.onNodeWithText("连接 StrideHub").assertIsDisplayed()
-                compose.onNodeWithText("离线称重与本机历史").performScrollTo().assertIsDisplayed()
+                compose.onNodeWithText("离线称重与本机历史").assertIsDisplayed()
                 scenario.onActivity { main ->
                     assertFalse(NativeUiTestSupport.containsWebSurface(main.window.decorView))
                     assertFalse(NativeSession.signedIn(main))

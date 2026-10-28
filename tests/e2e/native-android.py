@@ -132,17 +132,17 @@ def login(credentials):
         check=next(n for n in ui().iter('node') if n.get('class')=='android.widget.CheckBox')
         if check.get('checked')!='true':adb('shell','input','tap',*point(check))
         tap('连接并登录',scroll=True)
-    wait('总览');tab('总览');wait('最近的真实记录')
+    wait('总览');tab('总览');wait('身体近况')
     # A dedicated emulator can still have been connected to another server.
     # Verify the live repository's identity before any UI write or logout.
     tap('设置与更多');wait('连接与账号')
     visible=texts()
     assert 'http://10.0.2.2:8086' in visible, 'Refusing UI actions against a non-fixture server'
     assert credentials['username'] in visible, 'Refusing UI actions for a non-fixture account'
-    tap('返回');wait('最近的真实记录');shot('native-overview')
+    tap('返回');wait('身体近况');shot('native-overview')
 
 def navigation():
-    for label,expect in [('身体','身体与恢复'),('运动','每一次运动'),('计划','计划与日常'),('总览','最近的真实记录')]:
+    for label,expect in [('身体','身体与恢复'),('运动','每一次运动'),('计划','计划与日常'),('总览','身体近况')]:
         tab(label);wait(expect);shot('native-'+{'身体':'body','运动':'exercise','计划':'plans','总览':'overview'}[label])
 
 def meal(token):
@@ -160,7 +160,7 @@ def meal(token):
     assert all(row['id']!=record['id'] for row in api('/api/v1/health/meals',token=token)['records'])
 
 def offline():
-    tab('总览');wait('最近的真实记录')
+    tab('总览');wait('身体近况')
     subprocess.run(['docker','pause',CONTAINER],check=True,stdout=subprocess.DEVNULL)
     try:
         tap('刷新');wait('离线缓存',timeout=55,partial=True);shot('native-offline')
@@ -169,7 +169,7 @@ def offline():
     deadline=time.monotonic()+55
     while time.monotonic()<deadline:
         visible=texts()
-        if '最近的真实记录' in visible and not any('离线缓存' in text or '缓存预览，正在核对' in text for text in visible):
+        if '身体近况' in visible and not any('离线缓存' in text or '正在更新记录' in text for text in visible):
             shot('native-reconnected');return
         time.sleep(.3)
     raise AssertionError('Reconnect did not replace the offline/pending snapshot with a confirmed response')
@@ -216,8 +216,8 @@ def sync(token):
 
 def logout():
     tab('总览');tap('设置与更多');tap('退出 / 切换服务器或账号',scroll=True);wait('连接 StrideHub')
-    tap('离线称重与本机历史',scroll=True);wait('身体记录');shot('native-offline-weighing')
-    tap('返回 StrideHub');wait('连接 StrideHub')
+    tap('离线称重与本机历史',scroll=True);wait('本次测量');shot('native-offline-weighing')
+    tap('返回');wait('连接 StrideHub')
 
 def main():
     parser=argparse.ArgumentParser()
