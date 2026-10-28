@@ -47,7 +47,7 @@ class IndexPageTest extends ContainerTestCase
 
     public function testGetCacheKey(): void
     {
-        $this->assertEquals('index', $this->indexPage->getCacheability()->getCacheKey());
+        $this->assertEquals('index.stridehub-shell-v1', $this->indexPage->getCacheability()->getCacheKey());
     }
 
     #[\Override]

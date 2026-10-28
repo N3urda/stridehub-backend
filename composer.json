@@ -39,6 +39,7 @@
         "halaxa/json-machine": "^1.2",
         "league/flysystem-bundle": "^3.3",
         "league/flysystem-memory": "^3.29",
+        "mcp/sdk": "^0.9.0",
         "moneyphp/money": "^4.8",
         "nesbot/carbon": "^3.11",
         "neuron-core/neuron-ai": "^3.0",

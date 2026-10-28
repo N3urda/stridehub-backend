@@ -46,6 +46,18 @@ class ImportStatusRequestHandlerTest extends AdminWebTestCase
 
         $this->assertResponseIsSuccessful();
         $this->assertSame('Import pending', $crawler->filter('#import-pending-badge')->text());
+        $this->assertSame('/admin/importStatus', $crawler->filter('meta[name="import-status-url"]')->attr('content'));
+        $this->assertCount(1, $crawler->filter('.hub-admin-links a[href="/admin/file-imports"]'));
+    }
+
+    public function testItHidesTheBadgeWhenNothingIsPending(): void
+    {
+        $this->client->loginUser($this->adminUser());
+
+        $crawler = $this->client->request('GET', '/admin/upload');
+
+        $this->assertResponseIsSuccessful();
+        $this->assertCount(0, $crawler->filter('#import-pending-badge'));
     }
 
     #[\Override]

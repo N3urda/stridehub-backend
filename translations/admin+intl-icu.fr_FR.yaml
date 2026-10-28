@@ -42,7 +42,6 @@ Activity: Activity
 'Add widget': 'Ajouter un widget'
 'Add {fit}, {tcx} or {gpx} files. They are processed every few minutes.': 'Ajoutez des fichiers {fit}, {tcx} ou {gpx}. Ils sont traités toutes les minutes.'
 Admin: Admin
-'Admin panel': 'Panneau admin'
 'Admin username': "Nom d'utilisateur de l'admin"
 'Advanced (per-date & per-sport-type overrides)': 'Advanced (per-date & per-sport-type overrides)'
 'Age-based estimate': "Estimation basée sur l'âge"
@@ -66,7 +65,6 @@ Apply: Appliquer
 'Are you sure you want to delete {task} on {component} for {gear}, performed on {date}?': 'Are you sure you want to delete {task} on {component} for {gear}, performed on {date}?'
 'Are you sure you want to remove the {widget} widget?': 'Are you sure you want to remove the {widget} widget?'
 'Assign gear': 'Associer un matériel'
-'Athlete settings': 'Athlete settings'
 'Attached to': 'Attached to'
 'Automatically fill in gear, commute, sport type and more on newly imported activities. Rules run top to bottom, and can also be applied to activities you already imported.': 'Automatically fill in gear, commute, sport type and more on newly imported activities. Rules run top to bottom, and can also be applied to activities you already imported.'
 'Automation rules': 'Automation rules'
@@ -75,10 +73,8 @@ Apply: Appliquer
 'Average cadence': 'Cadence moyenne'
 'Average heart rate (bpm)': 'Average heart rate (bpm)'
 'Average power': 'Puissance moyenne'
-'Back to app': "Retour à l'application"
 'Back to the admin panel': 'Retour au panneau admin'
 'Base URI': 'Base URI'
-'Before you can use the app, we need to know a few things about you. These are used to calculate your heart rate zones and training load. You can fine-tune all other settings later on.': 'Before you can use the app, we need to know a few things about you. These are used to calculate your heart rate zones and training load. You can fine-tune all other settings later on.'
 Birthday: Anniversaire
 'Calculate energy (kJ)': "Calculer l'energie (kJ)"
 Cancel: Annuler
@@ -148,8 +144,6 @@ Endpoint: 'Point de passage'
 'Ends near': 'Ends near'
 'Energy in kJ will be calculated from average power × moving time, for activities that do not already provide it.': 'Energy in kJ will be calculated from average power × moving time, for activities that do not already provide it.'
 'Enter an existing activity to preview which rules would apply and what they would change. Nothing is saved.': 'Enter an existing activity to preview which rules would apply and what they would change. Nothing is saved.'
-'Enter your password': 'Enter your password'
-'Enter your username': 'Enter your username'
 Every: Chaque
 FTP: FTP
 'FTP history (cycling)': 'FTP history (cycling)'
@@ -283,7 +277,6 @@ Operator: Operateur
 'PHP date format for short dates, e.g. d-m-y renders to 01-01-25.': 'PHP date format for short dates, e.g. d-m-y renders to 01-01-25.'
 'Parts you track maintenance for, eg: chains, cassettes, brake pads...': 'Parts you track maintenance for, eg: chains, cassettes, brake pads...'
 'Passes near': 'Passes near'
-Password: 'Mot de passe'
 'Paste the value above, replacing any key that is already there.': 'Paste the value above, replacing any key that is already there.'
 'Performed on': 'Performed on'
 'Photos attached to your Strava activities will not be downloaded or stored on disk. Photos that were downloaded before are kept.': 'Photos attached to your Strava activities will not be downloaded or stored on disk. Photos that were downloaded before are kept.'
@@ -302,7 +295,6 @@ Radius: Rayon
 'Recording devices will appear here once activities have been imported.': 'Recording devices will appear here once activities have been imported.'
 'Recreate your containers': 'Recreate your containers'
 'Register maintenance': 'Register maintenance'
-'Remember me for 7 days': 'Remember me for 7 days'
 Remove: Supprimer
 'Remove Eddington': 'Remove Eddington'
 'Remove action': 'Remove action'
@@ -372,13 +364,9 @@ Settings: Paramètres
 'Show in dashboard widget': 'Show in dashboard widget'
 'Show last X years by default': 'Show last X years by default'
 'Show options': 'Voir les options'
-'Show password': 'Voir le mot de passe'
 'Show the workout assistant in the UI.': 'Show the workout assistant in the UI.'
 'Showing {first} - {last} of {total}': 'Showing {first} - {last} of {total}'
-'Sign in': Connexion
-'Sign in to the admin panel': "Connexion au panneau d'administration"
 'Sign out': Déconnexion
-'Signing in...': 'Connexion en cours...'
 'Skip activities recorded before': 'Skip activities recorded before'
 Skipped: Skipped
 'Skipped (an earlier rule stopped processing).': 'Skipped (an earlier rule stopped processing).'
@@ -481,7 +469,6 @@ Unit: Unité
 Uploaded: Téléversé
 Uploading...: 'Téléversement en cours'
 'Used to calculate the training load of this activity': 'Used to calculate the training load of this activity'
-Username: "Nom d'utilisateur"
 'Verify token': 'Vérifier le jeton'
 Version: Version
 Warning: Avertissement

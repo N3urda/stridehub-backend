@@ -101,11 +101,11 @@ class ManageGearOverviewRequestHandlerTest extends AdminWebTestCase
         $this->assertResponseIsSuccessful();
         $this->assertEquals(
             '/gear',
-            $crawler->filter('nav a:has(span:contains("Return to app"))')->attr('href'),
+            $crawler->filter('nav a[data-return-to-records]')->attr('href'),
         );
     }
 
-    public function testReturnToAppFallsBackToTheAppRootWithoutARedirect(): void
+    public function testReturnToAppFallsBackToTheWorkspaceWithoutARedirect(): void
     {
         $this->client->loginUser($this->adminUser());
 
@@ -113,8 +113,8 @@ class ManageGearOverviewRequestHandlerTest extends AdminWebTestCase
 
         $this->assertResponseIsSuccessful();
         $this->assertEquals(
-            '/',
-            $crawler->filter('nav a:has(span:contains("Return to app"))')->attr('href'),
+            '/admin/insights',
+            $crawler->filter('nav a[data-return-to-records]')->attr('href'),
         );
     }
 }

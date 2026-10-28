@@ -52,4 +52,8 @@ phpstan.neon
 *.keystore
 __pycache__/
 ###< Android client ###
+/public/downloads/
 ###< docs ###
+
+# Local agent coordination reports; product design lives in docs.
+/.superpowers/

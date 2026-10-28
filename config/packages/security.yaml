@@ -16,6 +16,20 @@ security:
             pattern: ^/(_(profiler|wdt)|css|images|js)/
             security: false
 
+        device_collection:
+            pattern: ^/device/v1(/|$)
+            security: false
+
+        mobile:
+            pattern: ^/mobile/v1(/|$)
+            stateless: true
+            provider: api_provider
+            entry_point: App\Infrastructure\Security\Api\ApiAuthenticationEntryPoint
+            access_token:
+                realm: 'StrideHub Mobile'
+                token_handler: App\Infrastructure\Security\Api\ApiTokenHandler
+                failure_handler: App\Infrastructure\Security\Api\ApiAuthenticationEntryPoint
+
         api:
             pattern: ^/api/v1(/|$)
             stateless: true
@@ -26,13 +40,23 @@ security:
                 token_handler: App\Infrastructure\Security\Api\ApiTokenHandler
                 failure_handler: App\Infrastructure\Security\Api\ApiAuthenticationEntryPoint
 
+        mcp:
+            pattern: ^/mcp$
+            stateless: true
+            provider: api_provider
+            entry_point: App\Infrastructure\Security\Api\ApiAuthenticationEntryPoint
+            access_token:
+                realm: 'StrideHub MCP'
+                token_handler: App\Infrastructure\Mcp\McpTokenHandler
+                failure_handler: App\Infrastructure\Security\Api\ApiAuthenticationEntryPoint
+
         main:
             lazy: true
             provider: admin_provider
             form_login:
                 login_path: admin_login
                 check_path: admin_login
-                default_target_path: admin_file_upload
+                default_target_path: admin_insights
                 enable_csrf: true
             remember_me:
                 secret: '%kernel.secret%'
@@ -46,6 +70,9 @@ security:
     # Note: Only the *first* matching rule is applied.
     # The ^/admin/login PUBLIC_ACCESS rule must precede ^/admin to avoid a redirect loop.
     access_control:
+        - { path: '^/mobile/v1/sessions$', roles: PUBLIC_ACCESS, methods: [POST] }
+        - { path: '^/mobile/v1(/|$)', roles: ROLE_API }
+        - { path: '^/mcp$', roles: ROLE_API }
         - { path: '^/api/v1(/|$)', roles: ROLE_API }
         - { path: ^/admin/login, roles: PUBLIC_ACCESS }
         - { path: ^/admin, roles: ROLE_ADMIN }

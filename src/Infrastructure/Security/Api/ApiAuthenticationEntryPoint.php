@@ -31,7 +31,7 @@ final readonly class ApiAuthenticationEntryPoint implements AuthenticationEntryP
             statusCode: Response::HTTP_UNAUTHORIZED,
             error: 'invalid_token',
             message: 'A valid API token is required. Send it in the Authorization header as a Bearer token.',
-            headers: ['WWW-Authenticate' => sprintf('Bearer realm="%s"', self::REALM)],
+            headers: ['WWW-Authenticate' => sprintf('Bearer realm="%s"', self::REALM), 'Cache-Control' => 'no-store, private'],
         );
     }
 }

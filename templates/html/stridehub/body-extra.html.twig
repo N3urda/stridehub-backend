@@ -1,0 +1,28 @@
+<section id="body-weight" class="health-panel hub-records" aria-labelledby="weight-title" data-health-base="{{ relativeUrl('/admin/health/api') }}">
+    <div class="section-title"><div><h2 id="weight-title">体重变化</h2><p class="subtle small">展示全部日记录，不受上方日期范围影响。每一天保留一个趋势值。</p></div><a class="hub-button" href="{{ relativeUrl('/admin/weight') }}">趋势与目标</a></div>
+    <div class="weight-layout"><div><div id="weight-metrics" class="compact-metrics"></div><div id="weight-chart" class="mini-chart" aria-label="体重历史趋势"></div><div id="weight-history" class="weight-history"></div><p class="subtle small">手机称重后，可在下方“逐次称重”核对是否收到。已有手动日记录会保留。</p></div>
+        <form id="weight-form" class="weight-form" aria-describedby="weight-form-help weight-status">
+            <div class="weight-form-heading"><strong>手动记录体重</strong><span id="weight-save-state" class="save-state">手动补记</span></div>
+            <p id="weight-form-help" class="weight-form-help">填写日期和体重即可保存；同一天已有记录时，会先请你核对。</p>
+            <label>记录日期<input name="date" type="date" required></label><label>体重（kg）<input name="weightKg" type="number" min="1" max="500" step="0.01" inputmode="decimal" placeholder="填入测量值" required></label><label class="weight-form-wide">备注（可选）<input name="notes" maxlength="500" placeholder="例如：晨起空腹"></label><button class="hub-button primary" type="submit" disabled>保存体重</button><p id="weight-status" class="weight-notice" role="status" aria-live="polite">正在读取记录，输入内容会保留。</p><button id="weight-review" class="hub-button" type="button" hidden>读取最新记录并核对</button>
+        </form>
+    </div>
+</section>
+<section id="zepp-daily" class="health-panel hub-records" aria-labelledby="zepp-daily-title"><div class="section-title"><div><h2 id="zepp-daily-title">手表记录的每一天</h2><p class="subtle small">心率、活动与身体指标，保留来源与数据缺口。</p></div><button id="body-zepp-sync" type="button" disabled class="hub-button">同步详细数据</button></div><p id="body-zepp-status" class="weight-notice" role="status" aria-live="polite">正在读取…</p><div id="body-daily-records"></div><button type="button" id="daily-more" class="hub-button" hidden>显示更多记录</button></section>
+<section id="collection-history" class="health-panel" aria-labelledby="collection-title">
+    <div class="section-title"><div><h2 id="collection-title">逐次称重 · 确认已收到</h2><p class="subtle small">按上方日期查看手机上传的每次测量。此处出现的记录，服务器已收到。</p></div><button id="collection-reload" class="hub-button" type="button">刷新称重记录</button></div>
+    <p id="collection-status" class="collection-status" role="status" aria-live="polite">正在读取称重记录…</p><div id="collection-records"></div><button id="collection-more" class="hub-button" type="button" hidden>更多采集记录</button>
+    <details class="health-help"><summary>手机已保存，但这里还没看到？</summary><ol class="collection-steps"><li>在手机采集记录中确认该条显示“NAS 已确认”，仅“已保存到本机”还没有完成上传。</li><li>确认手机连接的是同一个服务器和账号，再完成同步。</li><li>检查上方日期范围是否包含测量日期，然后刷新称重记录。</li></ol><p>同一天可以保留多次测量；日趋势使用最后一次有效采集，已有手动日记录不会被覆盖。</p></details>
+</section>
+<section id="zepp-sources" class="health-panel" aria-labelledby="source-title">
+    <h2 id="source-title">手表来源档案</h2><p class="subtle small">需要核对指标来源或缺失原因时，展开查看原始来源摘要。</p>
+    <details class="health-history collection-archive"><summary>查看来源与采集说明</summary><label class="collection-filter">查看来源<select id="collection-source"><option value="">全部来源</option></select></label><p class="subtle small">按上方日期范围回看。无日期快照单独标明；事件日期按 UTC 标记。</p>
+        <p id="source-status" class="collection-status" role="status" aria-live="polite"></p><div id="source-records"></div><button id="source-more" class="hub-button" type="button" hidden>更多来源摘要</button><button id="source-reload" class="hub-button" type="button">刷新来源档案</button>
+    </details>
+</section>
+<section id="collection-devices" class="health-panel" aria-labelledby="devices-title">
+    <h2 id="devices-title">手机采集与设置</h2><p>在 Android 客户端的连接设置中填写本服务器地址，登录并配对后即可上传称重记录。</p>
+    <p id="devices-status" class="collection-status" role="status" aria-live="polite"></p><div id="device-records"></div><button id="devices-reload" class="hub-button" type="button">刷新设备</button>
+    <details class="health-help"><summary>配对与撤销授权说明</summary><p>重新配对同一服务器和账号会更新设备凭据。撤销后，手机需要重新配对才能上传；已保存记录保留。设备显示“已授权”仅表示允许上传，是否收到某次测量请查看上方逐次称重。</p></details>
+    <nav class="health-jump" aria-label="个人设置"><a href="{{ relativeUrl('/admin/training') }}#profile">个人资料与时区</a><a href="{{ relativeUrl('/admin/settings/general') }}">单位与服务器设置</a><a href="{{ relativeUrl('/admin/weight') }}">体重目标与计划</a><a href="{{ relativeUrl('/admin/running') }}">运动 CSV 导出</a><a href="{{ relativeUrl('/admin/settings/athlete') }}">个人资料</a></nav><p class="subtle small">手机历史记录可在客户端导出 CSV；服务器备份由 NAS 管理，本页不提供备份操作。服务器设置不会改写手机历史记录中冻结的计算资料。估算值需结合采集时的资料和算法版本查看。</p>
+</section>

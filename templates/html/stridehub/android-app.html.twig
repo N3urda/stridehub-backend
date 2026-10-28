@@ -1,0 +1,59 @@
+{% extends 'html/stridehub/shell.html.twig' %}
+{% import 'html/stridehub/icons.html.twig' as icons %}
+{% set activeNav = 'android-app' %}
+{% set pageKicker = 'STRIDEHUB FOR ANDROID' %}
+{% set showPageHeading = false %}
+{% block title %}安卓 App · StrideHub{% endblock %}
+{% block stylesheets %}<link rel="stylesheet" href="{{ relativeUrl(asset('css/stridehub-android-app.css'))|e('html_attr') }}">{% endblock %}
+{% block head_scripts %}<script defer src="{{ relativeUrl(asset('js/stridehub-android-app.js'))|e('html_attr') }}"></script>{% endblock %}
+{% block page_content %}
+<div class="android-page" id="android-app-page">
+    <section class="android-download-card" aria-labelledby="android-app-title">
+        <div class="android-introduction">
+            <div class="android-app-mark">{{ icons.mark() }}</div>
+            <p class="android-eyebrow">手机上的 StrideHub</p>
+            <h1 id="android-app-title">随手记录，<br>回到这里看变化。</h1>
+            <p class="android-intro-copy">用安卓手机查看身体与训练记录，也能连接体脂秤、离线称重。登录并配对后，再把本机记录同步到你的 NAS。</p>
+            <div class="android-capabilities" aria-label="安卓 App 功能"><span>身体与训练看板</span><span>蓝牙称重</span><span>离线记录</span></div>
+        </div>
+        <div class="android-release">
+            {% if androidRelease %}
+                <p class="android-release-state">可下载的版本</p>
+                <h2>StrideHub <span>v{{ androidRelease.version }}</span></h2>
+                <dl class="android-release-facts">
+                    <div><dt>系统要求</dt><dd>Android {{ androidRelease.minAndroid }} 及以上</dd></div>
+                    <div><dt>安装包大小</dt><dd>{{ (androidRelease.sizeBytes / 1048576)|number_format(1) }} MB</dd></div>
+                </dl>
+                <a id="android-download" class="android-button android-button-primary" href="{{ relativeUrl(androidRelease.downloadPath)|e('html_attr') }}" download="{{ androidRelease.filename|e('html_attr') }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m-4-4 4 4 4-4M4 16v4h16v-4"/></svg>下载安卓安装包</a>
+                <p class="android-download-note">在安卓手机浏览器中打开本页，即可下载并安装。</p>
+            {% else %}
+                <p class="android-release-state android-release-unavailable">尚未发布</p>
+                <h2>安装包还没有准备好</h2>
+                <p>此服务器暂未提供可下载的安卓版本。发布后，这里会显示版本信息和下载按钮。</p>
+                <a class="android-button" href="{{ relativeUrl('/admin/insights')|e('html_attr') }}">先使用网页版</a>
+            {% endif %}
+        </div>
+    </section>
+
+    <section class="android-upgrade-note" aria-labelledby="android-upgrade-title">
+        <span class="android-upgrade-icon">{{ icons.icon('check') }}</span>
+        <div><h2 id="android-upgrade-title">已经安装过？直接覆盖升级。</h2><p>使用相同签名的安装包覆盖升级，可以保留本机记录。<strong>请不要先卸载 App。</strong>如系统提示签名冲突，先在 App 的“同步与设置”中导出 CSV，再核对安装包来源。</p></div>
+    </section>
+
+    <section class="android-setup-card" aria-labelledby="android-setup-title">
+        <div class="android-section-heading"><h2 id="android-setup-title">第一次使用，从连接开始</h2><p>手机需要能够访问这台服务器。局域网地址通常需要连接同一家庭网络。</p></div>
+        <ol class="android-setup-steps">
+            <li><span class="android-step-number" aria-hidden="true">1</span><div><h3>下载并安装</h3><p>{% if androidRelease %}在手机上下载上方安装包，打开下载的 APK，按 Android 系统提示完成安装。{% else %}安装包发布后，在手机浏览器打开本页下载，再按 Android 系统提示完成安装。{% endif %}</p></div></li>
+            <li><span class="android-step-number" aria-hidden="true">2</span><div><h3>填写服务地址，登录你的账号</h3><p>打开 StrideHub，将下方地址填入“服务地址”，使用本网页的用户名和密码，点击“连接并登录”。</p>
+                <div class="android-server-box"><label for="android-server-address">当前服务器地址</label><div class="android-server-controls"><input id="android-server-address" type="text" value="{{ serverAddress|e('html_attr') }}" readonly spellcheck="false" dir="ltr" aria-describedby="android-copy-status"><button class="android-button" id="android-copy-address" type="button" hidden>复制地址</button></div><p id="android-copy-status" class="android-copy-status" role="status" aria-live="polite">也可以长按地址，选择复制。</p></div>
+                {% if serverAddress starts with 'http://' %}<p class="android-connection-note">当前地址使用 HTTP。在可信局域网内连接时，勾选 App 中的“允许 HTTP（仅可信局域网）”；外网连接请使用 HTTPS 地址。</p>{% endif %}
+            </div></li>
+            <li><span class="android-step-number" aria-hidden="true">3</span><div><h3>称重后，确认记录已同步</h3><p>打开“称重”，先填写个人资料并添加体脂秤。首次上传前，进入“同步与设置”，选择“配对 NAS 并上传本机历史”，核对服务器与账号后确认。</p><p>记录显示“NAS 已确认”才表示上传完成；“已保存到本机”的记录仍可离线查看。</p><a class="android-text-link" href="{{ relativeUrl('/admin/health#collection-history')|e('html_attr') }}">到网页核对逐次称重 {{ icons.icon('arrow') }}</a></div></li>
+        </ol>
+    </section>
+
+    {% if androidRelease %}
+        <details class="android-file-details"><summary>安装包与完整性校验信息</summary><dl><div><dt>文件名</dt><dd>{{ androidRelease.filename }}</dd></div><div><dt>版本编号</dt><dd>{{ androidRelease.versionCode }}</dd></div><div><dt>SHA-256</dt><dd><code>{{ androidRelease.sha256 }}</code></dd></div></dl><p>如需核对下载是否完整，可将下载文件的 SHA-256 与此处对比。</p></details>
+    {% endif %}
+</div>
+{% endblock %}

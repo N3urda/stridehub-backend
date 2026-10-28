@@ -42,7 +42,6 @@ Activity: Activity
 'Add widget': 'Add widget'
 'Add {fit}, {tcx} or {gpx} files. They are processed every few minutes.': 'Add {fit}, {tcx} or {gpx} files. They are processed every few minutes.'
 Admin: Admin
-'Admin panel': 'Admin panel'
 'Admin username': 'Admin username'
 'Advanced (per-date & per-sport-type overrides)': 'Advanced (per-date & per-sport-type overrides)'
 'Age-based estimate': 'Age-based estimate'
@@ -66,7 +65,6 @@ Apply: 应用
 'Are you sure you want to delete {task} on {component} for {gear}, performed on {date}?': 'Are you sure you want to delete {task} on {component} for {gear}, performed on {date}?'
 'Are you sure you want to remove the {widget} widget?': 'Are you sure you want to remove the {widget} widget?'
 'Assign gear': 'Assign gear'
-'Athlete settings': 'Athlete settings'
 'Attached to': 'Attached to'
 'Automatically fill in gear, commute, sport type and more on newly imported activities. Rules run top to bottom, and can also be applied to activities you already imported.': 'Automatically fill in gear, commute, sport type and more on newly imported activities. Rules run top to bottom, and can also be applied to activities you already imported.'
 'Automation rules': 'Automation rules'
@@ -75,10 +73,8 @@ Apply: 应用
 'Average cadence': 'Average cadence'
 'Average heart rate (bpm)': 'Average heart rate (bpm)'
 'Average power': 'Average power'
-'Back to app': 'Back to app'
 'Back to the admin panel': 'Back to the admin panel'
 'Base URI': 'Base URI'
-'Before you can use the app, we need to know a few things about you. These are used to calculate your heart rate zones and training load. You can fine-tune all other settings later on.': 'Before you can use the app, we need to know a few things about you. These are used to calculate your heart rate zones and training load. You can fine-tune all other settings later on.'
 Birthday: Birthday
 'Calculate energy (kJ)': 'Calculate energy (kJ)'
 Cancel: Cancel
@@ -148,8 +144,6 @@ Endpoint: Endpoint
 'Ends near': 'Ends near'
 'Energy in kJ will be calculated from average power × moving time, for activities that do not already provide it.': 'Energy in kJ will be calculated from average power × moving time, for activities that do not already provide it.'
 'Enter an existing activity to preview which rules would apply and what they would change. Nothing is saved.': 'Enter an existing activity to preview which rules would apply and what they would change. Nothing is saved.'
-'Enter your password': 'Enter your password'
-'Enter your username': 'Enter your username'
 Every: Every
 FTP: FTP
 'FTP history (cycling)': 'FTP history (cycling)'
@@ -283,7 +277,6 @@ Operator: Operator
 'PHP date format for short dates, e.g. d-m-y renders to 01-01-25.': 'PHP date format for short dates, e.g. d-m-y renders to 01-01-25.'
 'Parts you track maintenance for, eg: chains, cassettes, brake pads...': 'Parts you track maintenance for, eg: chains, cassettes, brake pads...'
 'Passes near': 'Passes near'
-Password: Password
 'Paste the value above, replacing any key that is already there.': 'Paste the value above, replacing any key that is already there.'
 'Performed on': 'Performed on'
 'Photos attached to your Strava activities will not be downloaded or stored on disk. Photos that were downloaded before are kept.': 'Photos attached to your Strava activities will not be downloaded or stored on disk. Photos that were downloaded before are kept.'
@@ -302,7 +295,6 @@ Radius: Radius
 'Recording devices will appear here once activities have been imported.': 'Recording devices will appear here once activities have been imported.'
 'Recreate your containers': 'Recreate your containers'
 'Register maintenance': 'Register maintenance'
-'Remember me for 7 days': 'Remember me for 7 days'
 Remove: Remove
 'Remove Eddington': 'Remove Eddington'
 'Remove action': 'Remove action'
@@ -331,7 +323,7 @@ Ride: Ride
 'Rolling window (days)': 'Rolling window (days)'
 Rules: Rules
 'Rules to apply': 'Rules to apply'
-'Running reminders': '跑步提醒'
+'Running reminders': 跑步提醒
 Saturday: Saturday
 Save: Save
 'Save settings': 'Save settings'
@@ -356,7 +348,7 @@ Security: Security
 'Sends a notification after every successful import.': 'Sends a notification after every successful import.'
 'Sends a notification when a new app version is available. Requires a configured notification service.': 'Sends a notification when a new app version is available. Requires a configured notification service.'
 'Sends a notification when gear maintenance is due. Requires a configured notification service.': 'Sends a notification when gear maintenance is due. Requires a configured notification service.'
-'Sends evening, pre-run, weather-change and feedback reminders when enabled in your running profile. Requires a configured notification service.': '在跑步档案中启用后，发送前晚、跑前、天气变化和跑后反馈提醒。需要配置通知服务。'
+'Sends evening, pre-run, weather-change and feedback reminders when enabled in your running profile. Requires a configured notification service.': 在跑步档案中启用后，发送前晚、跑前、天气变化和跑后反馈提醒。需要配置通知服务。
 Sensors: Sensors
 'Sensors are only recorded for activities imported from FIT files. Activities from Strava, GPX or TCX never match this condition.': 'Sensors are only recorded for activities imported from FIT files. Activities from Strava, GPX or TCX never match this condition.'
 'Set description': 'Set description'
@@ -372,13 +364,9 @@ Settings: Settings
 'Show in dashboard widget': 'Show in dashboard widget'
 'Show last X years by default': 'Show last X years by default'
 'Show options': 'Show options'
-'Show password': 'Show password'
 'Show the workout assistant in the UI.': 'Show the workout assistant in the UI.'
 'Showing {first} - {last} of {total}': 'Showing {first} - {last} of {total}'
-'Sign in': 'Sign in'
-'Sign in to the admin panel': 'Sign in to the admin panel'
 'Sign out': 'Sign out'
-'Signing in...': 'Signing in...'
 'Skip activities recorded before': 'Skip activities recorded before'
 Skipped: Skipped
 'Skipped (an earlier rule stopped processing).': 'Skipped (an earlier rule stopped processing).'
@@ -481,7 +469,6 @@ Unit: Unit
 Uploaded: Uploaded
 Uploading...: Uploading...
 'Used to calculate the training load of this activity': 'Used to calculate the training load of this activity'
-Username: Username
 'Verify token': 'Verify token'
 Version: Version
 Warning: 警告

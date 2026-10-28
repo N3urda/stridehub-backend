@@ -29,7 +29,7 @@ class DashboardSettingsRequestHandlerTest extends AdminWebTestCase
         $this->assertGreaterThan(0, $crawler->filter('a[href*="/admin/settings/dashboard/reset"]')->count());
 
         // The settings navigation, with "Dashboard" active.
-        $this->assertCount(1, $crawler->filter('#drawer-navigation a[title="Settings"][aria-selected="true"]'));
+        $this->assertCount(1, $crawler->filter('.sh-sidebar a.hub-secondary-link.is-active[href$="/admin/settings/general"]'));
 
         $settingsPanel = $crawler->filter('nav.contextual-panel[aria-label="Settings"]');
         $this->assertCount(1, $settingsPanel);

@@ -15,6 +15,7 @@ use App\Domain\Activity\Stream\ActivityStreamRepository;
 use App\Domain\Activity\Stream\CombinedStream\CombinedActivityStreamRepository;
 use App\Domain\Activity\Stream\Metric\ActivityStreamMetricRepository;
 use App\Domain\Import\FileImportRepository;
+use App\Domain\Mobile\MobileImportReceiptLifecycle;
 use App\Domain\Segment\SegmentEffort\SegmentEffortRepository;
 use App\Domain\Segment\SegmentRepository;
 use App\Infrastructure\CQRS\Command\Command;
@@ -36,6 +37,7 @@ final readonly class DeleteActivityCommandHandler implements CommandHandler
         private ActivityDrivetrainUsageRepository $activityDrivetrainUsageRepository,
         private FileImportRepository $fileImportRepository,
         private ImageRepository $imageRepository,
+        private MobileImportReceiptLifecycle $mobileImports,
     ) {
     }
 
@@ -55,6 +57,7 @@ final readonly class DeleteActivityCommandHandler implements CommandHandler
         $this->activityBestEffortRepository->deleteForActivity($activityId);
         $this->activityRouteSignatureRepository->deleteForActivity($activityId);
         $this->activityDrivetrainUsageRepository->deleteForActivity($activityId);
+        $this->mobileImports->deleteForActivity($activityId);
         $this->fileImportRepository->deleteForActivity($activityId);
         $this->imageRepository->deleteForActivity($activityId);
         $this->activityRepository->delete($activityId);

@@ -1,0 +1,8 @@
+<section id="zepp-workouts-app" class="hub-records workout-hub" data-base="{{ relativeUrl('/admin/health/api/zepp/workouts') }}" data-profile="{{ relativeUrl('/admin/training/api/profile') }}" data-csrf="{{ csrf_token('health')|e('html_attr') }}">
+    <div class="section-title"><div><h2>Zepp 运动记录</h2><p class="subtle small">从云端保存每次运动与传感器明细。</p></div><button type="button" id="workouts-sync" class="hub-button">同步运动</button></div>
+    <div id="workouts-status" class="hub-notice" role="status" aria-live="polite" hidden></div>
+    <div class="workout-controls"><label>查看记录<select id="workouts-period"><option value="30">最近 30 天</option><option value="90" selected>最近 90 天</option><option value="all">全部已保存</option></select></label><button type="button" id="workouts-refresh" class="hub-button">刷新记录</button><span id="workouts-sync-status" class="subtle small"></span></div>
+    <div id="workouts-summary" class="compact-metrics"></div>
+    <div class="workout-layout"><div><div id="workouts-list" class="workout-list"><p class="empty-note">正在读取 Zepp 运动…</p></div><button id="workouts-more" class="hub-button" type="button" hidden>查看更多运动</button></div><section id="workout-detail" class="workout-detail" aria-label="选中的 Zepp 运动详情"><p class="empty-note">选择一次运动，查看心率、配速和其他已记录的指标。</p></section></div>
+    <p class="subtle small">这里展示 Zepp 云端原始来源。下方的文件导入分析单独统计，不与云端记录重复相加。</p>
+</section>

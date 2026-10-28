@@ -49,20 +49,22 @@
         catch { const error = new Error(method === 'GET' ? '网络连接失败，请重试。' : '连接中断，操作结果尚未确定。请读取最新记录后核对。'); error.uncertain = method !== 'GET'; throw error; }
         let data;
         try { data = response.status === 204 ? null : await response.json(); }
-        catch { const error = new Error('登录可能已过期。请在另一个标签页重新登录；当前草稿仍保留。'); error.uncertain = method !== 'GET'; throw error; }
+        catch { const loginRequired = response.status === 401 || response.redirected; const error = new Error(loginRequired ? '登录可能已过期。请在另一个标签页重新登录；当前草稿仍保留。' : method === 'GET' ? '暂时无法读取服务器结果，请稍后刷新重试。' : '尚未取得有效回执，保存结果待核对。请先读取最新记录；输入仍保留。'); error.uncertain = method !== 'GET'; throw error; }
         if (!response.ok) { const error = new Error(response.status === 403 ? '页面校验已过期。请保留草稿，在另一个标签页重新登录后再试。' : data.message || [data.lastError, data.nextAction].filter(Boolean).join(' ') || `请求失败（${response.status}）`); error.status = response.status; error.data = data; error.uncertain = method !== 'GET' && response.status >= 500; throw error; }
         return data;
     }
     function updateEditor() {
         for (const field of form.elements) field.disabled = state.busy;
         form.querySelector('[type=submit]').disabled = state.busy || state.blocked || !state.dirty;
+        form.querySelector('[type=submit]').textContent = state.busy ? '正在核对…' : '保存血压';
+        form.setAttribute('aria-busy', String(state.busy));
         $('#pressure-review').hidden = !state.blocked;
         $('#pressure-save-state').textContent = state.dirty ? '草稿 · 尚未保存' : state.version ? '已保存' : '新记录';
         $('#pressure-new').disabled = state.busy;
     }
     function resetEditor(record = null) {
         state.id = record?.id || null; state.version = record?.version || 0; state.dirty = false; state.blocked = false;
-        form.reset();
+        form.reset(); form.elements.systolic.setCustomValidity('');
         for (const name of fields) form.elements[name].value = name === 'measuredAt' ? localInput(record?.measuredAt || new Date()) : record?.[name] ?? (['arm', 'posture'].includes(name) ? 'unknown' : '');
         output('#pressure-form-status', ''); updateEditor();
     }
@@ -74,7 +76,7 @@
     async function save(event) {
         event.preventDefault(); if (state.busy || state.blocked || !state.dirty) return;
         const payload = values();
-        if (payload.systolic <= payload.diastolic) { output('#pressure-form-status', '收缩压应高于舒张压，请核对输入。', true); return; }
+        if (payload.systolic <= payload.diastolic) { output('#pressure-form-status', '收缩压应高于舒张压，请核对输入。', true); form.elements.systolic.setCustomValidity('收缩压应高于舒张压'); form.elements.systolic.reportValidity(); return; }
         state.id ||= newId(); state.busy = true; updateEditor(); output('#pressure-form-status', '正在保存并核对…');
         let acknowledged = false;
         try {
@@ -153,14 +155,24 @@
             output('#sleep-range', `当前显示：${rangeLabel(state.sleepRange)} · ${dayCount(state.sleepRange)} 天中有 ${covered} 天留有记录，${measured.length} 条有睡眠时长。空缺日期不代表没有睡眠，不计入平均。`);
         }
         if (records.length) { const latest = records[0]; metric(summary, '期间最近一晚', minutes(latest.totalMinutes), `${latest.date} · Zepp / Amazfit`); metric(summary, '有时长记录的平均时长', measured.length ? minutes(Math.round(measured.reduce((n,r) => n + r.totalMinutes, 0) / measured.length)) : '未知', `${measured.length} 条记录有时长，空缺日期不参与`); }
+        let visual = $('#body-sleep-visual');
+        if (!visual) { visual = node('div', 'body-sleep-visual'); visual.id = 'body-sleep-visual'; summary.before(visual); }
+        visual.replaceChildren();
+        if (records.length) {
+            const latest = records[0], head = node('div', 'body-sleep-head'), text = node('div');
+            text.append(node('p', 'subtle', latest.date + ' · 最近一晚'), node('div', 'sleep-duration', minutes(latest.totalMinutes)), node('p', 'subtle', displayTime(latest.startedAt) + ' 入睡 · ' + displayTime(latest.endedAt) + ' 醒来'));
+            const moon = svgNode('svg', {viewBox: '0 0 80 80', class: 'sleep-icon', 'aria-hidden': 'true'}); moon.append(svgNode('path', {d: 'M46 8A31 31 0 1 0 72 53 30 30 0 0 1 46 8Z'})); head.append(text, moon);
+            const bar = node('div', 'stage-bar'), legend = node('div', 'stage-legend'); window.StrideHubData?.stages(bar, legend, latest); visual.append(head, bar, legend, node('p', 'subtle', '各阶段累计时长；不代表阶段发生顺序。')); visual.hidden = false;
+        } else visual.hidden = true;
         const chart = $('#sleep-chart');
         if (!measured.length) chart.replaceChildren(node('p', 'health-empty', '这段时间暂无可用睡眠时长。可以扩大日期范围，或完成 Zepp 同步后重试。'));
         else {
-            const sorted = [...measured].sort((a,b) => a.date.localeCompare(b.date)); const from = Date.parse(state.sleepRange.from), to = Date.parse(state.sleepRange.to);
+            const shownRange = state.sleepRange || {from: range.elements.from.value, to: range.elements.to.value};
+            const sorted = [...measured].sort((a,b) => a.date.localeCompare(b.date)); const from = Date.parse(shownRange.from), to = Date.parse(shownRange.to);
             const {svg, y, left, right} = chartFrame(chart, '睡眠时长趋势，纵轴为小时；空缺日期保持空白。', Math.max(1, Math.ceil(Math.max(...measured.map(r => r.totalMinutes / 60)))));
             const width = Math.max(2, Math.min(32, (right - left) * .8 / Math.max(1, (to - from) / 86400000 + 1)));
             for (const record of sorted) { const x = from === to ? (left + right) / 2 : left + 5 + (Date.parse(record.date) - from) / (to - from) * (right - left - 10); const bar = svgNode('rect', {x: x - width/2, y: y(record.totalMinutes / 60), width, height: 194 - y(record.totalMinutes / 60), rx: 2, class: 'sleep-total'}); bar.append(svgNode('title', {}, `${record.date} ${minutes(record.totalMinutes)}`)); svg.append(bar); }
-            svg.append(svgNode('text', {x: left, y: 220}, state.sleepRange.from.slice(5)), svgNode('text', {x: right, y: 220, 'text-anchor': 'end'}, state.sleepRange.to.slice(5)), svgNode('text', {x: 46, y: 18}, '小时'));
+            svg.append(svgNode('text', {x: left, y: 220}, shownRange.from.slice(5)), svgNode('text', {x: right, y: 220, 'text-anchor': 'end'}, shownRange.to.slice(5)), svgNode('text', {x: 46, y: 18}, '小时'));
         }
         for (const record of records.slice(0, state.sleepShown)) {
             const row = node('article', 'health-record'); const content = node('div', 'health-record-content');
@@ -178,7 +190,7 @@
         output('#sleep-status', `${title}。${last}${status.lastError ? ' ' + status.lastError : ''}${nextAction ? ' ' + nextAction : ''}`, !!status.lastError && !sync.posting);
         const count = key => Number.isInteger(status[key]) && status[key] >= 0 ? status[key] : 0;
         output('#sleep-sync-result', status.lastAttemptAt ? `最近尝试：${displayTime(status.lastAttemptAt)} · 新增 ${count('imported')} 条 · 更新 ${count('updated')} 条 · 未变化 ${count('unchanged')} 条 · 跳过 ${count('skipped')} 条。${status.state === 'syncing' || sync.posting ? '同步尚未结束，数量以完成后为准。' : '跳过项可能是范围外或无法解析的记录。'}` : '');
-        $('#sleep-setup').textContent = status.configured ? '连接已配置。后台会定期同步；手动同步可立即检查新记录。' : '尚未配置 Zepp 连接。请在运行 StrideHub 的服务器完成 Zepp 登录连接，再刷新本页。';
+        $('#sleep-setup').textContent = status.configured ? '连接已配置。后台任务启动后会定期同步，也可手动检查新记录。' : '尚未配置 Zepp 连接。请在运行 StrideHub 的服务器完成 Zepp 登录连接，再刷新本页。';
         updateSyncControls();
     }
     function updateSyncControls() {
@@ -245,18 +257,18 @@
         const errors = [];
         if (results[0].status === 'fulfilled') { state.records = results[0].value.records; state.pressureRange = requested; renderPressure(); output('#pressure-status', ''); }
         else { errors.push('血压读取失败。'); output('#pressure-status', `未能载入 ${rangeLabel(requested)}。${state.pressureRange ? '仍显示 ' + rangeLabel(state.pressureRange) + ' 的上次结果。' : '尚无已载入结果。'}${results[0].reason.message}`, true); }
-        if (results[1].status === 'fulfilled') { state.sleeps = results[1].value.records; state.sleepRange = requested; renderSleep(); output('#sleep-history-status', ''); }
-        else { errors.push('睡眠读取失败。'); output('#sleep-history-status', `未能载入 ${rangeLabel(requested)}。${state.sleepRange ? '仍显示 ' + rangeLabel(state.sleepRange) + ' 的上次结果。' : '尚无已载入结果。'}${results[1].reason.message}`, true); }
+        if (results[1].status === 'fulfilled') { state.sleeps = results[1].value.records; state.sleepRange = requested; renderSleep(); output('#sleep-record-status', ''); }
+        else { errors.push('睡眠读取失败。'); output('#sleep-record-status', `未能载入 ${rangeLabel(requested)}。${state.sleepRange ? '仍显示 ' + rangeLabel(state.sleepRange) + ' 的上次结果。' : '尚无已载入结果。'}${results[1].reason.message}`, true); }
         output('#health-status', errors.join(' ') || '', errors.length > 0); $('#health-refresh').disabled = false;
         await statusCheck;
     }
-    form.addEventListener('input', () => { state.dirty = true; updateEditor(); }); form.addEventListener('change', () => { state.dirty = true; updateEditor(); }); form.addEventListener('submit', save);
+    form.addEventListener('input', () => { state.dirty = true; form.elements.systolic.setCustomValidity(''); updateEditor(); }); form.addEventListener('change', () => { state.dirty = true; form.elements.systolic.setCustomValidity(''); updateEditor(); }); form.addEventListener('submit', save);
     $('#pressure-new').addEventListener('click', () => edit(null)); $('#pressure-cancel').addEventListener('click', () => { if (mayDiscard()) { resetEditor(); $('#pressure-editor').open = false; } }); $('#pressure-review').addEventListener('click', review);
     $('#health-refresh').addEventListener('click', () => refresh());
     range.addEventListener('input', renderRange);
     function applyRange(value) { state.requestedRange = value; state.shown = 20; state.sleepShown = 20; renderRange(); return refresh(); }
     range.addEventListener('submit', event => { event.preventDefault(); if (!range.reportValidity()) return; if (range.elements.from.value > range.elements.to.value) { output('#health-status', '开始日期不能晚于结束日期。', true); return; } applyRange({from: range.elements.from.value, to: range.elements.to.value}); });
-    for (const shortcut of document.querySelectorAll('[data-health-days]')) shortcut.addEventListener('click', () => { const value = recentRange(Number(shortcut.dataset.healthDays)); range.elements.from.value = value.from; range.elements.to.value = value.to; applyRange(value); });
+    for (const shortcut of document.querySelectorAll('[data-health-days]')) shortcut.addEventListener('click', () => { const value = recentRange(Number(shortcut.dataset.healthDays)); range.elements.from.value = value.from; range.elements.to.value = value.to; range.requestSubmit(); });
     $('#sleep-sync').addEventListener('click', synchronize);
     $('#sleep-sync-refresh').addEventListener('click', () => checkSyncStatus(true));
     window.addEventListener('beforeunload', event => { if (state.dirty || state.busy) { event.preventDefault(); event.returnValue = ''; } });
@@ -266,6 +278,7 @@
         catch { output('#health-status', '无法读取跑步时区，暂按 Asia/Shanghai 显示。', true); }
         const initial = recentRange(90); state.requestedRange = initial; range.elements.to.value = initial.to; range.elements.from.value = initial.from; renderRange();
         $('#health-timezone').textContent = `血压日期与具体时刻按 ${state.timezone} 显示；睡眠按设备当地醒来日期筛选。默认查看最近 90 天。`;
+        app.dispatchEvent(new Event('health-range-ready'));
         await refresh();
     }
     let resizeTimer; window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { pressureChart(state.records); renderSleep(); }, 150); });

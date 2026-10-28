@@ -3560,19 +3560,28 @@
             "format": "date-time"
           },
           "distanceKm": {
-            "type": "number"
+            "type": [
+              "number",
+              "null"
+            ]
           },
           "durationMinutes": {
-            "type": "number"
+            "type": [
+              "number",
+              "null"
+            ]
           },
           "averageHeartRate": {
             "type": [
-              "integer",
+              "number",
               "null"
             ]
           },
           "movingSeconds": {
-            "type": "integer",
+            "type": [
+              "integer",
+              "null"
+            ],
             "minimum": 0
           },
           "elapsedSeconds": {
@@ -3590,7 +3599,8 @@
           "distanceKm",
           "durationMinutes",
           "averageHeartRate"
-        ]
+        ],
+        "description": "统一跑步记录，包含文件导入和 Zepp 云端跑步；已确认的来源别名折叠到同一 ID。缺失测量保持 null。"
       },
       "ForecastHour": {
         "type": "object",
@@ -3914,7 +3924,10 @@
                     ]
                   },
                   "durationMinutes": {
-                    "type": "number"
+                    "type": [
+                      "number",
+                      "null"
+                    ]
                   }
                 },
                 "required": [
@@ -4082,10 +4095,16 @@
             "format": "date-time"
           },
           "distanceKm": {
-            "type": "number"
+            "type": [
+              "number",
+              "null"
+            ]
           },
           "durationMinutes": {
-            "type": "number"
+            "type": [
+              "number",
+              "null"
+            ]
           },
           "averageHeartRate": {
             "type": [
@@ -4094,7 +4113,10 @@
             ]
           },
           "movingSeconds": {
-            "type": "integer",
+            "type": [
+              "integer",
+              "null"
+            ],
             "minimum": 0
           },
           "elapsedSeconds": {
@@ -4127,7 +4149,7 @@
           "durationMinutes",
           "averageHeartRate"
         ],
-        "description": "Sum of imported movement durations and distances, not the time gap between files. Missing linked records invalidate delta. Interval compliance is not inferred from the aggregate."
+        "description": "Sum of canonical linked workouts, not the time gap between files. Missing measurements remain null. Missing or overlapping linked records invalidate delta; interval compliance is not inferred."
       },
       "Reconciliation": {
         "type": "object",

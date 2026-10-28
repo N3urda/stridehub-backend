@@ -1,22 +1,35 @@
-<!doctype html>
-<html lang="zh-CN">
-<head>
-    <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>跑步分析 · StrideHub</title>
+{% extends 'html/stridehub/shell.html.twig' %}
+{% import 'html/stridehub/icons.html.twig' as icons %}
+{% set activeNav = 'movement' %}
+{% set pageKicker = 'MOVE & EXPLORE' %}
+{% set showPageHeading = false %}
+{% block title %}运动记录 · StrideHub{% endblock %}
+{% block body_class %}{% endblock %}
+{% block stylesheets %}
+<link rel="stylesheet" href="{{ relativeUrl(asset('css/stridehub-insights.css')) }}">
+<link rel="stylesheet" href="{{ relativeUrl(asset('css/stridehub-workspace.css')) }}">
     <link rel="stylesheet" href="{{ relativeUrl(asset('css/stridehub-running.css'))|e('html_attr') }}">
+{% endblock %}
+{% block head_scripts %}
+<script defer src="{{ relativeUrl(asset('js/stridehub-data.js')) }}"></script>
+<script defer src="{{ relativeUrl(asset('js/stridehub-workspace.js')) }}"></script>
+<script defer src="{{ relativeUrl(asset('js/stridehub-catalog.js')) }}"></script>
+<script defer src="{{ relativeUrl(asset('js/stridehub-workouts.js')) }}"></script>
     <script defer src="{{ relativeUrl(asset('libraries/echarts/echarts.min.js'))|e('html_attr') }}"></script>
     <script defer src="{{ relativeUrl(asset('js/stridehub-running.js'))|e('html_attr') }}"></script>
-</head>
-<body>
+{% endblock %}
+{% block page_content %}
 <div id="running-app" data-api="{{ relativeUrl('admin/running/api')|e('html_attr') }}" data-detail-base="{{ relativeUrl('activities')|e('html_attr') }}">
-    <header class="shell topbar"><a class="brand" href="{{ relativeUrl('admin/training') }}">STRIDE<span>HUB</span></a><nav aria-label="主导航"><a href="{{ relativeUrl('admin/health') }}">健康记录</a><a href="{{ relativeUrl('activities') }}">运动记录</a><a href="{{ relativeUrl('admin/training') }}">训练课表</a><a href="{{ relativeUrl('admin/upload') }}">导入运动</a></nav></header>
-    <main class="shell">
-        <div class="hero"><div><p class="eyebrow">RUNNING ANALYTICS / 运动记录</p><h1>每一次出发，都有迹可循。</h1><p class="muted">从长期积累到单次复盘，用真实记录读懂你的跑步。</p></div><span class="tag">公里 · 分钟 · bpm</span></div>
+<div class="shell">
+        <div class="hero"><div><p class="eyebrow">RUNNING ANALYTICS / 运动记录</p><h1>运动，让积累被看见。</h1><p class="muted">从长期积累到单次复盘，用真实记录读懂你的跑步。</p></div><span class="tag">公里 · 分钟 · bpm</span></div>
+        {% include 'html/stridehub/workout-catalog.html.twig' %}
+        {% include 'html/stridehub/workouts.html.twig' %}
+        <h2 class="imported-running-heading">文件导入的跑步分析</h2>
         <form id="filters" class="panel filters"><label>统计范围<select name="preset"><option value="90">近 90 天</option><option value="30">近 30 天</option><option value="365">近一年</option><option value="all">全部记录</option><option value="custom">自定义</option></select></label><label>开始日期<input name="from" type="date"></label><label>结束日期<input name="to" type="date"></label><label>运动类型<select name="sportType"><option value="all">全部跑步</option><option value="Run">户外跑步</option><option value="TrailRun">越野跑</option><option value="VirtualRun">虚拟跑步</option></select></label><button type="submit">更新看板</button></form>
         <p id="status" role="status" aria-live="polite" class="muted">正在读取运动记录…</p>
         <section id="overview" aria-label="长期跑步看板" hidden>
             <div id="summary" class="stats"></div>
-            <div id="empty" class="panel empty" hidden><h2>等待你的第一份跑步数据</h2><p>导入 FIT、TCX 或 GPX 文件后，这里会生成真实统计。GPX 可能只有轨迹，心率和步频取决于原文件。</p><a class="button" href="{{ relativeUrl('admin/upload') }}">导入运动文件</a><p>Zepp / Amazfit 可通过独立 Zepp Connector 同步到 watch 目录；看板不会要求你在页面填写账号密码。</p></div>
+            <div id="empty" class="panel empty" hidden><h2>等待你的第一份跑步数据</h2><p>导入 FIT、TCX 或 GPX 文件后，这里会生成真实统计。GPX 可能只有轨迹，心率和步频取决于原文件。</p><a class="button" href="{{ relativeUrl('admin/upload') }}">导入运动文件</a><p>已连接 Zepp 的运动将在同步后出现在这里。</p></div>
             <div id="overview-charts" class="grid">
                 <section class="panel"><h2>周跑量与频次</h2><p class="muted">跑量与次数一起看，了解训练节奏。</p><div id="weekly-chart" class="chart"></div></section>
                 <section class="panel"><h2>月度积累</h2><p class="muted">按日历月份统计，首尾月份可能不完整。</p><div id="monthly-chart" class="chart"></div></section>
@@ -43,6 +56,6 @@
             </div>
         </section>
         <details class="panel methodology"><summary>总览统计口径与数据来源</summary><ul id="overview-notes"></ul><p>看板仅分析已导入记录；不会生成 VO₂max、HRV、触地时间或伤病风险评分。天气与身体状态请在训练课表中结合查看。</p></details>
-    </main><footer class="shell muted">StrideHub · 跑步分析 · 数据留在你的 Dreeve 实例</footer>
+    </div><footer class="shell muted">StrideHub · 运动记录 · 每一次出发，都有迹可循。</footer>
 </div>
-</body></html>
+{% endblock %}

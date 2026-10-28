@@ -35,18 +35,23 @@ def main():
         if not token or len(token) > 4096 or any(ord(c) <= 32 or ord(c) == 127 for c in token):
             raise ValueError()
         target = args.output.expanduser().resolve()
+        events_user_id = None
         if target.exists():
             old = json.loads(target.read_text())
             if old.get("userId") != user_id:
                 print("Refusing to replace a different Zepp account. Keep each user's health data separate.", file=sys.stderr)
                 return 1
+            events_user_id = old.get("eventsUserId")
         target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         os.chmod(target.parent, 0o700)
         fd, temporary = tempfile.mkstemp(prefix=".credentials-", dir=target.parent)
         try:
             with os.fdopen(fd, "w") as handle:
                 os.fchmod(handle.fileno(), 0o600)
-                json.dump({"userId": user_id, "host": host, "appToken": token}, handle)
+                credentials = {"userId": user_id, "host": host, "appToken": token}
+                if events_user_id is not None:
+                    credentials["eventsUserId"] = events_user_id
+                json.dump(credentials, handle)
                 handle.write("\n")
             os.replace(temporary, target)
         finally:

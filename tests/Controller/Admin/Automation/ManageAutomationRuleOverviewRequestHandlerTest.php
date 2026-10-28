@@ -49,7 +49,7 @@ class ManageAutomationRuleOverviewRequestHandlerTest extends AdminWebTestCase
             $gatedPanel->text()
         );
         $this->assertCount(0, $crawler->filter('nav.contextual-panel'), 'The contextual panel is hidden in Strava API mode.');
-        $this->assertCount(1, $crawler->filter('aside#drawer-navigation > div a[href$="/admin/automation-rules"]'), 'The icon rail item stays visible and leads to the gated page.');
+        $this->assertCount(1, $crawler->filter('.hub-admin-links a[href$="/admin/automation-rules"][aria-current="page"]'), 'The advanced navigation entry stays visible and leads to the gated page.');
     }
 
     public function testItRendersTheEmptyState(): void
@@ -69,7 +69,7 @@ class ManageAutomationRuleOverviewRequestHandlerTest extends AdminWebTestCase
         $panel = $crawler->filter('nav.contextual-panel[aria-label="Automation rules"]');
         $this->assertCount(1, $panel);
         $this->assertSame('Rules', $panel->filter('a[aria-selected="true"]')->text());
-        $this->assertSame('true', $crawler->filter('aside#drawer-navigation > div a[href$="/admin/automation-rules"]')->attr('aria-selected'));
+        $this->assertSame('page', $crawler->filter('.hub-admin-links a[href$="/admin/automation-rules"]')->attr('aria-current'));
     }
 
     public function testItRendersTheRulesWithTheirConditionsActionsAndState(): void

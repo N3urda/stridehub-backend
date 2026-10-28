@@ -36,7 +36,7 @@ class ManageGearMaintenanceConfigRequestHandlerTest extends AdminWebTestCase
         $this->assertStringContainsString('Gear maintenance', $crawler->filter('body')->text());
         $this->assertStringContainsString('Components', $crawler->filter('body')->text());
         $this->assertCount(1, $crawler->filter('table.data-table'));
-        $this->assertStringContainsString('Save settings', $crawler->filter('button[type="submit"]')->text());
+        $this->assertStringContainsString('Save settings', $crawler->filter('form[data-dispatch-command="update-gear-maintenance-config"] button[type="submit"]')->text());
 
         $this->assertCount(1, $crawler->filter('form[data-dispatch-command="update-gear-maintenance-config"]'));
 
@@ -79,7 +79,7 @@ class ManageGearMaintenanceConfigRequestHandlerTest extends AdminWebTestCase
         $this->assertSame('/gear/maintenance', $crawler->filter('form[data-dispatch-command]')->attr('data-redirect'));
         $this->assertSame(
             '/gear/maintenance',
-            $crawler->filter('nav a:has(span:contains("Return to app"))')->attr('href'),
+            $crawler->filter('nav a[data-return-to-records]')->attr('href'),
         );
     }
 

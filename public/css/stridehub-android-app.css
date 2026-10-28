@@ -1,0 +1,58 @@
+.android-page{max-width:1120px;margin:0 auto;color:var(--hub-ink);line-height:1.75}
+.android-page h1,.android-page h2,.android-page h3,.android-page p{margin:0}
+.android-page h2{font-size:19px;line-height:1.5;font-weight:650}
+.android-page h3{font-size:16px;line-height:1.6;font-weight:650}
+.android-download-card{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(280px,1fr);gap:40px;align-items:center;border:1px solid var(--hub-line);border-radius:22px;padding:36px;background:linear-gradient(125deg,#f5f8ff 0,#fff 65%);box-shadow:0 4px 22px #244f8108}
+.android-app-mark{width:54px;height:54px;color:var(--hub-blue);margin-bottom:22px}
+.android-app-mark svg{display:block;width:100%;height:100%}
+.android-eyebrow{font-size:13px;color:var(--hub-muted);margin-bottom:8px!important}
+.android-page h1{font-size:34px;line-height:1.4;font-weight:650;letter-spacing:-.8px;margin-bottom:16px}
+.android-intro-copy{max-width:42ch;color:var(--hub-muted);font-size:15px}
+.android-capabilities{display:flex;flex-wrap:wrap;gap:8px;margin-top:22px}
+.android-capabilities span{font-size:12px;padding:4px 10px;border-radius:7px;background:#eaf0fc;color:#425d94}
+.android-release{min-width:0;border:1px solid var(--hub-line);background:#fff;border-radius:16px;padding:26px}
+.android-release-state{font-size:12px;color:#266e58;background:#edf7f1;display:inline-block;border-radius:20px;padding:3px 10px;margin-bottom:14px!important}
+.android-release-unavailable{color:#716138;background:#f7f3e9}
+.android-release h2 span{font-weight:500;white-space:nowrap}
+.android-release-facts{display:grid;gap:11px;margin:20px 0 24px}
+.android-release-facts>div{display:flex;justify-content:space-between;flex-wrap:wrap;gap:3px 12px}
+.android-release-facts dt{color:var(--hub-muted);font-size:13px}
+.android-release-facts dd{margin:0;font-size:14px;font-weight:550}
+.android-page .android-button{display:inline-flex;align-items:center;justify-content:center;gap:9px;min-height:48px;border:1px solid #d8e1f0;border-radius:10px;background:#fff;color:var(--hub-blue);font:inherit;font-size:14px;font-weight:600;text-decoration:none;padding:11px 17px;cursor:pointer;line-height:1.5;text-align:center;transition:background-color .15s,border-color .15s}
+.android-page .android-button:hover{background:#f1f5fc;border-color:#b6c6e8}
+.android-page .android-button-primary{background:var(--hub-blue);color:#fff;border-color:var(--hub-blue);width:100%}
+.android-page .android-button-primary:hover{background:#3656da;border-color:#3656da}
+.android-button svg{width:21px;height:21px;flex-shrink:0}
+.android-download-note{font-size:12px;color:var(--hub-muted);margin-top:13px!important;line-height:1.7}
+.android-release>p:not(.android-release-state){color:var(--hub-muted);margin-top:14px}
+.android-release>p+.android-button{margin-top:20px}
+.android-upgrade-note{display:flex;align-items:flex-start;gap:14px;margin:22px 0;padding:20px 24px;border:1px solid #dce8e3;border-radius:15px;background:#f3f8f5}
+.android-upgrade-icon{display:flex;align-items:center;justify-content:center;width:30px;height:30px;flex-shrink:0;border-radius:50%;background:#e2f0e8;color:#25735b;margin-top:2px}
+.android-upgrade-icon svg{width:19px;height:19px}
+.android-upgrade-note h2{font-size:16px;margin-bottom:5px}
+.android-upgrade-note p{font-size:13px;color:#4d665c;line-height:1.85}
+.android-setup-card{border:1px solid var(--hub-line);border-radius:20px;background:#fff;padding:28px 32px}
+.android-section-heading>p{color:var(--hub-muted);font-size:14px;margin-top:6px}
+.android-setup-steps{list-style:none;margin:26px 0 0;padding:0}
+.android-setup-steps>li{display:flex;align-items:flex-start;gap:16px;padding:22px 0;border-top:1px solid var(--hub-line)}
+.android-setup-steps>li:last-child{padding-bottom:0}
+.android-step-number{display:flex;align-items:center;justify-content:center;flex-shrink:0;width:32px;height:32px;background:#edf1ff;color:var(--hub-blue);border-radius:10px;font-size:14px;font-weight:650}
+.android-setup-steps>li>div{min-width:0;flex:1}
+.android-setup-steps p{font-size:14px;color:var(--hub-muted);margin-top:6px;max-width:70ch}
+.android-server-box{margin-top:16px;padding:16px;border-radius:12px;background:#f4f7fb}
+.android-server-box label{display:block;font-size:13px;color:var(--hub-ink);font-weight:600;margin-bottom:7px}
+.android-server-controls{display:flex;align-items:center;gap:10px}
+.android-server-controls input{display:block;flex:1;min-width:0;width:100%;padding:11px 12px;border:1px solid #d8e1f0;border-radius:9px;min-height:48px;font-size:16px;color:var(--hub-ink);background:#fff}
+.android-server-controls .android-button{flex-shrink:0;min-width:100px}
+.android-setup-steps .android-copy-status{font-size:12px;min-height:21px}
+.android-setup-steps .android-connection-note{font-size:12px;line-height:1.8;margin-top:12px}
+.android-page .android-text-link{display:inline-flex;align-items:center;gap:7px;min-height:44px;margin-top:10px;font-weight:600;font-size:14px;text-decoration:none}
+.android-text-link .hub-icon{width:18px;height:18px}
+.android-file-details{margin-top:22px;padding:0 3px;font-size:13px;color:var(--hub-muted);overflow-wrap:anywhere}
+.android-file-details>summary{cursor:pointer;min-height:44px;align-content:center;font-weight:600;color:var(--hub-ink)}
+.android-file-details dl{display:grid;gap:12px;padding:16px 18px;border:1px solid var(--hub-line);border-radius:12px;background:#fff;margin:8px 0 12px}
+.android-file-details dd{margin:3px 0 0;color:var(--hub-ink);word-break:break-word}
+.android-file-details code{font-size:12px;overflow-wrap:anywhere}
+@media(max-width:1050px){.android-download-card{grid-template-columns:minmax(0,1fr);gap:28px;padding:28px}.android-intro-copy{max-width:64ch}.android-release{max-width:560px;width:100%}}
+@media(max-width:480px){.android-download-card{padding:22px 18px;gap:24px;border-radius:17px}.android-page h1{font-size:27px;letter-spacing:-.5px}.android-app-mark{width:46px;height:46px;margin-bottom:18px}.android-intro-copy{font-size:14px}.android-release{padding:20px 16px}.android-release h2{font-size:18px}.android-release-facts>div{display:block}.android-release-facts dd{margin-top:3px}.android-upgrade-note{padding:18px 16px;gap:10px}.android-upgrade-note h2{font-size:15px}.android-setup-card{padding:22px 18px;border-radius:17px}.android-setup-steps>li{gap:10px}.android-step-number{width:27px;height:27px;border-radius:8px}.android-setup-steps p,.android-section-heading>p{font-size:13px}.android-server-box{padding:12px}.android-server-controls{flex-wrap:wrap;gap:8px}.android-server-controls input,.android-server-controls .android-button{flex-basis:100%}.android-server-controls input{font-size:16px;padding:10px 8px}.android-file-details>summary{font-size:12px}}
+@media(prefers-reduced-motion:reduce){.android-page .android-button{transition:none}}

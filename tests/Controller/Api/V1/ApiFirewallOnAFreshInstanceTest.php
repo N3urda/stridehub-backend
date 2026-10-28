@@ -33,9 +33,18 @@ class ApiFirewallOnAFreshInstanceTest extends ControllerWebTestCase
         $this->assertSame(Response::HTTP_UNAUTHORIZED, $this->client->getResponse()->getStatusCode());
     }
 
-    public function testTheRestOfTheAppKeepsRedirectingToTheSetup(): void
+    public function testTheWorkspaceEntrySkipsSetupButRequiresBrowserAuthentication(): void
     {
         $this->client->request('GET', '/');
+
+        $this->assertResponseRedirects('/admin/insights');
+        $this->client->followRedirect();
+        $this->assertResponseRedirects('/admin/login');
+    }
+
+    public function testLegacyAnalyticsStillRequireAthleteSettings(): void
+    {
+        $this->client->request('GET', '/activities');
 
         $this->assertResponseRedirects('http://localhost/admin/settings/athlete');
     }

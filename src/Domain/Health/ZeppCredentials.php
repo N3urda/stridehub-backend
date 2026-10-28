@@ -17,7 +17,7 @@ final readonly class ZeppCredentials
         return is_file($this->path());
     }
 
-    /** @return array{userId: string, host: string, appToken: string} */
+    /** @return array{userId: string, host: string, appToken: string, eventsUserId?: string} */
     public function read(): array
     {
         if (!$this->configured()) {
@@ -41,7 +41,15 @@ final readonly class ZeppCredentials
                 throw new \RuntimeException();
             }
 
-            return ['userId' => $data['userId'], 'host' => $data['host'], 'appToken' => $data['appToken']];
+            $credentials = ['userId' => $data['userId'], 'host' => $data['host'], 'appToken' => $data['appToken']];
+            if (array_key_exists('eventsUserId', $data)) {
+                if (!is_string($data['eventsUserId']) || !preg_match('/\A[A-Za-z0-9_-]{1,128}\z/', $data['eventsUserId'])) {
+                    throw new \RuntimeException();
+                }
+                $credentials['eventsUserId'] = $data['eventsUserId'];
+            }
+
+            return $credentials;
         } catch (\Throwable) {
             throw new ZeppSyncError('error', 'Zepp 授权文件不可用。', '请检查授权文件格式、路径及权限（仅所有者可读写，0600）。');
         }

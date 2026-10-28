@@ -26,7 +26,7 @@ class LoginLogoutRequestHandlerTest extends AdminWebTestCase
 
         $this->client->request('GET', '/admin/login');
 
-        $this->assertResponseRedirects('/admin/upload');
+        $this->assertResponseRedirects('/admin/insights');
     }
 
     public function testCanLogInWithValidCredentials(): void
@@ -38,7 +38,7 @@ class LoginLogoutRequestHandlerTest extends AdminWebTestCase
             '_password' => self::ADMIN_PASSWORD,
         ]));
 
-        $this->assertResponseRedirects('/admin/upload');
+        $this->assertResponseRedirects('/admin/insights');
 
         $this->client->followRedirect();
         $this->assertResponseIsSuccessful();

@@ -69,6 +69,7 @@
         const url = new URL(location.href); url.searchParams.set('tab', name); history.replaceState(null, '', url);
     }
     $$('[data-tab-target]').forEach(node => node.addEventListener('click', event => { event.preventDefault(); selectTab(node.dataset.tabTarget); }));
+    if (location.hash === '#profile') selectTab('profile', true);
     function formStatus(kind, message, error = false) { const node = $('.form-status', forms[kind]); node.replaceChildren(); node.className = `form-status full ${error ? 'error' : 'success'}`; if (message) node.append(document.createTextNode(message)); }
     function markDirty(kind) { forms[kind]._revision = (forms[kind]._revision || 0) + 1; forms[kind]._dirty = true; const status = $('#' + kind + '-save-state'); status.textContent = '有未保存的修改'; status.classList.add('dirty'); if (kind === 'checkin') renderToday(); }
     function updateFormControls(kind) { const form = forms[kind]; $$('input, select, textarea, button', form).forEach(control => { control.disabled = !!form._busy || !!form._loading; }); $('[type=submit]', form).disabled = !!form._busy || !!form._loading || !!form._blocked; }

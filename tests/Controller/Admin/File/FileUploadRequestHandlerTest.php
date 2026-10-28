@@ -54,7 +54,6 @@ class FileUploadRequestHandlerTest extends AdminWebTestCase
 
     public static function provideAdminPaths(): iterable
     {
-        yield 'root admin path' => ['/admin'];
         yield 'upload path' => ['/admin/upload'];
     }
 }

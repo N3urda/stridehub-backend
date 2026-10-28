@@ -1,0 +1,41 @@
+{
+    "activity": {
+        "id": "missing-fixture",
+        "name": "No sensor data"
+    },
+    "analysis": {
+        "timeline": [],
+        "scatter": [],
+        "zones": [],
+        "heartRateDistribution": [],
+        "coverage": {
+            "samples": 0,
+            "analyzedSeconds": 0,
+            "heartRateSeconds": 0,
+            "paceSeconds": 0,
+            "gapSeconds": 0,
+            "pausedSeconds": 0,
+            "invalidIntervals": 0
+        },
+        "metrics": {
+            "weightedHeartRate": null,
+            "paceSecondsPerKm": null,
+            "speedVariationPercent": null,
+            "efficiencyChangePercent": null
+        },
+        "notes": [
+            "统计按相邻原始时间戳加权；超过 30 秒的记录断档、显式暂停和无效值不计入有效时长。",
+            "曲线仅为显示抽样，统计使用全部有效区间。导入器可能已前向填充传感器缺项，覆盖率代表导入数据覆盖，并非硬件测量完整率。",
+            "步频沿用 Dreeve 的单脚周期 × 2 口径；不同导出工具的单位可能不同，请结合设备记录核对。",
+            "前后半程效率变化仅在至少 20 分钟、两半有效配速\/心率覆盖各达 90% 且速度变异不超过 15% 时展示；未做坡度或温度校正，不等同于有氧能力评分。"
+        ]
+    },
+    "splits": [],
+    "laps": [],
+    "splitSummary": {
+        "paceVariationPercent": null,
+        "secondHalfPaceChangePercent": null,
+        "fastestFullKmPace": null
+    },
+    "availableStreams": []
+}

@@ -1,0 +1,24 @@
+{% import 'html/stridehub/icons.html.twig' as icons %}
+{% set activeNav = activeNav|default('overview') %}
+<aside class="sh-sidebar" aria-hidden="false" aria-label="StrideHub 应用导航">
+    <a class="hub-brand" href="{{ relativeUrl('/admin/insights')|e('html_attr') }}">{{ icons.mark() }}<span>StrideHub<small>记录，让改变有迹可循</small></span></a>
+    <p class="hub-nav-label">YOUR PERSONAL RECORD</p>
+    <nav class="hub-primary-nav" aria-label="主导航">
+        {% for item in [
+            {key: 'overview', label: '总览', url: '/admin/insights', description: '看见每一天'},
+            {key: 'body', label: '身体', url: '/admin/health', description: '睡眠与身体记录'},
+            {key: 'movement', label: '运动', url: '/admin/running', description: '每一次积累'},
+            {key: 'nutrition', label: '饮食', url: '/admin/nutrition', description: '计划与实际摄入'},
+            {key: 'weight', label: '减重', url: '/admin/weight', description: '目标与体重趋势'},
+            {key: 'plans', label: '计划', url: '/admin/plans', description: '训练日程与执行'}
+        ] %}
+            <a class="hub-nav-item{{ activeNav == item.key ? ' is-active' : '' }}" href="{{ relativeUrl(item.url)|e('html_attr') }}"{% if activeNav == item.key %} aria-current="page"{% endif %}>{{ icons.icon(item.key) }}<span>{{ item.label }}<small>{{ item.description }}</small></span><span class="hub-nav-indicator" aria-hidden="true"></span></a>
+        {% endfor %}
+    </nav>
+    <div class="hub-sidebar-bottom">
+        <div class="hub-record-note">{{ icons.icon('spark') }}<p>把数据留下来。<br><span>让下一步更有依据。</span></p></div>
+        <a class="hub-secondary-link" href="{{ relativeUrl('/admin/training/today')|e('html_attr') }}">{{ icons.icon('check') }}<span>今日执行与反馈</span></a>
+        <a class="hub-secondary-link{{ activeNav == 'settings' ? ' is-active' : '' }}" href="{{ relativeUrl('/admin/settings/general')|e('html_attr') }}">{{ icons.icon('settings') }}<span>高级设置</span></a>
+        {% if (showLogout ?? true) and is_granted('ROLE_ADMIN') %}<form class="hub-logout" method="post" action="{{ relativeUrl(path('admin_logout'))|e('html_attr') }}"><input type="hidden" name="_csrf_token" value="{{ csrf_token('logout')|e('html_attr') }}"><button type="submit">{{ icons.icon('logout') }}<span>退出登录</span></button></form>{% endif %}
+    </div>
+</aside>

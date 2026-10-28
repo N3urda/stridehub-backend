@@ -4,10 +4,11 @@
     {% set generalSettingsUrl = relativeUrl(path('admin_settings', {group: 'general'})) %}
     <div class="modal-like-form">
         <div class="w-full max-w-2xl overflow-y-auto p-6 bg-white border border-gray-200 rounded-lg shadow-xl">
+            <nav class="hub-admin-return" aria-label="返回总览"><a href="{{ relativeUrl('/admin/insights') }}">← 返回总览</a></nav>
             <div class="mb-4">
-                <h3 class="text-lg font-semibold">{{ "Athlete settings"|trans({}, 'admin') }}</h3>
+                <h3 class="text-lg font-semibold">高级运动指标设置</h3>
                 <p class="mt-1 text-sm text-gray-500">
-                    {{ "Before you can use the app, we need to know a few things about you. These are used to calculate your heart rate zones and training load. You can fine-tune all other settings later on."|trans({}, 'admin') }}
+                    这些资料用于历史运动统计中的心率区间和训练负荷计算。记录睡眠、体重、血压、导入运动与查看计划不需要先填写。
                 </p>
             </div>
             <form data-dispatch-command="{{ dispatchCommand }}" data-redirect="{{ generalSettingsUrl }}" class="flex flex-col gap-4">

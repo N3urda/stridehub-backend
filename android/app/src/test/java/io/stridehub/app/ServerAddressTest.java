@@ -59,6 +59,20 @@ public final class ServerAddressTest {
         equal("https://runner.example/%E8%B7%91%E6%AD%A5", unicodePath.baseUrl());
         check(unicodePath.isTrustedUrl("https://runner.example/%E8%B7%91%E6%AD%A5/admin/login"));
 
+        equal("https://runner.example", ServerAddress.parse("https://runner.example/admin/insights", false).baseUrl());
+        equal("https://runner.example/mobile/v1/sessions", ServerAddress.parse("https://runner.example/admin/login/", false).route("/mobile/v1/sessions"));
+        equal("https://runner.example/stridehub/mobile/v1/sessions", ServerAddress.parse("https://runner.example/stridehub/admin/insights?from=2026-10-01#trend", false).route("/mobile/v1/sessions"));
+        equal("https://runner.example/stridehub", ServerAddress.parse("https://runner.example/stridehub/admin/training/today", false).baseUrl());
+        equal("https://runner.example/%E8%B7%91%E6%AD%A5/mobile/v1/sessions", ServerAddress.parse("https://runner.example/跑步/admin/health", false).route("/mobile/v1/sessions"));
+        equal("https://runner.example/admin-tools", ServerAddress.parse("https://runner.example/admin-tools/", false).baseUrl());
+        equal("https://runner.example/clinic/admin", ServerAddress.parse("https://runner.example/clinic/admin/admin/insights", false).baseUrl());
+        equal("https://runner.example", ServerAddress.parse("https://runner.example/admin/activities/admin/edit", false).baseUrl());
+        equal("https://runner.example/install/admin/custom-page", ServerAddress.parse("https://runner.example/install/admin/custom-page", false).baseUrl());
+        rejected(() -> ServerAddress.parse("https://runner.example/stridehub/admin/insights/../login", false), "pasted page traversal");
+        rejected(() -> ServerAddress.parse("https://runner.example/stridehub/admin/insights/%2fattack", false), "pasted page encoded separator");
+        rejected(() -> ServerAddress.parse("https://person:secret@runner.example/admin/insights", false), "pasted page embedded credentials");
+        rejected(() -> ServerAddress.parse("http://runner.example/admin/insights", false), "pasted page HTTP without opt-in");
+
         String[] invalid = {
             "", "runner.example", "//runner.example", "ftp://runner.example", "https:///admin",
             "https://user:pass@runner.example", "https://runner.example?query=1", "https://runner.example#hash",

@@ -216,6 +216,15 @@ final class ZeppSleepTest extends TestCase
         self::assertSame('2026-10-01', $service->forDate('2026-09-30')['sourceDate']);
     }
 
+    public function testLegacySyncUsesConfiguredProfileCalendarDate(): void
+    {
+        [$service, $repository] = $this->service([self::response([self::row()])]);
+        // At 00:00 UTC the user's Los Angeles calendar is still the previous day.
+        $repository->save('profile', 'default', ['timezone' => 'America/Los_Angeles'], 0);
+        self::assertSame(1, $service->sync(1)['imported']);
+        self::assertNotNull($service->forDate('2026-09-29'));
+    }
+
     private function credentials(string $user = 'fixture-user', string $host = 'api-mifit-cn3.zepp.com'): void
     {
         file_put_contents($this->directory.'/storage/zepp/credentials.json', json_encode(['userId' => $user, 'host' => $host, 'appToken' => 'fixture-token']));

@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace App\Infrastructure\Daemon;
 
 use App\Console\Cache\PruneRenderCacheConsoleCommand;
-use App\Console\Health\SyncSleepConsoleCommand;
+use App\Console\Health\SyncZeppConsoleCommand;
+use App\Console\Health\SyncZeppWorkoutsConsoleCommand;
 use App\Console\Import\RunAutomationRulesBackfillConsoleCommand;
 use App\Console\Import\RunFileImportConsoleCommand;
+use App\Console\Mobile\RunMobileWorkflowsConsoleCommand;
 use App\Console\Strava\ProcessStravaWebhooksConsoleCommand;
 use App\Domain\Import\ImportMode;
 use App\Domain\Settings\SettingsRepository;
@@ -95,19 +97,57 @@ final class SystemDaemon implements Daemon
 
         $extraConfiguredCronActionsOutput = [];
 
+        // Mobile requests enqueue durable work. The worker exits immediately when
+        // empty and owns its locks, so slow source requests never block HTTP or overlap.
+        $extraConfiguredCronActionsOutput[] = '<info> - mobileWorkflows: * * * * *</info>';
+        $actions[] = new Action(
+            key: 'mobileWorkflows',
+            mutexTtl: 60,
+            expression: '* * * * *',
+            performer: function (): PromiseInterface {
+                $process = new CronProcess(
+                    cronActionId: 'mobileWorkflows',
+                    clock: $this->clock,
+                    output: $this->getConsoleOutput(),
+                    command: sprintf('bin/console %s --limit=10', RunMobileWorkflowsConsoleCommand::NAME),
+                );
+                $process->start();
+
+                return resolve(true);
+            }
+        );
+
         // The explicit server-side Zepp connection opts into hourly refreshes. Without
         // a credential file this command exits without contacting Zepp or storing state.
-        $extraConfiguredCronActionsOutput[] = '<info> - syncZeppSleep (when connected): 15 * * * *</info>';
+        $extraConfiguredCronActionsOutput[] = '<info> - syncZeppData (when connected): 15 * * * *</info>';
         $actions[] = new Action(
-            key: 'syncZeppSleep',
-            mutexTtl: 300,
+            key: 'syncZeppData',
+            mutexTtl: 900,
             expression: '15 * * * *',
             performer: function (): PromiseInterface {
                 $process = new CronProcess(
-                    cronActionId: 'syncZeppSleep',
+                    cronActionId: 'syncZeppData',
                     clock: $this->clock,
                     output: $this->getConsoleOutput(),
-                    command: sprintf('bin/console %s --if-configured', SyncSleepConsoleCommand::NAME),
+                    command: sprintf('bin/console %s --if-configured', SyncZeppConsoleCommand::NAME),
+                );
+                $process->start();
+
+                return resolve(true);
+            }
+        );
+
+        $extraConfiguredCronActionsOutput[] = '<info> - syncZeppWorkouts (when connected): 25 * * * *</info>';
+        $actions[] = new Action(
+            key: 'syncZeppWorkouts',
+            mutexTtl: 900,
+            expression: '25 * * * *',
+            performer: function (): PromiseInterface {
+                $process = new CronProcess(
+                    cronActionId: 'syncZeppWorkouts',
+                    clock: $this->clock,
+                    output: $this->getConsoleOutput(),
+                    command: sprintf('bin/console %s --if-configured', SyncZeppWorkoutsConsoleCommand::NAME),
                 );
                 $process->start();
 

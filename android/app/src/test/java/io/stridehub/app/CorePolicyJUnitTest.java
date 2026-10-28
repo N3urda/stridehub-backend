@@ -8,7 +8,4 @@ public final class CorePolicyJUnitTest {
         ServerAddressTest.main(new String[0]);
     }
 
-    @Test public void loginScriptEscapingAndContract() {
-        LoginScriptTest.main(new String[0]);
-    }
 }

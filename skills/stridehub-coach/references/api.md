@@ -50,6 +50,15 @@ JSON 请求文件使用安全文件工具写入，包含真正的换行；不要
 | `GET /api/v1/health/sleep?from=...&to=...` | 独立保存的 Zepp 睡眠观察，列表为 `records` |
 | `GET /api/v1/health/sleep/status` | 凭据是否配置、最近同步结果和恢复操作 |
 | `POST /api/v1/health/sleep/sync` | 用户已要求同步时拉取最近 1–90 天，正文 `{"days":30}` |
+| `GET /api/v1/health/zepp/days?from=...&to=...` | 逐日 Zepp 睡眠、活动、心率、血氧、压力与身体观察及覆盖情况 |
+| `GET /api/v1/health/zepp/days/{date}` | 单日汇总及 samples、sleepStages、activityStages 明细 |
+| `GET /api/v1/health/zepp/raw/{id}` | 根据返回的 rawRecordIds 追溯保留的 Zepp 源记录 |
+| `GET /api/v1/health/zepp/status` | 详细 Zepp 同步状态、记录数量与恢复操作 |
+| `POST /api/v1/health/zepp/sync` | 已获同步授权时拉取最近 1–90 天完整可用数据 |
+| `GET /api/v1/health/weight?from=...&to=...` | 真实体重记录，固定 kg；返回 records、字符串 version、unit |
+| `PUT/DELETE /api/v1/health/weight/{date}` | 使用整体字符串 version 保存/删除某天实测体重 |
+| `GET /api/v1/health/plans` | 健康计划列表，返回 plans；不混入训练课次 |
+| `GET/PUT/DELETE /api/v1/health/plans/{id}` | 用整数 version 读取/保存/删除减重、作息、营养或恢复计划 |
 
 资源 CRUD 的完整字段读取相应 OpenAPI。不要把臆造的 `readiness`、`diagnosis`、`healthNotes` 等字段塞进 profile/check-ins。不要调用未实现的“自动生成课表”端点：规划由本 Skill 完成，API 校验并保存。
 
@@ -57,7 +66,7 @@ JSON 请求文件使用安全文件工具写入，包含真正的换行；不要
 
 ## 写入与并发
 
-- 更新和删除必须带当前整数 `version`；新记录由客户端指定稳定 ID，批量创建使用 `version:0`。首次健康背景返回 `id:default, version:0, updatedAt:null`。
+- 训练、健康背景、血压和健康计划更新/删除带当前整数 `version`；新记录由客户端指定稳定 ID，创建使用 `version:0`。首次健康背景返回 `id:default, version:0, updatedAt:null`。**体重例外**：必须先 GET 获取整体历史的字符串 version，创建、更新、删除都原样携带；不能使用 0。
 - 常规资源 PUT 是顶层部分更新。未提供的字段保留；**提供的数组和嵌套对象整体替换**。因此追加一份报告时需读取原 `reports` 并合并；用常规课次 PUT 更新 `feedback.notes` 也要保留原有反馈。专用 `PUT /sessions/{id}/feedback` 例外：按提供的反馈字段及 fuel 子字段合并。不要把未知反馈补成默认值。
 - `activityIds` 是完整关联集合，最多 20 条；旧 `activityId` 只表示第一条，显式写旧字段会替换整个集合。关联冲突不得靠删除别人课次来绕过。空 activityIds 解除关联但不会自动改成 planned；确认关联非空记录会标记 completed。
 - 一周调整放在一次原子 batch 中；超过 100 条拆分后不再保证跨请求原子性，先缩小任务范围或说明边界。批量失败时先读回确认，不逐条盲目补写。

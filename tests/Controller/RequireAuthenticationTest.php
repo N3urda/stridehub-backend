@@ -59,9 +59,9 @@ class RequireAuthenticationTest extends AdminWebTestCase
         yield 'strava webhook' => ['/strava/webhook'];
     }
 
-    public function testItStaysPublicWhileTheSettingIsOff(): void
+    public function testLegacyAnalyticsStayPublicWhileTheSettingIsOff(): void
     {
-        $this->client->request('GET', '/');
+        $this->client->request('GET', '/activities');
 
         $this->assertResponseIsSuccessful();
     }
@@ -73,6 +73,8 @@ class RequireAuthenticationTest extends AdminWebTestCase
 
         $this->client->request('GET', '/');
 
+        $this->assertResponseRedirects('/admin/insights');
+        $this->client->followRedirect();
         $this->assertResponseIsSuccessful();
     }
 
