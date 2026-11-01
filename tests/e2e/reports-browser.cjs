@@ -1,0 +1,137 @@
+/* Synthetic reports only. Run against the disposable localhost exam preview. */
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const {chromium} = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
+const credentialsPath = process.env.STRIDEHUB_REPORTS_TEST_CREDENTIALS;
+assert.ok(credentialsPath, 'Set STRIDEHUB_REPORTS_TEST_CREDENTIALS to disposable preview credentials.');
+const credentials = JSON.parse(fs.readFileSync(credentialsPath, 'utf8'));
+const base = credentials.baseUrl.replace(/\/$/, '');
+assert.equal(base, 'http://127.0.0.1:18089', 'Only the disposable exam preview is allowed.');
+const output = path.resolve('var/runtime/reports-browser'); fs.mkdirSync(output, {recursive: true});
+let browser, passed = 0;
+const report = text => { ++passed; console.log('PASS ' + text); };
+const shift = (date, days) => { const value = new Date(date + 'T12:00:00Z'); value.setUTCDate(value.getUTCDate() + days); return value.toISOString().slice(0, 10); };
+function syntheticPdf() {
+    const objects = ['<< /Type /Catalog /Pages 2 0 R >>', '<< /Type /Pages /Kids [3 0 R] /Count 1 >>', '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 150] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>', '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>'];
+    const stream = 'BT /F1 18 Tf 30 80 Td (DEMO report original) Tj ET'; objects.push(`<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`);
+    let pdf = '%PDF-1.4\n', offsets = [0];
+    objects.forEach((object, index) => { offsets.push(Buffer.byteLength(pdf)); pdf += `${index + 1} 0 obj\n${object}\nendobj\n`; });
+    const xref = Buffer.byteLength(pdf); pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+    offsets.slice(1).forEach(offset => { pdf += `${String(offset).padStart(10, '0')} 00000 n \n`; });
+    pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`; return Buffer.from(pdf);
+}
+async function api(route, method = 'GET', body) {
+    const response = await fetch(base + '/api/v1/health/' + route, {method, headers: {Authorization: 'Bearer ' + credentials.apiKey, 'Content-Type': 'application/json'}, body: body === undefined ? undefined : JSON.stringify(body)});
+    const data = response.status === 204 ? null : await response.json();
+    assert.ok(response.ok, route + ' ' + response.status + ' ' + JSON.stringify(data)); return data;
+}
+(async () => {
+    const workspace = await api('workspace'), today = workspace.today, yesterday = shift(today, -1), priorDate = shift(today, -365);
+    const context = await api('context');
+    assert.ok(context.reports.every(r => r.id.startsWith('DEMO-reports-')), 'Preview contains non-test report data; refusing writes.');
+    const oldReport = {id: 'DEMO-reports-old', title: 'DEMO 较早体检', reportDate: priorDate, sourceLabel: 'DEMO 合成数据', findings: [{name: 'DEMO 检查 A', valueText: '4.2', unit: 'mmol/L', referenceRangeText: '1–5', flag: 'normal', page: 1}, {name: 'DEMO 单位不同', valueText: '10', unit: 'mg/dL', flag: 'unknown'}, {name: 'DEMO 同名', valueText: '1'}, {name: 'DEMO 同名', valueText: '2'}]};
+    const currentReport = {id: 'DEMO-reports-current-' + Date.now(), title: 'DEMO 年度体检', reportDate: today, sourceLabel: 'DEMO <img src=x onerror=alert(1)>', needsReview: true, findings: [{name: 'DEMO 检查 A', valueText: '5.2', unit: 'mmol/L', referenceRangeText: '1–5', flag: 'high', page: 2}, {name: 'DEMO 文本结果', valueText: '<img src=x onerror=alert(1)>', referenceRangeText: '', flag: 'unknown', page: 3}, {name: 'DEMO 单位不同', valueText: '3', unit: 'mmol/L', flag: 'low'}, {name: 'DEMO 同名', valueText: '3'}], clinicianAdvice: ['DEMO 医生建议文本'], aiInterpretation: 'DEMO AI 解读文本', notes: 'DEMO 原始备注'};
+    await api('context', 'PUT', {version: context.version, reports: [currentReport, oldReport]});
+    for (const [id, date, systolic, diastolic] of [['DEMO-reports-bp-1', yesterday, 120, 80], ['DEMO-reports-bp-2', yesterday, 130, 90]]) {
+        const rows = (await api('blood-pressure')).records, existing = rows.find(r => r.id === id);
+        await api('blood-pressure/' + id, 'PUT', {version: existing?.version || 0, measuredAt: `${date}T08:00:00+08:00`, systolic, diastolic, notes: 'DEMO synthetic'});
+    }
+    let weights = await api('weight');
+    await api('weight/' + yesterday, 'PUT', {version: weights.version, weightKg: 70, source: 'manual', notes: 'DEMO synthetic'});
+    weights = await api('weight');
+    await api('weight/' + shift(today, -3), 'PUT', {version: weights.version, weightKg: 71, source: 'manual', notes: 'DEMO synthetic'});
+    const measurements = (await api('measurements')).records, measurement = measurements.find(r => r.id === 'DEMO-reports-waist');
+    await api('measurements/DEMO-reports-waist', 'PUT', {version: measurement?.version || 0, date: yesterday, waistCm: 80, source: 'user', sourceLabel: 'DEMO 手工测量'});
+    const plans = (await api('plans')).plans, existingPlan = plans.find(p => p.id === 'DEMO-reports-plan');
+    await api('plans/DEMO-reports-plan', 'PUT', {version: existingPlan?.version || 0, title: 'DEMO 随访事项', category: 'general', goal: 'DEMO 日常跟踪', startDate: today, status: 'active', source: 'ai', sourceLabel: 'DEMO 合成报告', rationale: 'DEMO 测试依据', items: [{id: 'measure', title: 'DEMO 记录腰围', date: today, status: 'pending', notes: '<img src=x onerror=alert(1)>'}]});
+    browser = await chromium.launch({headless: true, executablePath: process.env.CHROMIUM_EXECUTABLE || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'});
+    const page = await browser.newPage({viewport: {width: 1440, height: 1100}, timezoneId: 'America/Los_Angeles'});
+    const errors = []; page.on('pageerror', error => errors.push(error.message));
+    const planWrites = []; page.on('request', request => { if (request.method() === 'PUT' && request.url().includes('/health/api/plans/')) planWrites.push(JSON.parse(request.postData()).version); });
+    const anonymous = await fetch(base + '/admin/health/reports', {redirect: 'manual'});
+    assert.equal(anonymous.status, 302); assert.match(anonymous.headers.get('cache-control'), /no-store/);
+    await page.goto(base + '/admin/health/reports');
+    await page.locator('[name=_username]').fill(credentials.username); await page.locator('[name=_password]').fill(credentials.password);
+    await Promise.all([page.waitForURL(/\/admin\/health\/reports/), page.locator('button[type=submit]').click()]);
+    await page.locator('#report-findings tbody tr').first().waitFor(); await page.locator('#reports-refresh:enabled').waitFor();
+    assert.equal(await page.locator('#reports-list .report-choice').count(), 2);
+    assert.equal(await page.locator('#report-findings tbody tr').count(), 4);
+    assert.equal(await page.locator('#reports-app img').count(), 0);
+    assert.match(await page.locator('#report-narratives').innerText(), /报告医生建议[\s\S]*AI 整理与解读/);
+    assert.match(await page.locator('#report-review').innerText(), /待核对/);
+    report('authenticated report archive preserves all findings, provenance and separate advice; renders hostile text safely');
+    await page.locator('#report-abnormal').check(); assert.equal(await page.locator('#report-findings tbody tr').count(), 2);
+    await page.locator('#report-search').fill('检查 A'); assert.equal(await page.locator('#report-findings tbody tr').count(), 1);
+    await page.locator('#report-search').fill('不存在'); assert.match(await page.locator('#report-findings').innerText(), /没有符合/);
+    await page.locator('#report-search').fill(''); await page.locator('#report-abnormal').uncheck();
+    await page.locator('#report-compare').selectOption(oldReport.id);
+    assert.match(await page.locator('#report-findings').innerText(), /数值变化 \+1 mmol\/L/);
+    assert.match(await page.locator('#report-findings').innerText(), /单位不同，未计算变化/);
+    assert.match(await page.locator('#report-findings').innerText(), /同名项目不唯一/);
+    report('search, abnormal filters and prior-report comparison avoid invalid unit and duplicate-name comparisons');
+    const tracking = await page.locator('#report-tracking-cards').innerText();
+    assert.match(tracking, /125 \/ 85 mmHg · 2 次测量 \/ 1 天/);
+    assert.match(tracking, /70.5 kg · 2 个记录日/);
+    assert.match(tracking, /最近测量/); assert.match(tracking, new RegExp(yesterday));
+    assert.match(tracking, /静息心率[\s\S]*未记录/);
+    assert.equal(await page.locator('#report-tracking-cards .report-tracking-card').count(), 6);
+    report('tracking cards show dated real records, seven-day sample counts and missing resting heart rate without invented zeros');
+    const checkbox = page.locator('#report-plan-list input[type=checkbox]');
+    await checkbox.check(); await page.locator('#report-plan-status').getByText('已记录完成，并核对了服务器记录。').waitFor();
+    assert.equal((await api('plans/DEMO-reports-plan')).items[0].status, 'completed');
+    let plan = await api('plans/DEMO-reports-plan'); const concurrent = await api('plans/' + plan.id, 'PUT', {version: plan.version, notes: 'DEMO concurrent change'});
+    assert.equal(concurrent.version, plan.version + 1);
+    await checkbox.uncheck(); await page.locator('#report-plan-status').getByText('计划已在其他位置更新。已显示最新内容，请核对后再操作。').waitFor().catch(async error => { console.error('Plan status:', await page.locator('#report-plan-status').innerText(), 'writes:', planWrites); throw error; });
+    assert.equal((await api('plans/DEMO-reports-plan')).items[0].status, 'completed');
+    assert.equal(await checkbox.isChecked(), true);
+    assert.equal(planWrites.at(-1), plan.version, 'The rejected write used the version displayed before the concurrent update.');
+    await checkbox.uncheck(); await page.locator('#report-plan-status').getByText('已恢复为待完成，并核对了服务器记录。').waitFor();
+    assert.equal((await api('plans/DEMO-reports-plan')).notes, 'DEMO concurrent change');
+    report('follow-up item writes read back successfully and stale versions preserve concurrent plan changes');
+    let releaseRefresh;
+    const refreshGate = new Promise(resolve => { releaseRefresh = resolve; });
+    await page.route('**/admin/health/api/workspace', async route => { await refreshGate; await route.continue(); });
+    await page.locator('#reports-refresh').click();
+    try {
+        assert.equal(await checkbox.isDisabled(), true, 'Plan actions must be disabled while an older workspace snapshot may be in flight.');
+        assert.equal(await page.locator('#reports-refresh').isDisabled(), true);
+    } finally { releaseRefresh(); }
+    await page.locator('#reports-refresh:enabled').waitFor(); await page.unroute('**/admin/health/api/workspace');
+    assert.equal(await checkbox.isDisabled(), false);
+    report('in-flight workspace refresh blocks plan edits until the refreshed version is displayed');
+    await page.locator('#reports-list .report-choice').filter({hasText: oldReport.title}).click();
+    await page.locator('#report-attachment').getByText('这份报告尚未保存 PDF 原件').waitFor();
+    assert.equal(new URL(page.url()).searchParams.get('report'), oldReport.id);
+    await page.reload(); await page.locator('#report-title').getByText(oldReport.title).waitFor();
+    assert.equal(await page.locator('#report-compare option').count(), 1);
+    report('report selection survives reload and missing original PDFs remain explicit');
+    await page.locator('#reports-list .report-choice').filter({hasText: currentReport.title}).click();
+    const pdf = syntheticPdf();
+    await page.locator('#report-pdf-input').setInputFiles({name: 'DEMO-report.pdf', mimeType: 'application/pdf', buffer: pdf});
+    await page.locator('#report-attachment').getByRole('button', {name: '保存原件', exact: true}).click();
+    await page.locator('#report-attachment').getByRole('link', {name: '浏览 PDF 原件 ↗'}).waitFor();
+    const metadata = await api(`reports/${currentReport.id}/attachment`); assert.equal(metadata.available, true); assert.equal(metadata.sizeBytes, pdf.length);
+    const originalUrl = await page.locator('#report-attachment').getByRole('link', {name: '浏览 PDF 原件 ↗'}).getAttribute('href');
+    const original = await page.request.get(base + originalUrl); assert.equal(original.status(), 200); assert.match(original.headers()['content-type'], /application\/pdf/); assert.match(original.headers()['content-disposition'], /inline/); assert.deepEqual(await original.body(), pdf);
+    const downloaded = await page.request.get(base + originalUrl + '?download=1'); assert.equal(downloaded.status(), 200); assert.match(downloaded.headers()['content-disposition'], /attachment/);
+    assert.equal((await fetch(base + originalUrl, {redirect: 'manual'})).status, 302);
+    const popupPromise = page.waitForEvent('popup');
+    await page.locator('#report-attachment').getByRole('link', {name: '浏览 PDF 原件 ↗'}).click();
+    const pdfPage = await popupPromise; await pdfPage.waitForLoadState('domcontentloaded');
+    // Chrome renders PDFs in its extension frame; the outer document has no embed node.
+    assert.ok(pdfPage.frames().some(frame => frame.url().startsWith('chrome-extension://')), 'The browser PDF viewer opened.');
+    await pdfPage.waitForTimeout(1500); // Allow the native PDF renderer to paint the page for visual inspection.
+    await pdfPage.screenshot({path: path.join(output, 'report-pdf-viewer.png')});
+    await pdfPage.close();
+    report('PDF upload uses the protected page CSRF token and original view/download return the saved bytes only to an authenticated session');
+    await page.locator('#reports-refresh:enabled').waitFor();
+    await page.screenshot({path: path.join(output, 'reports-desktop.png'), fullPage: true});
+    await page.setViewportSize({width: 390, height: 844});
+    await page.screenshot({path: path.join(output, 'reports-mobile.png'), fullPage: true});
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'No page-level horizontal overflow on mobile.');
+    assert.match(await page.locator('.hub-nav-item[aria-current=page]').innerText(), /体检/);
+    await page.locator('#report-search').focus(); assert.equal(await page.locator('#report-search').evaluate(el => el === document.activeElement), true);
+    assert.deepEqual(errors, []); report('desktop and mobile layouts render without page errors or horizontal overflow');
+    console.log(`${passed} report browser checks passed. Screenshots: ${output}`);
+})().catch(error => { console.error(error); process.exitCode = 1; }).finally(async () => { if (browser) await browser.close(); });

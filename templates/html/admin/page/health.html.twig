@@ -41,6 +41,7 @@
         </section>
         {% include 'html/stridehub/body-extra.html.twig' %}
         <section id="health-context-section" class="health-panel" aria-labelledby="health-context-title">
+            <p><a class="button" href="{{ relativeUrl('/admin/health/reports')|e('html_attr') }}">打开体检报告 · 原件与日常跟踪 ↗</a></p>
             <div class="health-section-heading"><div><h2 id="health-context-title">报告与健康背景</h2><p class="muted">展示全部已保存的报告与限制，不受上方日期范围影响。</p></div><span id="health-context-count" class="source-pill"></span></div>
             <p id="health-context-status" role="status" aria-live="polite">正在读取…</p>
             <div id="health-constraints"></div>
