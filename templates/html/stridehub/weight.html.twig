@@ -1,15 +1,16 @@
 {% extends 'html/stridehub/shell.html.twig' %}
 {% set activeNav = 'weight' %}{% set showPageHeading = false %}
 {% block title %}减重数据 · StrideHub{% endblock %}
-{% block stylesheets %}<link rel="stylesheet" href="{{ relativeUrl(asset('css/stridehub-insights.css')) }}"><link rel="stylesheet" href="{{ relativeUrl(asset('css/stridehub-workspace.css')) }}">{% endblock %}
-{% block head_scripts %}<script defer src="{{ relativeUrl(asset('js/stridehub-data.js')) }}"></script><script defer src="{{ relativeUrl(asset('js/stridehub-workspace.js')) }}"></script>{% endblock %}
+{% block stylesheets %}<link rel="stylesheet" href="{{ relativeUrl(asset('css/stridehub-insights.css')) }}"><link rel="stylesheet" href="{{ relativeUrl(asset('css/stridehub-workspace.css')) }}"><link rel="stylesheet" href="{{ relativeUrl(asset('css/stridehub-composition.css')) }}">{% endblock %}
+{% block head_scripts %}<script defer src="{{ relativeUrl(asset('js/stridehub-data.js')) }}"></script><script defer src="{{ relativeUrl(asset('js/stridehub-composition.js')) }}"></script><script defer src="{{ relativeUrl(asset('js/stridehub-workspace.js')) }}"></script>{% endblock %}
 {% block page_content %}
 <div id="data-workspace" class="hub-records data-workspace" data-view="weight" data-base="{{ relativeUrl('/admin/health/api') }}" data-csrf="{{ csrf_token('health')|e('html_attr') }}">
     <header class="insights-heading"><div><p class="soft-label">WEIGHT / 减重</p><h1>目标与体重变化</h1><p class="subtle">把实测变化和目标进度放在一起看。</p></div><div class="data-actions"><button class="hub-button primary" type="button" data-open-editor="weight-entry">记录体重</button><button id="data-refresh" class="hub-button" type="button">刷新</button></div></header>
     {% include 'html/stridehub/workspace-toolbar.html.twig' %}
+    {% include 'html/stridehub/body-composition.html.twig' %}
     <section class="hub-surface"><div class="section-title"><h2>体重趋势</h2><span class="source-pill neutral">实测 / 七日均值 / 目标点</span></div><div id="weight-data-metrics" class="compact-metrics"></div><div id="weight-data-chart" class="data-chart"></div><p class="subtle small">七日均值只使用测量当天及前六天的实测值。目标点是计划值，不补全缺失测量。</p></section>
     <div class="data-two-columns"><section class="hub-surface"><div class="section-title"><h2>减重目标</h2><button class="hub-button" type="button" data-open-editor="goal">设置目标</button></div><div id="weight-goals"></div></section>
-    <section class="hub-surface"><div class="section-title"><h2>腰围与体脂</h2><button class="hub-button" type="button" data-open-editor="measurement">记录测量</button></div><div id="measurement-summary" class="compact-metrics"></div><div id="measurements-table" class="data-table-scroll" tabindex="0" aria-label="身体测量明细，可横向滚动"></div></section></div>
+    <section class="hub-surface"><div class="section-title"><h2>另行记录的腰围与体脂</h2><button class="hub-button" type="button" data-open-editor="measurement">记录测量</button></div><p class="subtle small">这里显示手动或导入的测量。手机称重上传的体脂估算在上方“体成分与计算指标”中查看，不会重复添加到这里。</p><div id="measurement-summary" class="compact-metrics"></div><div id="measurements-table" class="data-table-scroll" tabindex="0" aria-label="手动或导入的身体测量，可横向滚动"></div></section></div>
     <section class="hub-surface"><details class="data-disclosure"><summary>体重记录与趋势均值</summary><div id="weight-data-table" class="data-table-scroll" tabindex="0" aria-label="体重记录，可横向滚动"></div></details><details class="data-disclosure" id="history-panel"><summary>目标与测量的修改历史</summary><div id="record-history" class="data-history"><p>编辑已有目标或测量后，可在这里查看它的修改历史。</p></div></details></section>
     <dialog id="goal-editor" class="data-editor" aria-labelledby="goal-editor-title">
         <header class="editor-heading"><div><p class="soft-label">保存实际记录与计划</p><h2 id="goal-editor-title">设置目标</h2></div><button type="button" class="editor-close" data-close-editor aria-label="关闭设置目标">×</button></header>

@@ -54,6 +54,16 @@ class MainActivity : ComponentActivity() {
         dispatchWeighingShortcut(intent)
     }
 
+    override fun onStart() {
+        super.onStart()
+        io.stridehub.app.sync.NasSync.onForeground(this)
+    }
+
+    override fun onStop() {
+        io.stridehub.app.sync.NasSync.onBackground(this)
+        super.onStop()
+    }
+
     override fun onSaveInstanceState(outState: Bundle) {
         outState.putBoolean(AWAITING_WEIGHING, awaitingWeighing)
         outState.putBoolean(WEIGHING_OPEN, weighingOpen)

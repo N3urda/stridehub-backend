@@ -85,6 +85,7 @@ final readonly class McpWorkspace
         return ['today' => $today, 'timezone' => $w['timezone'], 'from' => $from, 'to' => $today, 'generatedAt' => $w['generatedAt'],
             'profile' => $w['profile'], 'healthContext' => $context,
             'body' => ['weight' => $w['weight']['records'][0] ?? null, 'weightTrend' => array_slice($w['weight']['trend'], -7),
+                'bodyComposition' => $w['bodyComposition'],
                 'measurements' => array_slice($w['measurements'], 0, 3), 'bloodPressure' => array_slice($w['bloodPressure'], 0, 3),
                 'sleep' => array_slice($w['sleep'], 0, 3), 'dailyActivity' => array_slice($w['daily'], 0, 3)],
             'weightVersion' => $w['weight']['version'], 'weightGoals' => $w['weight']['goals'],

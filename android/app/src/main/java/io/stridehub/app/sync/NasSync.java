@@ -3,6 +3,10 @@ import android.content.*;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.app.job.*;
+import android.net.ConnectivityManager;
+import android.net.Network;
+import android.os.Handler;
+import android.os.Looper;
 import android.security.keystore.*;
 import android.util.Base64;
 import io.stridehub.app.ServerAddress;
@@ -18,7 +22,14 @@ import java.util.concurrent.Executors;
 /** Serialized, immutable uploads. Pairing uses the native mobile session. */
 public final class NasSync {
     private static final java.util.concurrent.ExecutorService WORK=Executors.newSingleThreadExecutor();
-    private static Context app;
+    private static volatile Context app;
+    private static final Object AUTOMATIC=new Object();
+    private static final java.util.concurrent.atomic.AtomicLong TRIGGERS=new java.util.concurrent.atomic.AtomicLong();
+    private static boolean automaticQueued,automaticDirty;
+    private static final java.util.Set<Runnable> LISTENERS=new java.util.concurrent.CopyOnWriteArraySet<>();
+    private static int foregroundCount;
+    private static ConnectivityManager.NetworkCallback networkCallback;
+    private static final int JOB_ID=7341;
     private static final String PROCESS=java.util.UUID.randomUUID().toString();
     private static SharedPreferences prefs(Context c){
         app=c.getApplicationContext();
@@ -36,6 +47,13 @@ public final class NasSync {
         catch(Exception e){
             return "";
         }
+    }
+    /** Non-secret ownership snapshot; a delayed queue worker must not adopt another account's capture. */
+    public static synchronized String queueOwner(Context c){
+        String b=binding(c);
+        if(b.isEmpty())return null;
+        try{return new JSONObject().put("binding",b).put("server",server(c).baseUrl()).put("username",c.getSharedPreferences("connection",0).getString("username","")).toString();}
+        catch(JSONException impossible){throw new IllegalStateException(impossible);}
     }
     private static javax.crypto.SecretKey key()throws Exception{
         KeyStore k=KeyStore.getInstance("AndroidKeyStore");
@@ -59,8 +77,9 @@ public final class NasSync {
         return new String(cipher.doFinal(Base64.decode(parts[1],2)),StandardCharsets.UTF_8);
     }
     public static synchronized void disconnect(Context c){
-        prefs(c).edit().remove("binding").remove("token").remove("server").remove("attempt").remove("username").commit();
-        ((JobScheduler)c.getSystemService(Context.JOB_SCHEDULER_SERVICE)).cancel(7341);
+        prefs(c).edit().remove("binding").remove("token").remove("server").remove("attempt").remove("username").remove("revokedOwner").commit();
+        ((JobScheduler)c.getSystemService(Context.JOB_SCHEDULER_SERVICE)).cancel(JOB_ID);
+        changed();
     }
     public interface Done{
         void done(String message);
@@ -88,15 +107,16 @@ public final class NasSync {
                 if(!deviceId.equals(device.optString("deviceId")) || device.optString("token").isEmpty())throw new Exception("服务器返回的设备配对信息不一致");
                 synchronized(NasSync.class){
                     if(sessionGeneration!=io.stridehub.app.NativeSession.generation()||!generation.equals(prefs(c).getString("attempt",""))||!destination.equals(server(c).baseUrl())||!username.equals(c.getSharedPreferences("connection",0).getString("username","")))throw new Exception("连接已取消，请重新配对");
-                    prefs(c).edit().putString("server",destination).putString("binding",device.getString("deviceId")).putString("username",username).putString("token",seal(device.getString("token"))).commit();
+                    prefs(c).edit().putString("server",destination).putString("binding",device.getString("deviceId")).putString("username",username).putString("token",seal(device.getString("token"))).remove("revokedOwner").commit();
                 }
                 try(LocalStore store=new LocalStore(c)){
                     ContentValues recover=new ContentValues();recover.put("status","pending");recover.putNull("detail");
                     store.getWritableDatabase().update("sync_queue",recover,"binding=? AND status='revoked'",new String[]{deviceId});
-                    enqueueIfBound(store);
+                    enqueueIfBound(store,true);
                 }
-                schedule(c);
-                done.done("配对成功，记录已加入同步队列");
+                requestAutomatic(c);
+                changed();
+                done.done("配对成功，记录已加入队列并开始自动同步");
             }
             catch(Exception e){
                 done.done("配对失败："+e.getMessage());
@@ -107,18 +127,99 @@ public final class NasSync {
     public static void initialize(Context c){
         prefs(c);
     }
+    /** Foreground network callbacks are removed when both native activities leave the screen. */
+    public static synchronized void onForeground(Context c){
+        final Context context=c.getApplicationContext();
+        initialize(context);
+        if(foregroundCount++==0){
+            ConnectivityManager manager=(ConnectivityManager)context.getSystemService(Context.CONNECTIVITY_SERVICE);
+            networkCallback=new ConnectivityManager.NetworkCallback(){
+                @Override public void onAvailable(Network network){
+                    synchronized(NasSync.class){if(networkCallback!=this||foregroundCount==0)return;}
+                    requestAutomatic(context);
+                }
+            };
+            try{manager.registerDefaultNetworkCallback(networkCallback);}
+            catch(RuntimeException unavailable){networkCallback=null;}
+        }
+        requestAutomatic(context);
+    }
+    public static synchronized void onBackground(Context c){
+        if(foregroundCount==0||--foregroundCount!=0)return;
+        if(networkCallback!=null){
+            try{((ConnectivityManager)c.getSystemService(Context.CONNECTIVITY_SERVICE)).unregisterNetworkCallback(networkCallback);}
+            catch(RuntimeException ignored){}
+            networkCallback=null;
+        }
+    }
+    public static void addListener(Runnable listener){LISTENERS.add(listener);}
+    public static void removeListener(Runnable listener){LISTENERS.remove(listener);}
+    private static void changed(){
+        if(LISTENERS.isEmpty())return;
+        new Handler(Looper.getMainLooper()).post(()->{for(Runnable listener:LISTENERS)listener.run();});
+    }
+    /** Called only after local commit. All automatic, manual and Job uploads share WORK. */
+    public static void requestAutomatic(Context c){
+        final Context context=c.getApplicationContext();
+        initialize(context);
+        if(binding(context).isEmpty())return;
+        TRIGGERS.incrementAndGet();
+        schedule(context); // Survives process death even before this worker has enqueued the capture.
+        synchronized(AUTOMATIC){
+            automaticDirty=true;
+            if(automaticQueued)return;
+            automaticQueued=true;
+        }
+        WORK.execute(()->{
+            boolean retry=true;
+            try{
+                while(true){
+                    synchronized(AUTOMATIC){automaticDirty=false;}
+                    retry=true;
+                    retry=process(context,()->true);
+                    if(retry)schedule(context);
+                    synchronized(AUTOMATIC){
+                        // A failed attempt backs off; the persistent job also reconciles new raw rows.
+                        if(retry||!automaticDirty)return;
+                    }
+                }
+            }finally{
+                boolean again;
+                synchronized(AUTOMATIC){automaticQueued=false;again=automaticDirty&&!retry;}
+                if(again)requestAutomatic(context);
+            }
+        });
+    }
     public static void enqueueIfBound(LocalStore store){
+        enqueueIfBound(store,false);
+    }
+    /** Only the explicit pairing confirmation may claim previously unbound local history. */
+    private static void enqueueIfBound(LocalStore store,boolean claimUnowned){
         if(app==null)return;
-        String b=binding(app);
-        if(b.isEmpty())return;
+        final String b,destination,owner;
+        synchronized(NasSync.class){
+            b=binding(app);
+            if(b.isEmpty())return;
+            destination=server(app).baseUrl();
+            owner=queueOwner(app);
+        }
         SQLiteDatabase db=store.getWritableDatabase();
         db.beginTransaction();
         try{
+            // The connection may have changed while this worker waited for SQLite's writer lock.
+            if(!owner.equals(queueOwner(app)))return;
+            boolean revoked=owner.equals(prefs(app).getString("revokedOwner",""));
+            try(Cursor old=db.rawQuery("SELECT 1 FROM sync_queue WHERE binding=? AND server=? AND status='revoked' LIMIT 1",new String[]{b,destination})){
+                revoked=revoked||old.moveToFirst();
+            }
+            if(revoked)prefs(app).edit().putString("revokedOwner",owner).commit();
             for(Measurement m:store.all()){
-                try(Cursor cursor=db.rawQuery("SELECT upload_uuid,captured_time FROM measurements WHERE id=?",new String[]{
+                try(Cursor cursor=db.rawQuery("SELECT upload_uuid,captured_time,sync_owner FROM measurements WHERE id=?",new String[]{
                     ""+m.id}
                 )){
                     if(!cursor.moveToFirst())continue;
+                    if(cursor.isNull(2)&&!claimUnowned)continue;
+                    if(!cursor.isNull(2)&&!owner.equals(cursor.getString(2)))continue;
                     String uuid=cursor.getString(0),time=cursor.getString(1);
                     if(uuid==null){
                         uuid=java.util.UUID.randomUUID().toString();
@@ -159,9 +260,13 @@ public final class NasSync {
                     v.put("measurement_id",m.id);
                     v.put("uuid",uuid);
                     v.put("binding",b);
-                    v.put("server",server(app).baseUrl());
+                    v.put("server",destination);
                     v.put("payload",payload.toString());
-                    db.insertWithOnConflict("sync_queue",null,v,SQLiteDatabase.CONFLICT_IGNORE);
+                    if(revoked)v.put("status","revoked");
+                    if(db.insertWithOnConflict("sync_queue",null,v,SQLiteDatabase.CONFLICT_IGNORE)!=-1){
+                        ContentValues ownership=new ContentValues();ownership.put("sync_owner",owner);
+                        db.update("measurements",ownership,"id=? AND sync_owner IS NULL",new String[]{Long.toString(m.id)});
+                    }
                 }
             }
             db.setTransactionSuccessful();
@@ -172,7 +277,6 @@ public final class NasSync {
         finally{
             db.endTransaction();
         }
-        schedule(app);
     }
     private static String label(String state){
         switch(state){
@@ -191,7 +295,12 @@ public final class NasSync {
         try(Cursor row=store.getReadableDatabase().rawQuery("SELECT status,detail,binding FROM sync_queue WHERE measurement_id=?",new String[]{
             ""+id}
         )){
-            if(!row.moveToFirst())return "仅本机 · 未加入 NAS 同步";
+            if(!row.moveToFirst()){
+                try(Cursor owner=store.getReadableDatabase().rawQuery("SELECT sync_owner FROM measurements WHERE id=?",new String[]{Long.toString(id)})){
+                    if(owner.moveToFirst()&&!owner.isNull(0))return app!=null&&owner.getString(0).equals(queueOwner(app))?"仅本机 · 等待自动同步":"同步已暂停 · 请返回原账号配对";
+                }
+                return "仅本机 · 未加入 NAS 同步";
+            }
             String state=row.getString(0);
             if("pending".equals(state)&&app!=null&&!row.getString(2).equals(binding(app)))return "同步已暂停 · 请返回原账号配对";
             String detail=row.isNull(1)?"":row.getString(1);
@@ -209,28 +318,54 @@ public final class NasSync {
         return out.append("\n含已暂停的原账号记录；返回原服务器和原登录名并确认配对，可恢复原设备。其他账号不会接管旧队列。").toString();
     }
     public static void schedule(Context c){
-        if(binding(c).isEmpty())return;
-        ((JobScheduler)c.getSystemService(Context.JOB_SCHEDULER_SERVICE)).schedule(new JobInfo.Builder(7341,new ComponentName(c,SyncJob.class)).setMinimumLatency(10000).setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY).setPersisted(true).setBackoffCriteria(30000,JobInfo.BACKOFF_POLICY_EXPONENTIAL).build());
+        String owner=queueOwner(c);
+        if(owner==null||owner.equals(prefs(c).getString("revokedOwner","")))return;
+        try{
+            JobScheduler scheduler=(JobScheduler)c.getSystemService(Context.JOB_SCHEDULER_SERVICE);
+            // Repeated foreground/save events must not push an existing retry into the future.
+            if(scheduler.getPendingJob(JOB_ID)==null)scheduler.schedule(new JobInfo.Builder(JOB_ID,new ComponentName(c,SyncJob.class)).setMinimumLatency(10000).setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY).setPersisted(true).setBackoffCriteria(30000,JobInfo.BACKOFF_POLICY_EXPONENTIAL).build());
+        }catch(RuntimeException unavailable){/* Local records remain durable; foreground entry retries. */}
     }
     public static void sync(Context c,Done done){
+        TRIGGERS.incrementAndGet();
         WORK.execute(()->{
             if(binding(c).isEmpty()){done.done("尚未配对；原账号队列已暂停，记录继续保存在本机");return;}
-            boolean retry=run(c);if(retry)schedule(c);
+            schedule(c);
+            boolean retry=process(c,()->true);if(retry)schedule(c);
             done.done(retry?"仍有待同步记录；稍后自动重试":"本轮处理结束，请查看记录同步状态");
         });
     }
     static void runJob(Context c,java.util.function.Consumer<Boolean> done){
-        WORK.execute(()->done.accept(run(c)));
+        runJob(c,()->true,done);
+    }
+    static long triggerGeneration(){return TRIGGERS.get();}
+    static void runJob(Context c,java.util.function.BooleanSupplier active,java.util.function.Consumer<Boolean> done){
+        WORK.execute(()->done.accept(process(c,active)));
+    }
+    private static boolean process(Context c,java.util.function.BooleanSupplier active){
+        initialize(c);
+        if(binding(c).isEmpty())return false;
+        if(!active.getAsBoolean())return true;
+        try{
+            try(LocalStore store=new LocalStore(c)){enqueueIfBound(store);}
+            return run(c,active);
+        }catch(RuntimeException unavailable){return true;}
+        finally{changed();}
     }
     static boolean run(Context c){
+        return run(c,()->true);
+    }
+    private static boolean run(Context c,java.util.function.BooleanSupplier active){
         String b=binding(c);
         if(b.isEmpty())return false;
         final ServerAddress destination;
-        final String credential;
+        final String credential,owner;
         try{
             synchronized(NasSync.class){
                 if(!b.equals(binding(c)))return false;
                 destination=server(c);
+                owner=queueOwner(c);
+                if(owner.equals(prefs(c).getString("revokedOwner","")))return false;
                 credential=token(c);
             }
         }
@@ -240,30 +375,32 @@ public final class NasSync {
         try(LocalStore store=new LocalStore(c)){
             SQLiteDatabase db=store.getWritableDatabase();
             ContentValues recovered=new ContentValues();recovered.put("status","pending");recovered.putNull("claim_generation");
-            db.update("sync_queue",recovered,"status='sending' AND (claim_generation IS NULL OR claim_generation<>?)",new String[]{PROCESS});
+            db.update("sync_queue",recovered,"binding=? AND server=? AND status='sending' AND (claim_generation IS NULL OR claim_generation<>?)",new String[]{b,destination.baseUrl(),PROCESS});
             for(int handled=0;handled<10;handled++){
-                if(!b.equals(binding(c)))return false;
-                Upload row=claim(db,b);
+                if(!owner.equals(queueOwner(c)))return false;
+                if(!active.getAsBoolean())return true;
+                Upload row=claim(db,b,destination.baseUrl());
                 if(row==null)break;
                 try{
                     // Claim is the send boundary. Deletion after this point is explicitly in-flight.
-                    if(!b.equals(binding(c))){release(db,row.id,"pending","连接已暂停");return false;}
+                    if(!owner.equals(queueOwner(c))||!active.getAsBoolean()){release(db,row.id,"pending","连接已暂停");return true;}
                     JSONObject response=request(destination,"PUT","/device/v1/weight/"+row.uuid,row.payload,credential);
                     validateReceipt(response,row.uuid,b);
                     String projection=response.getJSONObject("projection").getString("status");
                     release(db,row.id,projection.equals("manual_conflict")?"manual_conflict":"synced",projection);
                 }catch(HttpError e){
                     if(e.code==401||e.code==403){
+                        prefs(c).edit().putString("revokedOwner",owner).commit();
                         release(db,row.id,"revoked","设备已撤销，请重新配对");
                         ContentValues revoked=new ContentValues();revoked.put("status","revoked");revoked.put("detail","设备已撤销，请重新配对");
-                        db.update("sync_queue",revoked,"binding=? AND status='pending'",new String[]{b});return false;
+                        db.update("sync_queue",revoked,"binding=? AND server=? AND status='pending'",new String[]{b,destination.baseUrl()});return false;
                     }
                     if(e.code==408||e.code==429||e.code>=500){release(db,row.id,"pending","NAS 暂不可用，稍后自动重试");return true;}
                     release(db,row.id,"error",e.code==409?"冲突或 NAS 已删除；不可覆盖，请检查 NAS":"请求被拒绝 "+e.code);
                 }catch(Exception e){release(db,row.id,"pending","连接中断，保留原记录稍后重试");return true;}
             }
-            try(Cursor n=db.rawQuery("SELECT 1 FROM sync_queue WHERE binding=? AND status='pending' LIMIT 1",new String[]{
-                b}
+            try(Cursor n=db.rawQuery("SELECT 1 FROM sync_queue WHERE binding=? AND server=? AND status='pending' LIMIT 1",new String[]{
+                b,destination.baseUrl()}
             )){
                 return n.moveToFirst();
             }
@@ -274,11 +411,11 @@ public final class NasSync {
         Upload(long id,String uuid,String payload){this.id=id;this.uuid=uuid;this.payload=payload;}
     }
     /** A short DB transaction claims exactly one still-existing row; no cursor spans HTTP. */
-    private static Upload claim(SQLiteDatabase db,String binding){
+    private static Upload claim(SQLiteDatabase db,String binding,String destination){
         db.beginTransaction();
         try{
             Upload result=null;
-            try(Cursor row=db.rawQuery("SELECT q.measurement_id,q.uuid,q.payload FROM sync_queue q INNER JOIN measurements m ON m.id=q.measurement_id WHERE q.binding=? AND q.status='pending' ORDER BY q.measurement_id LIMIT 1",new String[]{binding})){
+            try(Cursor row=db.rawQuery("SELECT q.measurement_id,q.uuid,q.payload FROM sync_queue q INNER JOIN measurements m ON m.id=q.measurement_id WHERE q.binding=? AND q.server=? AND q.status='pending' ORDER BY q.measurement_id LIMIT 1",new String[]{binding,destination})){
                 if(row.moveToFirst()){
                     ContentValues claim=new ContentValues();claim.put("status","sending");claim.put("claim_generation",PROCESS);claim.put("detail","发送中，NAS 可能已收到");
                     if(db.update("sync_queue",claim,"measurement_id=? AND status='pending'",new String[]{Long.toString(row.getLong(0))})==1)result=new Upload(row.getLong(0),row.getString(1),row.getString(2));

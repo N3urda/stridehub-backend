@@ -16,6 +16,41 @@ import java.util.UUID;
 
 @SuppressWarnings("deprecation")
 public final class ScaleMigrationTest extends AndroidTestCase {
+    public void testVersionSixUpgradePreservesEveryFrozenFieldAndAddsNullOwner() throws Exception {
+        DisposableDatabaseContext context=new DisposableDatabaseContext(getContext());
+        java.util.Map<String,String> before=new java.util.LinkedHashMap<>();
+        String[] tables={"measurements","measurement_derivations","legacy_imports","sync_queue"};
+        try {
+            try(SQLiteDatabase db=context.openOrCreateDatabase("tinyyumi.db",0,null)){
+                db.execSQL("CREATE TABLE measurements (id INTEGER PRIMARY KEY AUTOINCREMENT,measured_at INTEGER NOT NULL,local_day TEXT NOT NULL,weight REAL NOT NULL,fat REAL,impedance INTEGER NOT NULL DEFAULT 0,bmi REAL,source TEXT NOT NULL,device_address TEXT,raw_packet TEXT,profile_snapshot TEXT,upload_uuid TEXT,captured_time TEXT)");
+                db.execSQL("CREATE TABLE measurement_derivations (measurement_id INTEGER NOT NULL,algorithm_version INTEGER NOT NULL,calculated_at INTEGER NOT NULL,profile_snapshot TEXT,metrics_json TEXT NOT NULL,PRIMARY KEY(measurement_id,algorithm_version))");
+                db.execSQL("CREATE TABLE legacy_imports (fingerprint TEXT PRIMARY KEY,measurement_id INTEGER NOT NULL,original_row TEXT NOT NULL)");
+                db.execSQL("CREATE TABLE sync_queue (measurement_id INTEGER PRIMARY KEY,uuid TEXT NOT NULL,binding TEXT NOT NULL,server TEXT NOT NULL,payload TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'pending',detail TEXT,claim_generation TEXT)");
+                String[] states={"pending","sending","synced","revoked","manual_conflict","error","cancelled_inflight"};
+                for(int i=0;i<states.length;i++){
+                    int id=i+1;
+                    db.execSQL("INSERT INTO measurements VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",new Object[]{id,123456789L+id,"2026-10-21",72.4,21.6,410,22.1,"fixture","local-device","frozen-raw","{\"height\":180}","frozen-uuid-"+id,"2026-10-21T08:00:00+08:00"});
+                    db.execSQL("INSERT INTO measurement_derivations VALUES(?,?,?,?,?)",new Object[]{id,3,123456800L+id,"{\"height\":180}","{\"frozen\":true}"});
+                    db.execSQL("INSERT INTO legacy_imports VALUES(?,?,?)",new Object[]{"fingerprint-"+id,id,"[\"original\",\"row\"]"});
+                    db.execSQL("INSERT INTO sync_queue VALUES(?,?,?,?,?,?,?,?)",new Object[]{id,"frozen-uuid-"+id,"old-device","https://original.example/install","{\"immutable\":"+id+"}",states[i],"original detail","original-process"});
+                }
+                db.setVersion(6);for(String table:tables)before.put(table,snapshot(db,table));
+            }
+            try(LocalStore store=new LocalStore(context)){
+                SQLiteDatabase db=store.getWritableDatabase();assertEquals(7,db.getVersion());
+                for(String table:tables)assertEquals(table+" changed during migration",before.get(table),snapshot(db,table));
+                try(Cursor rows=db.rawQuery("SELECT sync_owner FROM measurements",null)){assertEquals(7,rows.getCount());while(rows.moveToNext())assertTrue(rows.isNull(0));}
+            }
+        }finally{context.cleanup();}
+    }
+    private static String snapshot(SQLiteDatabase db,String table){
+        StringBuilder result=new StringBuilder();
+        try(Cursor rows=db.rawQuery("SELECT * FROM "+table+" ORDER BY rowid",null)){
+            while(rows.moveToNext())for(int i=0;i<rows.getColumnCount();i++)if(!rows.getColumnName(i).equals("sync_owner"))
+                result.append(rows.getColumnName(i)).append(':').append(rows.getType(i)).append(':').append(rows.getString(i)).append('\n');
+        }
+        return result.toString();
+    }
     public void testAtomicImportAndReplay() throws Exception {
         DisposableDatabaseContext context = new DisposableDatabaseContext(getContext());
         try (LocalStore store = new LocalStore(context)) {

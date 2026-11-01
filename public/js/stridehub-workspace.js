@@ -188,8 +188,8 @@
         table($('weight-data-table'), ['日期', '实测 kg', '七日均值 kg', '样本天数', '来源 / 备注'], [...trend].reverse().map(r => [r.date, num(r.weightKg, 2), num(r.average7DaysKg, 2), r.sampleDays, `${r.sourceLabel || r.source} ${r.notes}`]));
         $('measurement-summary').replaceChildren();
         const waist = state.data.measurements.find(r => r.waistCm != null), fat = state.data.measurements.find(r => r.bodyFatPercent != null);
-        metric($('measurement-summary'), '最近腰围', num(waist?.waistCm, 1), 'cm', waist?.date || '所选范围未记录');
-        metric($('measurement-summary'), '最近体脂率', num(fat?.bodyFatPercent, 1), '%', fat?.date || '所选范围未记录');
+        metric($('measurement-summary'), '手动 / 导入腰围', num(waist?.waistCm, 1), 'cm', waist?.date || '所选范围无另行记录');
+        metric($('measurement-summary'), '手动 / 导入体脂率', num(fat?.bodyFatPercent, 1), '%', fat?.date || '手机估算请看上方体成分');
         table($('measurements-table'), ['日期', '来源', '腰围 cm', '体脂率 %', '操作'], state.data.measurements.map(r => [r.date, r.sourceLabel || (r.source === 'user' ? '手动记录' : '导入'), num(r.waistCm, 1), num(r.bodyFatPercent, 1), controls('measurement', 'measurements', r)]));
     }
     const validDate = value => /^\d{4}-\d{2}-\d{2}$/.test(value || '') && Number.isFinite(Date.parse(value)) && new Date(value).toISOString().slice(0, 10) === value;
@@ -273,6 +273,7 @@
             document.querySelectorAll('.data-form [type=date]').forEach(el => { if (!el.value && !state.drafts.has(el.form.id.replace('-form', ''))) el.value = el.name === 'endDate' ? shiftDay(data.today, 60) : data.today; });
             if ($('nutrition-date')) { const input = $('nutrition-date'); input.min = data.from; input.max = data.to; if (!validDate(input.value) || input.value < data.from || input.value > data.to) input.value = data.today >= data.from && data.today <= data.to ? data.today : data.to; state.selectedDay = input.value; }
             app.dataset.view === 'nutrition' ? renderNutrition() : renderWeight();
+            if (app.dataset.view === 'weight') document.dispatchEvent(new CustomEvent('body-composition-range', {detail: {from: data.from, to: data.to, timezone: data.timezone}}));
             updateRangeState();
             status($('data-status'), '');
         } catch (e) { if (generation === state.generation) status($('data-status'), e.message + ' 当前内容未刷新，保留上次读取的记录。', true); }

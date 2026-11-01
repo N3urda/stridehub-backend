@@ -6,6 +6,7 @@ namespace App\Tests\Infrastructure\Mcp;
 
 use App\Domain\Health\HealthContextService;
 use App\Domain\Health\HealthDataService;
+use App\Domain\Health\WeightCollection;
 use App\Domain\Health\WeightRecordService;
 use App\Domain\Training\TrainingRepository;
 use App\Infrastructure\Mcp\McpWorkspace;
@@ -16,6 +17,28 @@ final class McpWorkspaceTest extends AdminWebTestCase
     protected function shouldSeedActivity(): bool
     {
         return false;
+    }
+
+    public function testOverviewIncludesSourcedCompositionWithoutInventingManualMeasurements(): void
+    {
+        $today = $this->call('get_overview', [])['data']['today'];
+        $id = 'b0000000-0000-4000-8000-000000000001';
+        $collection = $this->getContainer()->get(WeightCollection::class);
+        $collection->capture('demo', $id, ['measurementId' => $id, 'measuredAt' => $today.'T08:00:00+08:00', 'localDate' => $today,
+            'weightKg' => 75, 'fatPercent' => 23.1, 'bmi' => 25.95, 'profile' => (object) ['heightCm' => 170],
+            'derived' => (object) ['algorithmVersion' => 'DEMO', 'source' => 'DEMO scale', 'values' => (object) ['BODY_FAT' => 23.1]]]);
+        $overview = $this->call('get_overview', [])['data'];
+        $body = $overview['body']['bodyComposition'];
+        self::assertSame(1, $body['captureCount']);
+        self::assertSame('weight_capture', $body['latest']['source']);
+        self::assertSame('DEMO scale', $body['latest']['sourceLabel']);
+        self::assertSame(23.1, $body['latest']['bodyFatPercent']);
+        self::assertSame(25.95, $body['latest']['capturedBmi']);
+        self::assertSame('estimate', array_column($body['latest']['metrics'], null, 'key')['BODY_FAT']['kind']);
+        self::assertSame([], $overview['body']['measurements']);
+        $collection->delete('demo', $id);
+        self::assertNull($this->call('get_overview', [])['data']['body']['bodyComposition']['latest']);
+        self::assertTrue($this->call('get_history', ['topic' => 'weight_captures', 'from' => $today, 'to' => $today])['data']['records'][0]['deleted']);
     }
 
     public function testCollectedTopicsPreserveSnapshotAndExcludeProviderSecrets(): void

@@ -119,6 +119,8 @@ public final class NativeSession {
         }
         current = new Session(server.baseUrl(), username, token, lifetime);
         loaded = true;
+        // A renewed login only resumes an existing matching device binding; never pairs implicitly.
+        io.stridehub.app.sync.NasSync.requestAutomatic(context);
     }
 
     /** Clear only the mobile credential; retain connection hints and all local weighing records. */

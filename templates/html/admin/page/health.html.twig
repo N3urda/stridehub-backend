@@ -9,10 +9,12 @@
     <link rel="stylesheet" href="{{ relativeUrl(asset('css/stridehub-training.css'))|e('html_attr') }}">
     <link rel="stylesheet" href="{{ relativeUrl(asset('css/stridehub-health.css'))|e('html_attr') }}">
     <link rel="stylesheet" href="{{ relativeUrl(asset('css/stridehub-insights.css'))|e('html_attr') }}">
+    <link rel="stylesheet" href="{{ relativeUrl(asset('css/stridehub-composition.css'))|e('html_attr') }}">
 {% endblock %}
 {% block head_scripts %}
     <script defer src="{{ relativeUrl(asset('js/stridehub-health.js'))|e('html_attr') }}"></script>
     <script defer src="{{ relativeUrl(asset('js/stridehub-data.js'))|e('html_attr') }}"></script>
+    <script defer src="{{ relativeUrl(asset('js/stridehub-composition.js'))|e('html_attr') }}"></script>
 <script defer src="{{ relativeUrl(asset('js/stridehub-body.js'))|e('html_attr') }}"></script>
 <script defer src="{{ relativeUrl(asset('js/stridehub-collection.js'))|e('html_attr') }}"></script>
     <script defer src="{{ relativeUrl(asset('js/stridehub-health-context.js'))|e('html_attr') }}"></script>
@@ -39,6 +41,7 @@
             <details class="health-help"><summary>没有看到睡眠数据？</summary><p>先在手机 Zepp App 中完成手表同步，再点击“立即同步”。未记录的睡眠阶段会显示“未知”，不会填成 0。</p><p id="sleep-setup">正在检查连接状态。</p><p>睡眠记录与手填的每日身体状态分别保存。同步不会覆盖你的睡眠体感、疲劳或疼痛反馈。</p></details>
             <p class="health-footnote">睡眠阶段来自设备估计，缺失记录不代表没有睡眠。</p>
         </section>
+        {% include 'html/stridehub/body-composition.html.twig' %}
         {% include 'html/stridehub/body-extra.html.twig' %}
         <section id="health-context-section" class="health-panel" aria-labelledby="health-context-title">
             <p><a class="button" href="{{ relativeUrl('/admin/health/reports')|e('html_attr') }}">打开体检报告 · 原件与日常跟踪 ↗</a></p>
