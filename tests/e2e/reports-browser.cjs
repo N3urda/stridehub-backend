@@ -120,7 +120,9 @@ async function api(route, method = 'GET', body) {
     await page.locator('#report-attachment').getByRole('link', {name: '浏览 PDF 原件 ↗'}).click();
     const pdfPage = await popupPromise; await pdfPage.waitForLoadState('domcontentloaded');
     // Chrome renders PDFs in its extension frame; the outer document has no embed node.
-    assert.ok(pdfPage.frames().some(frame => frame.url().startsWith('chrome-extension://')), 'The browser PDF viewer opened.');
+    const isPdfViewer = frame => frame.url().startsWith('chrome-extension://');
+    const viewerFrame = pdfPage.frames().find(isPdfViewer) || await pdfPage.waitForEvent('framenavigated', {predicate: isPdfViewer});
+    assert.ok(viewerFrame, 'The browser PDF viewer opened.');
     await pdfPage.waitForTimeout(1500); // Allow the native PDF renderer to paint the page for visual inspection.
     await pdfPage.screenshot({path: path.join(output, 'report-pdf-viewer.png')});
     await pdfPage.close();
