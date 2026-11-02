@@ -168,3 +168,12 @@ adb -s emulator-5556 shell am instrument -w \
 模拟器、合成 BLE 广播、单元测试、静态门禁和构建结果不能替代真实手机收秤、系统权限/后台行为、TalkBack/大字体、NAS 部署及真实 Zepp 账号核对。运行命令的说明不代表这些检查已经通过；最终测试次数、设备、服务版本、产物摘要及未验证范围以实际验收报告为准。
 
 本目录与仓库使用相同的 GPL-3.0-or-later 许可证，见根目录 `LICENSE`。
+
+
+## 图表工作台（0.4.0）
+
+总览、身体、称重、运动、计划共用同一个原生导航容器。称重不再打开另一个 Activity；切换保留称重子页、页面滚动和未提交表单，离开称重页会暂停蓝牙接收。离线称重和桌面快捷方式继续可用。
+
+总览展示体重趋势、每日步数柱、睡眠分期堆叠柱和静息心率；身体历史列表默认收起；饮食使用能量柱、实际摄入/目标横条与营养素供能环；运动列表提供本页类型分布和单次距离柱。跑步周/月图支持指标切换，计划展示训练状态分布。缺测日期留空、未知营养项不填零，分页运动图明确只覆盖当前页。
+
+隔离 UI 验收可用 `./gradlew -PproductTests assembleDebug assembleDebugAndroidTest` 构建独立包 `io.stridehub.app.producttests`。`NativeProductPresentationTest` 仅使用合成离线缓存与回环地址；`WeighingNavigationTest` 验证单 Activity 导航、旋转恢复及跨 Tab 草稿保留。截图不代表实体秤或个人手机验收。

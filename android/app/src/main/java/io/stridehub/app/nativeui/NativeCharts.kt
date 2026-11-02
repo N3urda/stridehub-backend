@@ -64,15 +64,10 @@ object ChartData {
         if(known.isEmpty()) Text("暂无实际测量值",color=MaterialTheme.colorScheme.onSurfaceVariant)
         else {
             val min=known.min();val max=known.max();val low=if(min==max) min-1 else min;val high=if(min==max) max+1 else max
-            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(24.dp)) {
-                listOf("最低" to min,"最高" to max).forEach {(label,value)->Column(verticalArrangement=Arrangement.spacedBy(3.dp)) {
-                    Text(label,style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("%.1f".format(value),style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.SemiBold)
-                }}
-            }
+            Text("最低 ${"%.1f".format(min)}  ·  最高 ${"%.1f".format(max)}  ·  ${known.size} 个有效点",style=MaterialTheme.typography.labelMedium,color=MaterialTheme.colorScheme.onSurfaceVariant)
             val grid=MaterialTheme.colorScheme.outlineVariant
             val xs=rows.mapIndexed {i,row->ChartData.x(row,i)};val xLow=xs.minOrNull() ?: 0.0;val xHigh=xs.maxOrNull()?.takeIf {it>xLow} ?: xLow+1
-            Canvas(Modifier.fillMaxWidth().height(155.dp).semantics {contentDescription="$title，最低 ${"%.1f".format(min)}，最高 ${"%.1f".format(max)}，${known.size} 个有效测量点。缺失数据留空。"}.pointerInput(rows,key){detectTapGestures {point->val target=xLow+point.x/size.width*(xHigh-xLow);selected=xs.indices.minByOrNull {abs(xs[it]-target)} ?: -1}}) {
+            Canvas(Modifier.fillMaxWidth().height(132.dp).semantics {contentDescription="$title，最低 ${"%.1f".format(min)}，最高 ${"%.1f".format(max)}，${known.size} 个有效测量点。缺失数据留空。"}.pointerInput(rows,key){detectTapGestures {point->val target=xLow+point.x/size.width*(xHigh-xLow);selected=xs.indices.minByOrNull {abs(xs[it]-target)} ?: -1}}) {
                 (0..3).forEach {i->val y=size.height*i/3;drawLine(grid,Offset(0f,y),Offset(size.width,y),1f)}
                 fun position(index:Int)=Offset(((xs[index]-xLow)/(xHigh-xLow)*size.width).toFloat(),(size.height-(values[index]!!-low)/(high-low)*size.height).toFloat())
                 if(selected in values.indices) {
@@ -88,8 +83,9 @@ object ChartData {
                 }
 
             }
+            ChartRangeLabels(rows.first().text("date",rows.first().text("at",rows.first().text("seconds",""))),rows.last().text("date",rows.last().text("at",rows.last().text("seconds",""))))
             if(selected in rows.indices) Text("${rows[selected].text("date",rows[selected].text("at",rows[selected].text("seconds","样本 ${selected+1}")))} · ${values[selected]?.let {"%.2f".format(it)} ?: "缺失"}",style=MaterialTheme.typography.bodySmall)
-            Text("${known.size} 个有效点 · 点按查看 · 缺失值保留空白",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+
         }
     }}
 }

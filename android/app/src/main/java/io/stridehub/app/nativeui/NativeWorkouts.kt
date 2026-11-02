@@ -40,7 +40,7 @@ import kotlin.math.roundToLong
     val stackActions=LocalDensity.current.fontScale>=1.5f
     val path="/api/v1/mobile/workouts?page=$page&limit=30&from=$from&to=$to&sportType=$sport"
     NativeData(vm,path) {data->PageColumn {
-        SectionTitle(if(management) "运动记录管理" else "每一次运动","留下运动，也看见积累。")
+        SectionTitle(if(management) "运动记录管理" else "每一次运动",null)
         Card(colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.primaryContainer),modifier=Modifier.fillMaxWidth()) {
             Column(Modifier.padding(20.dp),verticalArrangement=Arrangement.spacedBy(18.dp)) {
                 Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
@@ -96,8 +96,12 @@ import kotlin.math.roundToLong
         }
         val pending=data.optInt("pendingDuplicates")
         if(pending>0) InfoCard("$pending 条运动待核对","进入带有「待核对」标记的运动确认来源；核对完成前，累计总量保持未知。")
-        SectionTitle("运动记录","按时间排列 · 点开查看曲线与轨迹")
         val rows=data.array("records")
+        if(pending==0 && rows.isNotEmpty()) {
+            HorizontalValues("本页运动类型 · ${rows.size} 条",rows.groupBy {sportLabel(it.text("sportType"))}.map {(label,items)->Triple(label,items.size.toDouble(),ChartPalette.activity)},"次")
+            DailyBars("本页单次距离 · km",rows.reversed().map {r->JSONObject().put("date",r.text("startAt").take(10)).put("value",DashboardData.number(r,"distanceKm") ?: JSONObject.NULL)},"value","km")
+        }
+        SectionTitle("运动记录","点开查看曲线、分段与轨迹")
         if(rows.isEmpty()) {
             InfoCard("还没有这一时段的记录","可以调整日期与运动类型，或从设备和文件中添加运动。")
             TextButton(onClick={showDates=true}) {Text("调整日期范围")}

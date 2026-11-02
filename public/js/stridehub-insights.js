@@ -6,8 +6,8 @@
     const initialDays = Number(new URL(location.href).searchParams.get('days'));
     const state = {days: [7, 30, 90].includes(initialDays) ? initialDays : 30, generation: 0, zone: '', today: '', from: '', syncing: false, syncStatus: null, sleepRecords: [], dailyRecords: [], sources: {}};
     const groups = {
-        sleep: ['overview-sleep-chart'], daily: ['activity-metrics', 'vital-metrics', 'steps-chart'],
-        workouts: ['running-metrics', 'recent-activities'], workspace: ['overview-data-strip'], plans: ['overview-plans'],
+        sleep: ['overview-sleep-chart'], daily: ['activity-metrics', 'vital-metrics', 'steps-chart', 'overview-heart-chart'],
+        workouts: ['running-metrics', 'recent-activities', 'overview-workout-chart', 'overview-workout-calendar'], workspace: ['overview-data-strip'], plans: ['overview-plans'],
         collection: ['overview-collection'], sync: ['sync-description']
     };
     function updateSyncButton() {
@@ -45,7 +45,7 @@
         stages($('sleep-stage-bar'), $('sleep-stage-legend'), sleep);
         const values = records.filter(r => Number.isFinite(r.totalMinutes));
         $('sleep-average').textContent = values.length ? `${values.length} 晚 · 平均 ${minutes(Math.round(values.reduce((n, r) => n + r.totalMinutes, 0) / values.length))}` : '缺失的夜晚保持空白';
-        bars($('overview-sleep-chart'), calendar(state.from, state.today, records, 'hours', r => Number.isFinite(r.totalMinutes) ? r.totalMinutes / 60 : null), 'hours', {color: '#9c9de8', unit: ' 小时', label: '睡眠时长趋势，未记录的夜晚留空'});
+        window.StrideHubCharts.bars($('overview-sleep-chart'), window.StrideHubCharts.sleepRows(records, state.from, state.today), {series: window.StrideHubCharts.sleepSeries, stacked: true, unit: '小时', label: '逐晚睡眠分期 · 累计时长，不代表发生顺序'});
     }
     function renderDaily(records) {
         state.dailyRecords = records; renderCoverage();
@@ -61,6 +61,7 @@
         metric(vitals, hr?.heartRate?.restingBpm != null ? '静息心率' : '日平均心率', num(hr?.heartRate?.restingBpm ?? hr?.heartRate?.averageBpm), 'bpm', hr?.date || '未提供');
         metric(vitals, '平均血氧', num(oxygen?.oxygen?.averagePercent, 1), '%', oxygen?.date || '未提供');
         metric(vitals, '压力', num(stress?.stress?.average), '', stress?.date || '未提供');
+        window.StrideHubCharts.trend($('overview-heart-chart'), calendar(state.from, state.today, records, 'resting', r => r.heartRate?.restingBpm), {series: [{key: 'resting', label: '静息心率', color: '#ca5c72'}], unit: 'bpm', label: '静息心率趋势'});
         $('vitals-caption').textContent = hr?.heartRate?.sampleCount ? `心率日记录包含 ${num(hr.heartRate.sampleCount)} 个有效采样；各指标日期可能不同。` : '设备没有提供的指标保持未知，不补零或生成健康评分。';
     }
     function renderCoverage() {
@@ -76,6 +77,12 @@
         metric($('running-metrics'), '累计运动', num(s.distanceKm, 1), 'km');
         metric($('running-metrics'), '运动次数', num(s.count), '次');
         metric($('running-metrics'), '运动时间', num(s.movingSeconds == null ? null : s.movingSeconds / 3600, 1), '小时');
+        const charts = window.StrideHubCharts;
+        charts.bars($('overview-workout-chart'), data.weeks, {series: [{key: 'distanceKm', label: '周距离', color: '#178b91'}], unit: 'km', label: '每周运动距离'});
+        const days = new Map();
+        for (const row of data.records) { const date = dateInZone(new Date(row.startAt), state.zone); days.set(date, !Number.isFinite(row.durationMinutes) || (days.has(date) && days.get(date) === null) ? null : (days.get(date) || 0) + row.durationMinutes); }
+        const activityDays = calendar(state.from, state.today, [...days].map(([date, value]) => ({date, value})), 'value', r => r.value);
+        charts.heatmap($('overview-workout-calendar'), data.pendingDuplicates ? [] : activityDays, {key: 'value', label: '运动时长', unit: '分钟'});
         $('recent-activities').replaceChildren();
         for (const item of data.records.slice(0, 3)) {
             const source = item.sources[0], row = node('a', 'activity-row'); row.href = base + '/running?' + (source.source === 'zepp' ? 'zeppWorkout=' : 'activityId=') + encodeURIComponent(source.id);

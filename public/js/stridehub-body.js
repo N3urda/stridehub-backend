@@ -3,7 +3,7 @@
     const section = document.getElementById('body-weight'); if (!section) return;
     const {node, svg, request, num, dateInZone, shiftDay, time} = window.StrideHubData;
     const $ = id => document.getElementById(id), app = $('health-app'), base = section.dataset.healthBase.replace(/\/$/, ''), form = $('weight-form');
-    const state = {version: null, records: [], daily: [], shown: 7, busy: false, dirty: false, blocked: false, zone: 'Asia/Shanghai', requestId: 0, weightRequest: 0, syncing: false, syncStatus: null};
+    const state = {version: null, records: [], daily: [], dailyRange: null, shown: 7, busy: false, dirty: false, blocked: false, zone: 'Asia/Shanghai', requestId: 0, weightRequest: 0, syncing: false, syncStatus: null};
     function updateSyncButton() {
         const data = state.syncStatus, button = $('body-zepp-sync');
         button.disabled = state.syncing || !data?.configured || !data?.state || ['syncing', 'auth_required', 'not_configured', 'unknown'].includes(data.state);
@@ -21,16 +21,9 @@
         $('weight-save-state').textContent = state.busy ? '正在保存' : state.dirty ? '尚未保存' : '手动补记';
     };
     function drawWeights(records) {
-        const target = $('weight-chart'); target.replaceChildren(); const rows = [...records].sort((a, b) => a.date.localeCompare(b.date));
-        if (!rows.length) { target.append(node('p', 'empty-note', '从第一条记录开始。每次称重，都是了解变化的新线索。')); return; }
-        const width = 600, height = 130, min = Math.floor(Math.min(...rows.map(r => r.weightKg)) - 1), max = Math.ceil(Math.max(...rows.map(r => r.weightKg)) + 1);
-        const first = Date.parse(rows[0].date), last = Date.parse(rows.at(-1).date), x = r => first === last ? width / 2 : 42 + (Date.parse(r.date) - first) / (last - first) * (width - 58), y = r => 98 - (r.weightKg - min) / (max - min) * 78;
-        const chart = svg('svg', {viewBox: `0 0 ${width} ${height}`, role: 'img', 'aria-label': `体重记录，纵轴 ${min} 至 ${max} 千克`});
-        for (const value of [min, max]) { const yy = y({weightKg: value}); chart.append(svg('line', {x1: 38, x2: width, y1: yy, y2: yy, class: 'chart-grid'}), svg('text', {x: 0, y: yy + 4}, value + ' kg')); }
-        if (rows.length > 1) chart.append(svg('polyline', {points: rows.map(r => `${x(r)},${y(r)}`).join(' '), fill: 'none', stroke: '#64b3a2', 'stroke-width': 2}));
-        for (const row of rows) { const dot = svg('circle', {cx: x(row), cy: y(row), r: 4, fill: '#37a891', stroke: '#fff', 'stroke-width': 2}); dot.append(svg('title', {}, `${row.date}：${row.weightKg} kg`)); chart.append(dot); }
-        chart.append(svg('text', {x: 42, y: 122}, rows[0].date), svg('text', {x: width, y: 122, 'text-anchor': 'end'}, rows.at(-1).date)); target.append(chart);
+        window.StrideHubCharts.trend($('weight-chart'), records, {series:[{key:'weightKg',label:'实测体重',color:'#db8639'}],unit:'kg',label:'体重实测记录'});
     }
+
     function renderWeight() {
         const rows = state.records, target = $('weight-metrics'); target.replaceChildren(); const latest = rows[0];
         window.StrideHubData.metric(target, '最近一次', num(latest?.weightKg, 2), 'kg', latest?.date || '尚未记录');
@@ -80,6 +73,13 @@
     }
     function renderDaily() {
         const target = $('body-daily-records'); target.replaceChildren();
+        const charts = window.StrideHubCharts, range = $('health-range');
+        const from = state.dailyRange?.from, to = state.dailyRange?.to;
+        if (from && to) {
+            charts.heatmap($('body-activity-calendar'), window.StrideHubData.calendar(from,to,state.daily,'steps',r=>r.activity?.steps), {key:'steps',unit:'步',label:'每日步数'});
+            charts.trend($('body-resting-chart'), window.StrideHubData.calendar(from,to,state.daily,'resting',r=>r.heartRate?.restingBpm), {series:[{key:'resting',label:'静息心率',color:'#ca5c72'}],unit:'bpm',label:'静息心率变化'});
+        }
+
         if (!state.daily.length) target.append(node('p', 'empty-note', '还没有详细日记录。同步后可展开查看每天的心率、活动与数据来源。'));
         for (const day of state.daily.slice(0, state.shown)) {
             const details = node('details', 'data-day-entry'); const summary = node('summary', '', `${day.date} · ${num(day.activity?.steps)} 步 · ${day.heartRate?.sampleCount == null ? '未提供心率采样' : day.heartRate.sampleCount + ' 个心率采样'}`); details.append(summary);
@@ -106,9 +106,11 @@
         const generation = ++state.requestId; const range = $('health-range'); const today = dateInZone(new Date(), state.zone); const from = range.elements.from.value || shiftDay(today, -89), to = range.elements.to.value || today;
         state.syncStatus = null; updateSyncButton(); $('body-zepp-status').textContent = '正在检查连接状态…';
         const [records, sync] = await Promise.allSettled([request(base + `/zepp/days?from=${from}&to=${to}`), request(base + '/zepp/status')]); if (generation !== state.requestId) return;
-        if (records.status === 'fulfilled') { state.daily = records.value.records; state.shown = 7; renderDaily(); }
+        if (records.status === 'fulfilled') { state.daily = records.value.records; state.dailyRange = {from, to}; state.shown = 7; renderDaily(); }
         else {
-            state.daily = []; state.shown = 7; $('daily-more').hidden = true;
+            state.daily = []; state.dailyRange = {from, to}; state.shown = 7; renderDaily(); $('daily-more').hidden = true;
+            for (const id of ['body-activity-calendar','body-resting-chart']) $(id).replaceChildren(node('p','viz-empty health-error','这段时间读取失败，请展开下方每日记录重试。'));
+            $('body-daily-records').closest('details').open = true;
             const retry = node('button', 'hub-button', '重新读取每日记录'); retry.type = 'button'; retry.addEventListener('click', () => { retry.disabled = true; loadDaily(); });
             $('body-daily-records').replaceChildren(node('p', 'empty-note health-error', `${from} 至 ${to} 的记录读取失败。${records.reason.message}`), retry);
         }

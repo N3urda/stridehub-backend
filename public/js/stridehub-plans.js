@@ -4,9 +4,11 @@
     const {node, request, status, time, shiftDay, dateInZone, metric, num} = window.StrideHubData;
     const $ = id => document.getElementById(id), base = app.dataset.base.replace(/\/$/, '');
     const state = {plans: [], sessions: [], workspace: null, from: '', to: '', category: 'all', zone: 'Asia/Shanghai', today: '', generation: 0, busy: false, blocked: false, loading: false};
+    const visuals = window.StrideHubCharts;
     const categoryNames = {weight: '减重计划', sleep: '作息计划', nutrition: '饮食计划', recovery: '恢复计划', general: '生活计划'};
     const statuses = {draft: '草稿', active: '进行中', paused: '已暂停', completed: '已完成', cancelled: '已取消', planned: '已安排', skipped: '已跳过'};
     function render() {
+        renderCharts();
         const stream = $('plan-stream'); stream.replaceChildren();
         if (['all', 'training', 'nutrition'].includes(state.category) && state.workspace) {
             const card = node('section', 'hub-plan-card agenda-card'), rows = state.sessions;
@@ -14,7 +16,7 @@
             const heading = node('div', 'section-title'); heading.append(node('h2', '', state.category === 'all' ? '每日训练与饮食' : showTraining ? '训练日程' : '饮食日程'), node('span', 'subtle small', `${state.from} → ${state.to} · ${state.zone}`)); card.append(heading);
             const calendar = node('div', 'training-calendar'), types = {easy: '轻松跑', long: '长距离', tempo: '节奏跑', interval: '间歇', recovery: '恢复跑', race: '比赛', rest: '休息'};
             for (let date = state.from; date <= state.to; date = shiftDay(date, 1)) {
-                const day = node('article', 'training-day' + (date === state.today ? ' is-today' : ''));
+                const day = node('article', 'training-day' + (date === state.today ? ' is-today' : '')); day.dataset.date = date; day.tabIndex = -1;
                 const weekday = new Intl.DateTimeFormat('zh-CN', {weekday: 'short', timeZone: 'UTC'}).format(new Date(date + 'T12:00:00Z'));
                 const header = node('div', 'agenda-day-heading'); header.append(node('strong', '', date.slice(5)), node('span', '', date === state.today ? '今天' : weekday)); day.append(header);
                 const sessions = showTraining ? rows.filter(r => dateInZone(new Date(r.startAt), state.zone) === date) : [];
@@ -36,7 +38,8 @@
                 if (!sessions.length && !plans.length && !(showNutrition && actual?.mealCount > 0)) day.append(node('p', 'agenda-empty', '暂无安排'));
                 calendar.append(day);
             }
-            card.append(calendar); stream.append(card);
+            if ((Date.parse(state.to) - Date.parse(state.from)) / 86400000 >= 14) { const details = node('details', 'data-disclosure'); details.append(node('summary', '', '查看逐日安排与执行入口'), calendar); card.append(details); } else card.append(calendar);
+            stream.append(card);
         }
         if (['all', 'weight'].includes(state.category) && state.workspace) {
             const goals = state.workspace.weight.goals.filter(g => g.startDate <= state.to && g.endDate >= state.from);
@@ -44,7 +47,7 @@
             goals.forEach(g => { const card = node('section', 'hub-plan-card agenda-goal'); card.dataset.weightGoalId = g.id; const head = node('div', 'plan-head'); head.append(node('h2', '', g.title), node('span', 'plan-badge', statuses[g.status])); card.append(node('span', 'plan-type', '减重目标'), head, node('p', 'subtle small', `${g.startDate} → ${g.endDate}`));
                 card.append(node('p', 'plan-goal', `${num(g.startWeightKg, 2)} → ${num(g.targetWeightKg, 2)} kg`)); const p = g.progress;
                 card.append(node('p', 'subtle small', p.measuredAt ? `截至 ${p.measuredAt} 实测 ${num(p.currentWeightKg, 2)} kg · 距目标 ${num(p.remainingKg, 2)} kg` : '目标期间尚无实测体重'));
-                g.milestones.filter(m => m.date >= state.from && m.date <= state.to).forEach(m => card.append(node('p', 'agenda-milestone', `${m.date} 阶段目标 · ${num(m.weightKg, 2)} kg`)));
+                g.milestones.filter(m => m.date >= state.from && m.date <= state.to).forEach(m => { const milestone = node('p', 'agenda-milestone', `${m.date} 阶段目标 · ${num(m.weightKg, 2)} kg`); milestone.dataset.date = m.date; milestone.tabIndex = -1; card.append(milestone); });
                 const link = node('a', 'text-link', '查看趋势与目标 →'); link.href = base + '/weight'; card.append(link); stream.append(card);
             });
         }
@@ -54,10 +57,10 @@
             card.append(node('span', 'plan-type', `${categoryNames[plan.category] || '生活计划'} · ${plan.sourceLabel || ({ai: 'AI 制定', user: '自己记录', clinician: '专业人员'}[plan.source])}`));
             const head = node('div', 'plan-head'); head.append(node('h2', '', plan.title), node('span', 'plan-badge', statuses[plan.status] || plan.status)); card.append(head);
             card.append(node('p', 'subtle small', `${plan.startDate} 至 ${plan.endDate || '持续记录'} · 更新于 ${time(plan.updatedAt, state.zone)}`), node('p', 'plan-goal', plan.goal));
-            if (plan.rationale) card.append(node('p', 'plan-rationale', '制定依据：' + plan.rationale));
+            if (plan.rationale) { const details = node('details', 'data-disclosure'); details.append(node('summary', '', '制定依据'), node('p', 'plan-rationale', plan.rationale)); card.append(details); }
             const list = node('ul', 'hub-plan-items');
             for (const entry of plan.items) {
-                const li = node('li'), button = node('button', 'item-check' + (entry.status === 'completed' ? ' done' : ''), entry.status === 'completed' ? '✓' : entry.status === 'skipped' ? '−' : ''); button.type = 'button'; button.setAttribute('aria-label', (entry.status === 'completed' ? '撤销完成：' : '标记完成：') + entry.title); button.setAttribute('aria-pressed', String(entry.status === 'completed')); button.disabled = state.busy || state.blocked || state.loading || ['draft', 'paused', 'cancelled', 'completed'].includes(plan.status);
+                const li = node('li'); if (entry.date) { li.dataset.date = entry.date; li.tabIndex = -1; } const button = node('button', 'item-check' + (entry.status === 'completed' ? ' done' : ''), entry.status === 'completed' ? '✓' : entry.status === 'skipped' ? '−' : ''); button.type = 'button'; button.setAttribute('aria-label', (entry.status === 'completed' ? '撤销完成：' : '标记完成：') + entry.title); button.setAttribute('aria-pressed', String(entry.status === 'completed')); button.disabled = state.busy || state.blocked || state.loading || ['draft', 'paused', 'cancelled', 'completed'].includes(plan.status);
                 button.addEventListener('click', () => toggle(plan, entry));
                 const content = node('div', 'item-content'); content.append(node('strong', '', entry.title), node('p', '', [entry.date || '未指定日期', entry.time, entry.status === 'skipped' ? '已跳过' : '', entry.notes].filter(Boolean).join(' · '))); li.append(button, content); list.append(li);
             }
@@ -66,6 +69,36 @@
             stream.append(card);
         }
         if (!plans.length && ['sleep', 'other'].includes(state.category)) { const empty = node('section', 'hub-plan-card'); empty.append(node('h2', '', state.category === 'all' ? '尚无生活计划' : '这个分类还没有计划'), node('p', 'empty-note', '已保存的生活计划将在这里显示；饮食与减重的量化目标可在对应页面查看。')); stream.append(empty); }
+    }
+    function renderCharts() {
+        if (!state.workspace) { $('plans-visuals').hidden = true; return; }
+        $('plans-visuals').hidden = false;
+        const training = ['all', 'training'].includes(state.category), nutrition = ['all', 'nutrition'].includes(state.category);
+        $('plans-distribution-panel').hidden = !training;
+        $('plans-completion-panel').hidden = !training;
+        $('plans-nutrition-panel').hidden = !nutrition;
+        const inspect = row => {
+            const date = typeof row === 'string' ? row : row.date;
+            const item = [...document.querySelectorAll('#plan-stream [data-date]')].find(el => el.dataset.date === date);
+            if (item) { const details = item.closest('details'); if (details) details.open = true; item.focus({preventScroll: true}); item.scrollIntoView({block: 'center', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth'}); }
+        };
+        const daily = [];
+        const sessions = state.sessions.filter(s => s.type !== 'rest' && s.status !== 'cancelled');
+        const selectedPlans = state.plans.filter(p => state.category === 'all' || p.category === state.category || (state.category === 'other' && !['weight', 'sleep', 'nutrition'].includes(p.category)));
+        for (let date = state.from; date <= state.to; date = shiftDay(date, 1)) {
+            const entries = sessions.filter(s => dateInZone(new Date(s.startAt), state.zone) === date);
+            const totals = status => entries.filter(s => s.status === status).reduce((sum, s) => sum + (Number.isFinite(s.durationMinutes) ? s.durationMinutes : 0), 0);
+            const mealPlans = state.workspace.nutrition.plans.filter(p => p.date === date && p.status === 'active');
+            const items = selectedPlans.flatMap(p => p.items).filter(i => i.date === date);
+            const milestones = ['all', 'weight'].includes(state.category) ? state.workspace.weight.goals.filter(g => !['cancelled', 'draft'].includes(g.status)).flatMap(g => g.milestones).filter(m => m.date === date) : [];
+            daily.push({date, planned: totals('planned'), completed: totals('completed'), skipped: totals('skipped'), count: (training ? entries.length : 0) + (nutrition ? mealPlans.length : 0) + items.length + milestones.length});
+        }
+        if (training) {
+            visuals.bars($('plans-distribution-chart'), daily, {series: [{key: 'completed', label: '已完成安排', color: '#247F75'}, {key: 'planned', label: '待完成安排', color: '#437FC1'}, {key: 'skipped', label: '已跳过', color: '#ADB7C5'}], unit: '分钟', label: '每日训练计划时长，按执行状态分组', stacked: true, onSelect: inspect});
+            visuals.ring($('plans-completion-chart'), [{label: '已完成', value: sessions.filter(s => s.status === 'completed').length, color: '#247F75'}, {label: '待完成', value: sessions.filter(s => s.status === 'planned').length, color: '#437FC1'}, {label: '已跳过', value: sessions.filter(s => s.status === 'skipped').length, color: '#ADB7C5'}], {unit: '次', label: '训练安排执行状态'});
+        }
+        visuals.heatmap($('plans-calendar-chart'), daily, {key: 'count', unit: '项', label: '所选分类的每日安排数量', onSelect: inspect});
+        if (nutrition) visuals.bars($('plans-nutrition-chart'), state.workspace.nutrition.days.map(d => ({date: d.date, actual: d.actualLogged.energyKcal, target: d.targets.energyKcal})), {series: [{key: 'actual', label: '已记录摄入', color: '#247F75'}, {key: 'target', label: '计划目标', color: '#A8B4C6'}], unit: 'kcal', label: '饮食计划与已记录摄入', onSelect: inspect});
     }
     async function toggle(plan, entry) {
         if (state.busy || state.blocked || state.loading) return; ++state.generation; state.busy = true; lockRange(); render(); status($('plans-status'), '正在保存完成状态…');

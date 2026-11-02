@@ -57,10 +57,26 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Collections;
 
-public final class WeighingActivity extends ComponentActivity implements ScaleClient.Listener {
+public class WeighingActivity extends ComponentActivity implements ScaleClient.Listener {
     private int PAPER=0xfff2f5f9, INK=0xff132b46, MUTED=0xff57657a, GREEN=0xff4666ed, SOFT=0xffe8ecfc, LINE=0xffe1e5ef;
     private int SURFACE=Color.WHITE, ON_ACCENT=Color.WHITE;
     private boolean darkTheme;
+    private boolean weighingVisible = true;
+    protected boolean embeddedWeighing() { return false; }
+    private void refreshAppearance() {
+        darkTheme=resolveDarkTheme(this);
+        int[] colors=NativeAppearance.weighingColors(darkTheme);
+        PAPER=colors[0];INK=colors[1];MUTED=colors[2];GREEN=colors[3];SOFT=colors[4];LINE=colors[5];SURFACE=colors[6];ON_ACCENT=colors[7];
+        if(shell!=null) shell.setBackgroundColor(PAPER);
+        if(nav!=null) nav.setBackgroundColor(PAPER);
+    }
+    public View weighingView() { return shell; }
+    public void setWeighingVisible(boolean visible) {
+        if (weighingVisible == visible) return;
+        weighingVisible = visible;
+        if (visible) { refreshAppearance(); render(); scroll.post(() -> scroll.scrollTo(0,pageScroll[page])); maybeAutoStart(); }
+        else { pageScroll[page] = scroll.getScrollY(); pauseCapture(); }
+    }
     private final int[] pageScroll=new int[4];
     private static final int PERMISSIONS=51, ENABLE_BT=52, EXPORT=53, IMPORT=54;
     private LocalStore store;
@@ -96,6 +112,7 @@ public final class WeighingActivity extends ComponentActivity implements ScaleCl
         darkTheme=resolveDarkTheme(this);
         setTheme(darkTheme?android.R.style.Theme_Material_NoActionBar:android.R.style.Theme_Material_Light_NoActionBar);
         super.onCreate(saved);
+        weighingVisible = !embeddedWeighing();
         int[] colors=NativeAppearance.weighingColors(darkTheme);
         PAPER=colors[0];INK=colors[1];MUTED=colors[2];GREEN=colors[3];SOFT=colors[4];LINE=colors[5];SURFACE=colors[6];ON_ACCENT=colors[7];
         if(saved!=null){int[] positions=saved.getIntArray("pageScroll");if(positions!=null)System.arraycopy(positions,0,pageScroll,0,Math.min(4,positions.length));}
@@ -123,7 +140,7 @@ public final class WeighingActivity extends ComponentActivity implements ScaleCl
         scroll=new ScrollView(this); scroll.setFillViewport(true); scroll.setClipToPadding(false);
         content=column(); content.setPadding(dp(20),dp(12),dp(20),dp(28)); scroll.addView(content);
         shell.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
-        WeighingShell.install(this,shell);
+        if (!embeddedWeighing()) WeighingShell.install(this,shell);
     }
     private void render() {
         syncLabels.clear();records=store.all(); content.removeAllViews(); statusLabel=null; stageTitle=null; measureButton=null; liveValue=null; liveCaption=null; liveFat=null; liveBmi=null; liveSource=null;liveDetail=null;liveReading=null;liveMetrics=null;preparation=null;
@@ -489,7 +506,7 @@ public final class WeighingActivity extends ComponentActivity implements ScaleCl
         try{return location!=null && (location.isProviderEnabled(LocationManager.GPS_PROVIDER)||location.isProviderEnabled(LocationManager.NETWORK_PROVIDER));}catch(Exception e){return false;}
     }
     private void maybeAutoStart(){
-        if(!foreground||page!=0||permissionPending||client.isBusy()||sessionFinished||!autoResume||manualDialog!=null)return;
+        if(!foreground||!weighingVisible||page!=0||permissionPending||client.isBusy()||sessionFinished||!autoResume||manualDialog!=null)return;
         if(store.device()==null)return;
         Profile profile=store.profile();
         if(profile==null||profile.validationError(System.currentTimeMillis())!=null){status="请先补充身体资料，再开始称重。";render();return;}
@@ -499,6 +516,7 @@ public final class WeighingActivity extends ComponentActivity implements ScaleCl
         beginScan(profile);
     }
     private void startMeasurement() {
+        if (!weighingVisible) return;
         autoResume=true;sessionFinished=false;
         Profile profile=store.profile();
         if(profile==null||profile.validationError(System.currentTimeMillis())!=null){showProfile(this::startMeasurement);return;}
@@ -625,7 +643,7 @@ public final class WeighingActivity extends ComponentActivity implements ScaleCl
     @Override protected void onStart(){super.onStart();foreground=true;io.stridehub.app.sync.NasSync.addListener(syncChanged);if(store!=null&&shell!=null)render();io.stridehub.app.sync.NasSync.onForeground(this);}
     @Override protected void onResume(){
         super.onResume();
-        if(externalSettings){
+        if(externalSettings && weighingVisible){
             externalSettings=false;permissionPending=false;
             // Returning from Settings is not consent to show the same permission prompt again.
             if(hasBlePermissions()&&bluetoothEnabled()&&locationReady())startMeasurement();
@@ -633,11 +651,14 @@ public final class WeighingActivity extends ComponentActivity implements ScaleCl
         }else maybeAutoStart();
     }
     @Override protected void onStop() {
-        foreground=false;io.stridehub.app.sync.NasSync.removeListener(syncChanged);io.stridehub.app.sync.NasSync.onBackground(this);boolean interrupted=client.isBusy();client.stop();currentWeight=null;pendingReview=null;
+        foreground=false;io.stridehub.app.sync.NasSync.removeListener(syncChanged);io.stridehub.app.sync.NasSync.onBackground(this);pauseCapture();super.onStop();
+    }
+    private void pauseCapture() {
+        boolean interrupted=client.isBusy();client.stop();currentWeight=null;pendingReview=null;
         if(deviceDialog!=null&&deviceDialog.isShowing())deviceDialog.dismiss();deviceList=null;pickerStatus=null;
         if(sessionFinished){captureState=ScaleClient.State.SAVED;status="测量完成，已保存到本机。";}
         if(interrupted&&!sessionFinished){captureState=ScaleClient.State.IDLE;status=autoResume?"接收已暂停，返回称重页会继续等待。":"已暂停接收。";}
-        updateAwake();super.onStop();
+        updateAwake();
     }
     @Override protected void onDestroy(){client.stop();store.close();super.onDestroy();}
     @Override protected void onSaveInstanceState(Bundle out){super.onSaveInstanceState(out);pageScroll[page]=scroll.getScrollY();out.putIntArray("pageScroll",pageScroll);out.putInt("page",page);out.putInt("days",days);out.putString("metric",selectedMetric.name());out.putInt("weightAverageDays",weightAverageDays);out.putBoolean("forcePicker",forcePicker);out.putString("exportKind",exportKind);out.putLong("lastSavedId",lastSavedId);out.putBoolean("autoResume",autoResume);out.putBoolean("externalSettings",externalSettings);out.putBoolean("permissionPending",permissionPending);out.putBoolean("sessionFinished",sessionFinished);if(manualDialog!=null&&manualDialog.isShowing()){out.putBoolean("manualOpen",true);out.putString("manualWeight",manualWeight.getText().toString());out.putString("manualFat",manualFat.getText().toString());out.putLong("manualTime",manualTime.getTimeInMillis());}}

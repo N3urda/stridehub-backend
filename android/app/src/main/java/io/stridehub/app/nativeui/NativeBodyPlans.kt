@@ -23,15 +23,8 @@ import java.time.LocalDate
     var allDaily by rememberSaveable(from,to) {mutableStateOf(false)}
     val openWeighing=LocalOpenWeighing.current
     NativeData(vm,"/api/v1/health/workspace?from=$from&to=$to") {data->PageColumn {
-        PageHeader("BODY","身体与恢复","体重、睡眠与日常指标，放在一起看。")
-        FeatureActionCard(
-            title="开始称重 / 本机历史",
-            subtitle="连接体脂秤，记录身体的每一次变化",
-            icon=Icons.Default.MonitorWeight,
-            onClick=openWeighing,
-            modifier=Modifier.testTag("body-weighing"),
-            emphasized=true
-        )
+        PageHeader("BODY","身体与恢复","")
+        OutlinedButton(onClick=openWeighing,modifier=Modifier.fillMaxWidth().testTag("body-weighing")){Text("称重 / 本机历史")}
         Column(verticalArrangement=Arrangement.spacedBy(4.dp)) {
             Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.SpaceBetween) {
                 Text("记录范围",style=MaterialTheme.typography.titleSmall,fontWeight=FontWeight.SemiBold)
@@ -55,10 +48,35 @@ import java.time.LocalDate
             BodySnapshot("最新体重",healthValue(weight?.opt("weightKg"),1),"kg",weight?.text("date") ?: "此范围暂无记录",Icons.Default.MonitorWeight,Modifier.weight(1f).fillMaxHeight())
             BodySnapshot("最新睡眠",healthDuration(latestSleep?.opt("totalMinutes")),null,latestSleep?.text("date") ?: "此范围暂无记录",Icons.Default.Bedtime,Modifier.weight(1f).fillMaxHeight())
         }
-        SectionTitle("体重与身体记录","从单次测量到长期变化")
+        SectionTitle("体重与身体记录",null)
         val trend=weights?.array("trend").orEmpty()
-        if(trend.isNotEmpty()) NativeLineChart("体重 · kg",trend,"weightKg",MaterialTheme.colorScheme.primary)
+        if(trend.isNotEmpty()) NativeLineChart("体重 · kg",trend,"weightKg",ChartPalette.weight)
         else InfoCard("还没有这一时段的体重趋势","开始称重或补充体重记录后，这里会呈现实际测量的变化。")
+        SectionTitle("睡眠历史","睡眠时长与记录详情")
+        if(sleep.isEmpty()) {
+            InfoCard("暂无睡眠记录","同步已上传到 Zepp 的睡眠数据，或调整日期范围查看之前的记录。")
+            ActionRow("同步 Zepp 健康数据",Icons.Default.Sync){vm.push(route("sync"))}
+        } else {
+            SleepStackChart(sleep){vm.push(route("data","sleep",payload=it))}
+            (if(allSleep) sleep else emptyList()).forEach {r->
+                InfoCard(r.text("date"),"睡眠 ${healthDuration(r.opt("totalMinutes"))} · 深睡 ${healthDuration(r.opt("deepMinutes"))}\n${r.text("sourceLabel",r.text("source","Zepp"))}") {
+                    vm.push(route("data","sleep",payload=r,title="睡眠详情"))
+                }
+            }
+            if(sleep.isNotEmpty()) TextButton(onClick={allSleep=!allSleep},modifier=Modifier.fillMaxWidth()) {Text(if(allSleep) "收起睡眠历史" else "查看全部 ${sleep.size} 条睡眠记录")}
+        }
+        SectionTitle("每日健康指标","步数、心率与当日记录")
+        val daily=data.array("daily")
+        if(daily.isEmpty()) InfoCard("暂无每日健康指标","当前范围没有设备记录。完成同步后，可在这里查看每天的实际数据。")
+        DailyBars("每日步数",DashboardData.daily(daily,"activity","steps"),"value","步",onOpen={vm.push(route("data","day",id=it.text("date")))})
+        NativeLineChart("静息心率 · bpm",DashboardData.daily(daily,"heartRate","restingBpm"),"value",androidx.compose.ui.graphics.Color(0xFFBA4E6B))
+        (if(allDaily) daily else emptyList()).forEach {r->
+            val heartRate=healthValue(r.optJSONObject("heartRate")?.opt("restingBpm"))
+            InfoCard(r.text("date"),"步数 ${healthValue(r.optJSONObject("activity")?.opt("steps"))} · 静息心率 ${if(heartRate=="—") heartRate else "$heartRate bpm"}") {
+                vm.push(route("data","day",id=r.text("date"),title="每日指标"))
+            }
+        }
+        if(daily.isNotEmpty()) TextButton(onClick={allDaily=!allDaily},modifier=Modifier.fillMaxWidth()) {Text(if(allDaily) "收起每日指标" else "查看全部 ${daily.size} 天的指标")}
         DestinationGrid(vm,listOf(
             BodyPlanDestination("weight",Forms.get("weight").title,"查看与补充体重",Icons.Default.MonitorWeight),
             BodyPlanDestination("measurements",Forms.get("measurements").title,"记录围度的变化",Icons.Default.Straighten),
@@ -66,34 +84,12 @@ import java.time.LocalDate
             BodyPlanDestination("check-ins",Forms.get("check-ins").title,"记录今天的感受",Icons.Default.SelfImprovement)
         ))
         ActionRow("健康背景与检查报告",Icons.Default.FolderOpen){vm.push(route("records","context"))}
-        SectionTitle("睡眠历史","睡眠时长与记录详情")
-        if(sleep.isEmpty()) {
-            InfoCard("暂无睡眠记录","同步已上传到 Zepp 的睡眠数据，或调整日期范围查看之前的记录。")
-            ActionRow("同步 Zepp 健康数据",Icons.Default.Sync){vm.push(route("sync"))}
-        } else {
-            NativeLineChart("睡眠时长 · 分钟",sleep.reversed(),"totalMinutes",MaterialTheme.colorScheme.secondary)
-            (if(allSleep) sleep else sleep.take(5)).forEach {r->
-                InfoCard(r.text("date"),"睡眠 ${healthDuration(r.opt("totalMinutes"))} · 深睡 ${healthDuration(r.opt("deepMinutes"))}\n${r.text("sourceLabel",r.text("source","Zepp"))}") {
-                    vm.push(route("data","sleep",payload=r,title="睡眠详情"))
-                }
-            }
-            if(sleep.size>5) TextButton(onClick={allSleep=!allSleep},modifier=Modifier.fillMaxWidth()) {Text(if(allSleep) "收起睡眠历史" else "查看全部 ${sleep.size} 条睡眠记录")}
-        }
-        SectionTitle("每日健康指标","步数、心率与当日记录")
-        val daily=data.array("daily")
-        if(daily.isEmpty()) InfoCard("暂无每日健康指标","当前范围没有设备记录。完成同步后，可在这里查看每天的实际数据。")
-        (if(allDaily) daily else daily.take(5)).forEach {r->
-            val heartRate=healthValue(r.optJSONObject("heartRate")?.opt("restingBpm"))
-            InfoCard(r.text("date"),"步数 ${healthValue(r.optJSONObject("activity")?.opt("steps"))} · 静息心率 ${if(heartRate=="—") heartRate else "$heartRate bpm"}") {
-                vm.push(route("data","day",id=r.text("date"),title="每日指标"))
-            }
-        }
-        if(daily.size>5) TextButton(onClick={allDaily=!allDaily},modifier=Modifier.fillMaxWidth()) {Text(if(allDaily) "收起每日指标" else "查看全部 ${daily.size} 天的指标")}
     }}
 }
 
 @Composable fun PlansScreen(vm:AppModel) {PageColumn {
-    PageHeader("PLAN","计划与日常","从今天要做的事开始，让每一步都有记录。")
+    PageHeader("PLAN","计划与日常","")
+    PlanWeekChart(vm)
     SectionTitle("今日执行")
     FeatureActionCard(
         title="今日安排与训练反馈",
@@ -165,5 +161,25 @@ private data class BodyPlanDestination(val kind:String,val title:String,val subt
                 if(pair.size==1) Spacer(Modifier.weight(1f))
             }
         }
+    }
+}
+
+@Composable private fun PlanWeekChart(vm:AppModel) {
+    val repository=vm.repository ?: return
+    val today=LocalDate.now()
+    var rows by remember {mutableStateOf<List<org.json.JSONObject>?>(null)}
+    var error by remember {mutableStateOf<String?>(null)}
+    LaunchedEffect(repository.account,vm.revision) {
+        try { rows=repository.get("/api/v1/training/sessions?from=${today.minusDays(6)}&to=${today.plusDays(7)}").data.array("items");error=null }
+        catch(e:Exception) {if(e is kotlinx.coroutines.CancellationException) throw e;error=e.message}
+    }
+    if(error!=null) Text("计划概览暂时不可用",style=MaterialTheme.typography.bodySmall)
+    else rows?.let {sessions->
+        if(sessions.isEmpty()) Text("近 7 天及未来 7 天暂无训练安排",style=MaterialTheme.typography.bodySmall)
+        else HorizontalValues("近 7 天与未来 7 天的训练安排",listOf(
+            Triple("已完成",sessions.count {it.text("status")=="completed"}.toDouble(),ChartPalette.activity),
+            Triple("已计划",sessions.count {it.text("status")=="planned"}.toDouble(),ChartPalette.weight),
+            Triple("已取消",sessions.count {it.text("status")=="cancelled"}.toDouble(),androidx.compose.ui.graphics.Color.Gray)
+        ),"次")
     }
 }

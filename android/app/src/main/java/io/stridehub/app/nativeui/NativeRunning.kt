@@ -40,13 +40,11 @@ import kotlin.math.max
         }
         view.summary.let {summary->Metrics(summary,listOf("count" to "跑步次数","activeDays" to "有记录的天数","distanceKm" to "累计距离 km","movingSeconds" to "运动时间 秒","paceSecondsPerKm" to "平均配速 秒/km","longestRunKm" to "最长单次 km","elevationM" to "累计爬升 m","averageHeartRate" to "加权平均心率 bpm"))}
         val weekly=view.weekly;val monthly=view.monthly
-        NativeBars("周跑量 · km",weekly,"distanceKm")
-        NativeBars("每周跑步次数",weekly,"count")
-        NativeBars("月跑量 · km",monthly,"distanceKm")
-        NativeBars("每周最长单次 · km",weekly.map {if(it.optInt("count")==0) JSONObject(it.toString()).put("longestRunKm",JSONObject.NULL) else it},"longestRunKm")
-        NativeBars("每周运动时间 · 秒",weekly,"movingSeconds")
-        NativeBars("每周平均配速 · 秒/km",weekly,"paceSecondsPerKm")
-        NativeBars("每周加权心率 · bpm",weekly,"averageHeartRate")
+        var metric by rememberSaveable {mutableStateOf("distanceKm")}
+        val metricNames=mapOf("distanceKm" to "距离 · km","count" to "次数","movingSeconds" to "时长 · 秒","paceSecondsPerKm" to "配速 · 秒/km","averageHeartRate" to "心率 · bpm")
+        FlowRow(horizontalArrangement=Arrangement.spacedBy(8.dp)) {metricNames.forEach {(key,label)->FilterChip(metric==key,{metric=key},label={Text(label)})}}
+        NativeBars("每周${metricNames[metric]}",weekly,metric)
+        NativeBars("每月${metricNames[metric]}",monthly,metric)
         SectionTitle("跑步活动日历","${data.text("dailyFrom")} 至 ${data.optJSONObject("filters")?.text("to")}；点击日期查看当天记录。无记录不代表休息。")
         RunningCalendar(view.daily) {date->vm.push(route("running",payload=JSONObject().put("from",date).put("to",date)))}
         SectionTitle("已计算的最佳片段","来自导入运动内的最快片段，不等同于认证比赛成绩。")
@@ -127,6 +125,7 @@ import kotlin.math.max
                 val width=size.width/rows.size
                 values.forEachIndexed {index,value->if(value!=null){val height=(value/upper*size.height).toFloat();drawRect(color,Offset(index*width+width*.1f,size.height-height),Size(width*.8f,height))}}
             }
+            ChartRangeLabels(rows.first().text(labelKey),rows.last().text(labelKey))
             if(selected in rows.indices) Text("${rows[selected].text(labelKey)} · ${values[selected]?.let {"%.2f".format(it)} ?: "缺失"}",style=MaterialTheme.typography.bodySmall)
             Text("点按查看记录 · 最大值 ${"%.2f".format(known.max())}",style=MaterialTheme.typography.labelSmall)
         }

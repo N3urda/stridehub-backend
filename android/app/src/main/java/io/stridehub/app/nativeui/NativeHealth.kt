@@ -10,6 +10,7 @@ import org.json.JSONObject
 @Composable fun HealthDetail(vm:AppModel,r:JSONObject) {
     if(r.getString("kind")=="sleep") {PageColumn {
         val data=r.getJSONObject("payload");SectionTitle("睡眠详情",data.text("date"))
+        SleepStackChart(listOf(data))
         Metrics(data,listOf("startedAt" to "入睡时间","endedAt" to "醒来时间","totalMinutes" to "总睡眠 分钟","deepMinutes" to "深睡 分钟","lightMinutes" to "浅睡 分钟","remMinutes" to "REM 分钟","awakeMinutes" to "清醒 分钟","wakeCount" to "醒来次数","score" to "设备评分","restingHeartRate" to "静息心率 bpm","sourceLabel" to "数据来源"))
         Text("指标来自设备记录；缺失项保持未知。",style=MaterialTheme.typography.bodySmall)
     };return}
@@ -41,22 +42,23 @@ import org.json.JSONObject
 }
 
 @Composable fun NutritionScreen(vm:AppModel) {NativeData(vm,"/api/v1/health/workspace") {data->PageColumn {
-    SectionTitle("饮食与每日营养","已记录餐次的合计；不代表全天摄入。")
-    ActionRow("饮食记录"){vm.push(route("records","meals"))}
-    ActionRow("饮食计划"){vm.push(route("records","meal-plans"))}
-    val nutrition=data.optJSONObject("nutrition") ?: JSONObject()
-    NativeLineChart("已完整记录的能量 · kcal",nutrition.array("days").map {d->JSONObject().put("date",d.text("date")).put("value",d.optJSONObject("actualLogged")?.opt("energyKcal") ?: JSONObject.NULL)},"value",MaterialTheme.colorScheme.primary)
-    nutrition.array("days").filter {it.optInt("mealCount")>0 || it.text("planId","").isNotBlank()}.reversed().forEach {day->
-        SectionTitle(day.text("date"),"${day.text("mealCount")} 餐 · ${day.text("estimatedMeals")} 餐使用估算值")
-        Card {androidx.compose.foundation.layout.Column(androidx.compose.ui.Modifier.padding(16.dp)) {
-            Text("指标 · 已记录 / 目标 / 差值",style=MaterialTheme.typography.labelLarge)
-            listOf("energyKcal" to "能量 kcal","proteinGrams" to "蛋白质 g","carbohydrateGrams" to "碳水 g","fatGrams" to "脂肪 g").forEach {(key,label)->
-                Text("$label  ${day.optJSONObject("actualLogged")?.text(key) ?: "—"} / ${day.optJSONObject("targets")?.text(key) ?: "—"} / ${day.optJSONObject("delta")?.text(key) ?: "—"}")
-                if(day.optJSONObject("actualLogged")?.isNull(key)!=false && day.optJSONObject("knownSubtotal")?.isNull(key)==false) Text("已知小计 ${day.getJSONObject("knownSubtotal").text(key)}（含缺失餐次，不能作为完整合计）",style=MaterialTheme.typography.bodySmall)
-            }
-        }}
-        nutrition.array("meals").filter {it.text("date")==day.text("date")}.forEach {RecordCard(vm,Forms.get("meals"),it)}
-        TextButton(onClick={val initial=Forms.initial(Forms.get("meals").fields).put("date",day.text("date")).put("planId",day.opt("planId")).put("version",0).put("id",java.util.UUID.randomUUID().toString());vm.push(route("form","meals",payload=initial))}) {Text("记录这一天的饮食")}
+    SectionTitle("饮食与营养","仅统计已记录餐次")
+    Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+        OutlinedButton(onClick={vm.push(route("records","meals"))}){Text("记录饮食")}
+        OutlinedButton(onClick={vm.push(route("records","meal-plans"))}){Text("饮食计划")}
     }
-    Text(nutrition.text("methodology"),style=MaterialTheme.typography.bodySmall)
+    val nutrition=data.optJSONObject("nutrition") ?: JSONObject()
+    val days=nutrition.array("days").filter {it.optInt("mealCount")>0 || it.text("planId","").isNotBlank()}
+    DailyBars("已记录能量 · kcal",DashboardData.calendar(nutrition.array("days").map {d->JSONObject().put("date",d.text("date")).put("value",d.optJSONObject("actualLogged")?.opt("energyKcal") ?: JSONObject.NULL)}),"value","kcal")
+    var selected by remember(days.toString()){mutableIntStateOf((days.size-1).coerceAtLeast(0))}
+    if(days.isNotEmpty()) {
+        ChartSelection(days,selected,{selected=it},days[selected].text("date"))
+        val day=days[selected]
+        NutritionTargetChart(day)
+        MacroDonut(day)
+        Text("${day.text("mealCount")} 餐 · ${day.text("estimatedMeals")} 餐为估算",style=MaterialTheme.typography.labelSmall)
+        var details by remember {mutableStateOf(false)}
+        TextButton(onClick={details=!details}){Text(if(details) "收起餐次" else "查看当天餐次")}
+        if(details) nutrition.array("meals").filter {it.text("date")==day.text("date")}.forEach {RecordCard(vm,Forms.get("meals"),it)}
+    } else Text("记录餐食后查看营养趋势。")
 }}}
