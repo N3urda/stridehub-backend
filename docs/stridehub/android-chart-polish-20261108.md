@@ -27,3 +27,13 @@ Additional regression coverage checks missing dates/weeks, source separation, re
 The signed APK is in `var/runtime/android-polish-20261108/downloads/StrideHub-0.4.1.apk`. This client-only release uses the existing backend APIs. The NAS backend and its download-page metadata were not changed in this iteration.
 
 APK SHA-256: `2a4b7c97d36434bc0c2984241aa653269db832e93f33be23789117bdaeec0cd5`.
+
+## NAS publication — 2026-11-08
+
+The signed 0.4.1 APK, checksum and release manifest are now published in NAS image `stridehub:android-0.4.1-dad5d710a` (config ID `8a8811dd1be4e055f38772056d083a48fe557a3286173de6e7725498fb398a7a`). This image extends the deployed main backend and changes only download assets and image labels. Existing APKs remain available.
+
+Backup: `backups/pre-android-041-20261108`. All original business tables/records and persistent files were preserved. Twenty-one authenticated read APIs and seventeen public checks passed, including the complete public APK hash and MCP/TLS. The public manifest has versionCode 10 and `no-cache, no-store, must-revalidate` headers. No real phone installation is claimed; users can install this APK over the previous version without uninstalling.
+
+Download: https://n3urdachengdu.xyz:1999/downloads/StrideHub-0.4.1.apk
+
+The authenticated download page remains `/admin/app`. Rollback uses the previous `stridehub:main-3169b6e9b` image while retaining current data. Private execution evidence is under `var/runtime/android-041-deploy-20261108/`.
