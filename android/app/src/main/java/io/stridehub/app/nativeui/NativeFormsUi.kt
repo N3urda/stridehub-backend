@@ -35,7 +35,7 @@ import java.util.UUID
         SectionTitle(form.title)
         Button(onClick={val initial=Forms.initial(form.fields).put("version",if(kind=="weight") data.opt("version") else 0).put("id",UUID.randomUUID().toString());vm.push(route("form",kind,payload=initial))}){Text("新增${form.title}")}
         val rows=data.array("records").ifEmpty {data.array("items")}.ifEmpty {data.array("plans")}
-        if(kind=="weight") NativeLineChart("体重 · kg",rows.reversed(),"weightKg",MaterialTheme.colorScheme.primary)
+        if(rows.isNotEmpty()) RecordTrendPanel(kind,rows)
         if(rows.isEmpty()) InfoCard("还没有记录","点击新增，保存你的第一条${form.title}。")
         rows.forEach { row -> RecordCard(vm,form,if(kind=="weight") JSONObject(row.toString()).put("version",data.opt("version")) else row) }
     }}

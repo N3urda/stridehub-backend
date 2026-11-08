@@ -73,7 +73,7 @@ class NativeProductPresentationTest {
             val scrollOffset=scroller.fetchSemanticsNode().config[androidx.compose.ui.semantics.SemanticsProperties.VerticalScrollAxisRange].value()
             scroller.performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.ScrollBy) {it(0f,-scrollOffset)}
             screenshot("01-overview-fixture")
-            scrollTitleToTop("睡眠结构 · 小时")
+            scrollTitleToTop("睡眠结构")
             screenshot("09-sleep-chart-fixture")
             compose.onNodeWithText("饮食与营养").performScrollTo().performClick()
             awaitText("三大营养素供能占比")
@@ -86,7 +86,14 @@ class NativeProductPresentationTest {
             awaitTag("body-weighing")
             awaitText("离线缓存")
             primaryAction(compose.onNodeWithTag("body-weighing"))
+            compose.onNodeWithText("体重 · kg").assertIsDisplayed()
             screenshot("02-body-fixture")
+            compose.onNodeWithTag("body-metric-pressure").performScrollTo().performClick()
+            awaitText("收缩压 · mmHg")
+            screenshot("11-pressure-chart-fixture")
+            compose.onNodeWithTag("body-metric-composition").performScrollTo().performClick()
+            awaitText("体脂率 · %")
+            screenshot("12-composition-chart-fixture")
 
             selectTab(2)
             awaitText("运动记录")
@@ -102,8 +109,9 @@ class NativeProductPresentationTest {
 
             selectTab(3)
             awaitTag("plans-today")
-            primaryAction(compose.onNodeWithTag("plans-today"))
+            compose.onNodeWithText("一周训练").assertIsDisplayed()
             screenshot("04-plans-fixture")
+            compose.onNodeWithTag("plans-today").performScrollTo().assertIsDisplayed()
             compose.onNodeWithTag("plans-today").performClick()
             scenario.onActivity { main ->
                 val vm = ViewModelProvider(main)[AppModel::class.java]
@@ -308,6 +316,15 @@ class NativeProductPresentationTest {
                 .put("targets",JSONObject().put("energyKcal",2100).put("proteinGrams",120).put("carbohydrateGrams",240).put("fatGrams",65)))}
             workspace.put("nutrition",JSONObject().put("days",days).put("meals",JSONArray()))
         }
+        if (populated) {
+            workspace.put("bloodPressure", JSONArray().put(JSONObject().put("measuredAt", "${today}T08:00:00+08:00").put("systolic", 118).put("diastolic", 76)).put(JSONObject().put("measuredAt", "${today.minusDays(2)}T08:00:00+08:00").put("systolic", 122).put("diastolic", 78)))
+            workspace.put("measurements", JSONArray().put(JSONObject().put("date", today.toString()).put("waistCm", 84).put("bodyFatPercent", 21.5)))
+        }
+        val compositionRows = JSONArray()
+        if (populated) (0..5).forEach { i -> compositionRows.put(JSONObject().put("measurementId", "fixture-capture-$i")
+            .put("capture", JSONObject().put("measuredAt", "${today.minusDays(i.toLong())}T07:30:00+08:00"))
+            .put("composition", JSONObject().put("metrics", JSONArray().put(JSONObject().put("key", "BODY_FAT").put("label", "体脂率").put("unit", "%").put("value", 21.5+i*.1))))) }
+        cache(repo, "/api/v1/health/body-composition?from=${today.minusDays(29)}&to=$today&limit=100", JSONObject().put("records",compositionRows).put("snapshot","fixture-snapshot").put("nextOffset",JSONObject.NULL).put("total",compositionRows.length()))
         cache(repo, "/api/v1/health/workspace", workspace)
         cache(repo, "/api/v1/health/workspace?from=${today.minusDays(29)}&to=$today", workspace)
         cache(repo, "/api/v1/mobile/workouts?page=1&limit=30&from=${today.minusDays(89)}&to=$today&sportType=all", workouts)
@@ -316,6 +333,10 @@ class NativeProductPresentationTest {
             .put("title", "轻松跑 · 保持舒适节奏").put("startAt", "${today.plusDays(1)}T07:00:00+08:00")
             .put("durationMinutes", 45).put("distanceKm", 6.0).put("type", "easy").put("status", "planned")
             .put("activityIds", JSONArray()).put("steps", JSONArray()))
+        val week = today.minusDays((today.dayOfWeek.value-1).toLong())
+        val weekSessions = JSONArray()
+        if (populated) weekSessions.put(JSONObject().put("id", "completed-session").put("title", "轻松跑").put("startAt", "${week}T07:00:00+08:00").put("status", "completed").put("durationMinutes", 35).put("distanceKm", 5.0))
+        cache(repo, "/api/v1/health/workspace?from=$week&to=${week.plusDays(6)}", JSONObject(workspace.toString()).put("sessions",weekSessions))
         cache(repo, "/api/v1/training/sessions?from=$today&to=${today.plusDays(365)}&status=planned", JSONObject().put("items", sessions))
         cache(repo, "/api/v1/training/today", JSONObject().put("date", today.toString()).put("timezone", "Asia/Shanghai")
             .put("sessions", JSONArray()).put("pendingFeedback", JSONArray()).put("dataQuality", JSONArray()))

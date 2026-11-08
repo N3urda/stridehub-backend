@@ -48,17 +48,17 @@ object NativeAppearance {
         outline=Color(0xFF788E8C), outlineVariant=Color(0xFF33474A)
     ) else lightColorScheme(
         primary=Color(0xFF087E9B), onPrimary=Color.White,
-        primaryContainer=Color(0xFFE1F1F5), onPrimaryContainer=Color(0xFF123D35),
+        primaryContainer=Color(0xFFE1F1F5), onPrimaryContainer=Color(0xFF124653),
         secondary=Color(0xFF466784), onSecondary=Color.White,
         secondaryContainer=Color(0xFFE4EEF5), onSecondaryContainer=Color(0xFF233D52),
         tertiary=Color(0xFF875735), onTertiary=Color.White,
         background=Color(0xFFF3F6FA), onBackground=Color(0xFF182F35),
         surface=Color.White, onSurface=Color(0xFF182F35),
-        surfaceVariant=Color(0xFFE9F0EE), onSurfaceVariant=Color(0xFF52676B),
+        surfaceVariant=Color(0xFFE9EFF4), onSurfaceVariant=Color(0xFF52676B),
         surfaceContainerLowest=Color.White, surfaceContainerLow=Color.White,
-        surfaceContainer=Color(0xFFF7FAF9), surfaceContainerHigh=Color(0xFFF0F5F3),
-        surfaceContainerHighest=Color(0xFFEAF1EF),
-        outline=Color(0xFF7B8F8F), outlineVariant=Color(0xFFD9E4E1)
+        surfaceContainer=Color(0xFFF5F8FB), surfaceContainerHigh=Color(0xFFEDF3F7),
+        surfaceContainerHighest=Color(0xFFE6EEF3),
+        outline=Color(0xFF7B8F8F), outlineVariant=Color(0xFFD9E3EB)
     )
 
     val typography = Typography().run { copy(
@@ -76,7 +76,7 @@ object NativeAppearance {
         labelSmall=labelSmall.copy(fontSize=11.sp,lineHeight=16.sp)
     ) }
     val shapes = Shapes(extraSmall=RoundedCornerShape(8.dp),small=RoundedCornerShape(12.dp),
-        medium=RoundedCornerShape(16.dp),large=RoundedCornerShape(22.dp),extraLarge=RoundedCornerShape(28.dp))
+        medium=RoundedCornerShape(16.dp),large=RoundedCornerShape(18.dp),extraLarge=RoundedCornerShape(24.dp))
 
     /** The retained BLE views use the same semantic colors as the Compose pages. */
     @JvmStatic fun weighingColors(dark: Boolean): IntArray = colors(dark).run {

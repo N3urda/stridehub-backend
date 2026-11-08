@@ -9,6 +9,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.contentDescription
@@ -56,38 +60,71 @@ object ChartData {
     }
 
 }
-@Composable fun NativeLineChart(title:String,rows:List<JSONObject>,key:String,color:Color,expectedCadenceSeconds:Double?=null) {
+/** Resolve semantic accents against the active surface, including night mode. */
+@Composable fun readableChartColor(color:Color):Color =
+    if(MaterialTheme.colorScheme.surface.luminance()<.2f) lerp(color,Color.White,.28f) else color
+
+@Composable fun ChartYAxis(high:Double,low:Double,format:ChartValueFormat,height:androidx.compose.ui.unit.Dp) {
+    Column(Modifier.widthIn(min=44.dp).height(height),verticalArrangement=Arrangement.SpaceBetween,horizontalAlignment=Alignment.End) {
+        (0..3).forEach {index->
+            Text(format.value(high-(high-low)*index/3),style=MaterialTheme.typography.labelSmall,
+                color=MaterialTheme.colorScheme.onSurfaceVariant,textAlign=TextAlign.End)
+        }
+    }
+}
+
+@Composable fun NativeLineChart(
+    title:String,rows:List<JSONObject>,key:String,color:Color,expectedCadenceSeconds:Double?=null,
+    format:ChartValueFormat=ChartValueFormat.forMetric(title,key),axis:ChartAxis=ChartAxis.AUTO
+) {
     val values=remember(rows.toString(),key){ChartData.values(rows,key)}
-    val known=values.filterNotNull();var selected by remember(rows.toString(),key) {mutableIntStateOf(-1)}
-    Card(Modifier.fillMaxWidth(),colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.surface)) {Column(Modifier.padding(18.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
-        Text(title,style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.SemiBold)
-        if(known.isEmpty()) Text("暂无实际测量值",color=MaterialTheme.colorScheme.onSurfaceVariant)
+    val known=values.filterNotNull()
+    var selected by remember(rows.toString(),key) {mutableIntStateOf(values.indexOfLast {it!=null}.coerceAtLeast(0))}
+    val accent=readableChartColor(color)
+    val effectiveAxis=ChartPresentation.axisFor(rows,axis)
+    ChartPanel(title) {
+        if(known.isEmpty()) Text("暂无实际测量值",color=MaterialTheme.colorScheme.onSurfaceVariant,style=MaterialTheme.typography.bodyMedium)
         else {
-            val min=known.min();val max=known.max();val low=if(min==max) min-1 else min;val high=if(min==max) max+1 else max
-            Text("最低 ${"%.1f".format(min)}  ·  最高 ${"%.1f".format(max)}  ·  ${known.size} 个有效点",style=MaterialTheme.typography.labelMedium,color=MaterialTheme.colorScheme.onSurfaceVariant)
-            val grid=MaterialTheme.colorScheme.outlineVariant
-            val xs=rows.mapIndexed {i,row->ChartData.x(row,i)};val xLow=xs.minOrNull() ?: 0.0;val xHigh=xs.maxOrNull()?.takeIf {it>xLow} ?: xLow+1
-            Canvas(Modifier.fillMaxWidth().height(132.dp).semantics {contentDescription="$title，最低 ${"%.1f".format(min)}，最高 ${"%.1f".format(max)}，${known.size} 个有效测量点。缺失数据留空。"}.pointerInput(rows,key){detectTapGestures {point->val target=xLow+point.x/size.width*(xHigh-xLow);selected=xs.indices.minByOrNull {abs(xs[it]-target)} ?: -1}}) {
-                (0..3).forEach {i->val y=size.height*i/3;drawLine(grid,Offset(0f,y),Offset(size.width,y),1f)}
-                fun position(index:Int)=Offset(((xs[index]-xLow)/(xHigh-xLow)*size.width).toFloat(),(size.height-(values[index]!!-low)/(high-low)*size.height).toFloat())
-                if(selected in values.indices) {
-                    val selectedX=((xs[selected]-xLow)/(xHigh-xLow)*size.width).toFloat()
-                    drawLine(color.copy(alpha=.25f),Offset(selectedX,0f),Offset(selectedX,size.height),1.dp.toPx())
-                }
-                ChartData.plotSegments(rows,key,expectedCadenceSeconds).forEach {segment->
-                    segment.zipWithNext().forEach {(a,b)->drawLine(color,position(a),position(b),3.dp.toPx())}
-                    segment.forEach {index->
-                        // Every isolated real sample remains visible regardless of total sample count.
-                        if(segment.size==1 || values.size<30 || index==selected) drawCircle(color,if(index==selected) 5.dp.toPx() else 2.5.dp.toPx(),position(index))
+            val (low,high)=ChartPresentation.range(known,3.0*10.0.pow(-format.decimals))
+            val grid=MaterialTheme.colorScheme.outlineVariant.copy(alpha=.6f)
+            Column(Modifier.fillMaxWidth(),verticalArrangement=Arrangement.spacedBy(4.dp)) {
+                Text(format.label(values.getOrNull(selected)),style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.SemiBold,color=accent)
+                Text("${known.size} 个有效点",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            val xs=rows.mapIndexed {i,row->ChartData.x(row,i)}
+            val xLow=xs.minOrNull() ?: 0.0
+            val xHigh=xs.maxOrNull()?.takeIf {it>xLow} ?: xLow+1
+            val chartHeight=156.dp
+            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(10.dp)) {
+                ChartYAxis(high,low,format,chartHeight)
+                Canvas(Modifier.weight(1f).height(chartHeight).semantics {
+                    contentDescription="$title，最低 ${format.label(known.min())}，最高 ${format.label(known.max())}。缺失数据留空，下方按钮可逐条查看。"
+                }.pointerInput(rows.toString(),key,effectiveAxis){detectTapGestures {point->
+                    val target=xLow+point.x/size.width*(xHigh-xLow)
+                    selected=xs.indices.minByOrNull {abs(xs[it]-target)} ?: 0
+                }}) {
+                    val top=8.dp.toPx();val bottom=size.height-top;val plotHeight=bottom-top
+                    val left=5.dp.toPx();val right=size.width-left;val plotWidth=right-left
+                    (0..3).forEach {i->val y=top+plotHeight*i/3;drawLine(grid,Offset(left,y),Offset(right,y),1.dp.toPx())}
+                    fun position(index:Int)=Offset((left+(xs[index]-xLow)/(xHigh-xLow)*plotWidth).toFloat(),(bottom-(values[index]!!-low)/(high-low)*plotHeight).toFloat())
+                    val selectedX=(left+(xs[selected]-xLow)/(xHigh-xLow)*plotWidth).toFloat()
+                    drawLine(accent.copy(alpha=.28f),Offset(selectedX,top),Offset(selectedX,bottom),1.dp.toPx())
+                    ChartData.plotSegments(rows,key,expectedCadenceSeconds).forEach {segment->
+                        segment.zipWithNext().forEach {(a,b)->drawLine(accent,position(a),position(b),2.5.dp.toPx())}
+                        segment.forEach {index->
+                            if(segment.size==1 || values.size<30 || index==selected) {
+                                if(index==selected) drawCircle(accent.copy(alpha=.16f),8.dp.toPx(),position(index))
+                                drawCircle(accent,if(index==selected) 4.dp.toPx() else 2.5.dp.toPx(),position(index))
+                            }
+                        }
                     }
                 }
-
             }
-            ChartRangeLabels(rows.first().text("date",rows.first().text("at",rows.first().text("seconds",""))),rows.last().text("date",rows.last().text("at",rows.last().text("seconds",""))))
-            if(selected in rows.indices) Text("${rows[selected].text("date",rows[selected].text("at",rows[selected].text("seconds","样本 ${selected+1}")))} · ${values[selected]?.let {"%.2f".format(it)} ?: "缺失"}",style=MaterialTheme.typography.bodySmall)
-
+            ChartRangeLabels(ChartPresentation.axisLabel(rows.first(),0,effectiveAxis),ChartPresentation.axisLabel(rows.last(),rows.lastIndex,effectiveAxis))
+            ChartSelection(rows,selected,{selected=it},ChartPresentation.axisLabel(rows[selected],selected,effectiveAxis,full=true)+" · "+format.label(values[selected]))
+            Text("最低 ${format.label(known.min())}  ·  最高 ${format.label(known.max())}",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
         }
-    }}
+    }
 }
 data class RoutePoint(val latitude:Double,val longitude:Double)
 @Composable fun NativeRoute(points:List<RoutePoint>) {

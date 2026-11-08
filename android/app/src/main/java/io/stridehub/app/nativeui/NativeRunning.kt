@@ -38,10 +38,27 @@ import kotlin.math.max
             FilterChip(all,{all=!all;page=1},label={Text("全部历史")})
             listOf("all" to "全部跑步","Run" to "跑步","TrailRun" to "越野跑","VirtualRun" to "室内跑").forEach {(value,label)->FilterChip(sport==value,{sport=value;page=1},label={Text(label)})}
         }
-        view.summary.let {summary->Metrics(summary,listOf("count" to "跑步次数","activeDays" to "有记录的天数","distanceKm" to "累计距离 km","movingSeconds" to "运动时间 秒","paceSecondsPerKm" to "平均配速 秒/km","longestRunKm" to "最长单次 km","elevationM" to "累计爬升 m","averageHeartRate" to "加权平均心率 bpm"))}
+        ChartPanel("这一段的跑步") {
+            val summary=view.summary
+            val facts=listOf("累计距离" to (healthValue(summary.opt("distanceKm"),1)+" km"),"运动时间" to JournalPresentation.duration(DashboardData.number(summary,"movingSeconds")),
+                "平均配速" to JournalPresentation.pace(DashboardData.number(summary,"paceSecondsPerKm")),"跑步次数" to (healthValue(summary.opt("count"),0)+" 次"))
+            facts.chunked(2).forEach {pair->
+                Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(16.dp)) {
+                    pair.forEach {(label,value)->
+                        Column(Modifier.weight(1f)) {
+                            Text(label,style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(value,style=MaterialTheme.typography.titleLarge)
+                        }
+                    }
+                }
+            }
+            var details by remember {mutableStateOf(false)}
+            TextButton(onClick={details=!details}) {Text(if(details) "收起汇总" else "更多汇总")}
+            if(details) Metrics(summary,listOf("activeDays" to "有记录的天数","longestRunKm" to "最长单次 km","elevationM" to "累计爬升 m","averageHeartRate" to "加权平均心率 bpm"))
+        }
         val weekly=view.weekly;val monthly=view.monthly
         var metric by rememberSaveable {mutableStateOf("distanceKm")}
-        val metricNames=mapOf("distanceKm" to "距离 · km","count" to "次数","movingSeconds" to "时长 · 秒","paceSecondsPerKm" to "配速 · 秒/km","averageHeartRate" to "心率 · bpm")
+        val metricNames=mapOf("distanceKm" to "距离 · km","count" to "次数","movingSeconds" to "时长","paceSecondsPerKm" to "配速 · 分/km","averageHeartRate" to "心率 · bpm")
         FlowRow(horizontalArrangement=Arrangement.spacedBy(8.dp)) {metricNames.forEach {(key,label)->FilterChip(metric==key,{metric=key},label={Text(label)})}}
         NativeBars("每周${metricNames[metric]}",weekly,metric)
         NativeBars("每月${metricNames[metric]}",monthly,metric)
@@ -49,7 +66,7 @@ import kotlin.math.max
         RunningCalendar(view.daily) {date->vm.push(route("running",payload=JSONObject().put("from",date).put("to",date)))}
         SectionTitle("已计算的最佳片段","来自导入运动内的最快片段，不等同于认证比赛成绩。")
         if(view.bestEfforts.isEmpty()) InfoCard("暂无最佳片段","导入并处理包含时间和距离流的运动后可查看。")
-        view.bestEfforts.forEach {effort->InfoCard("${effort.text("distanceM")} m · ${effort.text("seconds")} 秒","${effort.text("date")} · ${effort.text("name")}"){vm.push(route("workout",payload=JSONObject().put("id",effort.getString("activityId"))))}}
+        view.bestEfforts.forEach {effort->InfoCard("${effort.text("distanceM")} m · ${JournalPresentation.duration(DashboardData.number(effort,"seconds"))}","${effort.text("date")} · ${effort.text("name")}"){vm.push(route("workout",payload=JSONObject().put("id",effort.getString("activityId"))))}}
         SectionTitle("跑步记录")
         val activities=view.activities
         if(activities.array("items").isEmpty()) Text("此范围内没有导入的跑步记录。")
@@ -89,20 +106,20 @@ import kotlin.math.max
     val view=WorkoutPresentation.analysisSections(detail)
     val analysis=view.analysis
     SectionTitle("跑步分析","统计均使用服务器的原始区间分析结果。")
-    analysis.optJSONObject("metrics")?.let {Metrics(it,listOf("weightedHeartRate" to "有效加权心率 bpm","paceSecondsPerKm" to "有效平均配速 秒/km","speedVariationPercent" to "速度变异 %","efficiencyChangePercent" to "前后半程效率变化 %"))}
-    Metrics(view.splitSummary,listOf("fastestFullKmPace" to "最快完整公里 秒/km","paceVariationPercent" to "完整公里配速变异 %","secondHalfPaceChangePercent" to "后半程配速变化 %"))
+    analysis.optJSONObject("metrics")?.let {Metrics(it,listOf("weightedHeartRate" to "有效加权心率 bpm","paceSecondsPerKm" to "有效平均配速","speedVariationPercent" to "速度变异 %","efficiencyChangePercent" to "前后半程效率变化 %"))}
+    Metrics(view.splitSummary,listOf("fastestFullKmPace" to "最快完整公里配速","paceVariationPercent" to "完整公里配速变异 %","secondHalfPaceChangePercent" to "后半程配速变化 %"))
     var axis by rememberSaveable {mutableStateOf("seconds")}
     FlowRow(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-        FilterChip(axis=="seconds",{axis="seconds"},label={Text("横轴：运动秒数")})
-        FilterChip(axis=="distanceKm",{axis="distanceKm"},label={Text("横轴：距离 km")},enabled=analysis.array("timeline").any {!it.isNull("distanceKm")})
+        FilterChip(axis=="seconds",{axis="seconds"},label={Text("运动时间")})
+        FilterChip(axis=="distanceKm",{axis="distanceKm"},label={Text("运动距离")},enabled=analysis.array("timeline").any {!it.isNull("distanceKm")})
     }
     val timeline=analysis.array("timeline").let {rows->if(axis=="seconds") rows else rows.filter {!it.isNull("distanceKm")}.map {JSONObject(it.toString()).put("seconds",it.opt("distanceKm"))}}
-    listOf("paceSecondsPerKm" to "配速 · 秒/km","heartRate" to "心率 · bpm","cadenceSpm" to "步频 · 步/分","altitudeM" to "海拔 · m","powerW" to "功率 · W").forEach {(key,label)->NativeLineChart(label,timeline,key,MaterialTheme.colorScheme.primary)}
+    listOf("paceSecondsPerKm" to "配速 · 分/km","heartRate" to "心率 · bpm","cadenceSpm" to "步频 · 步/分","altitudeM" to "海拔 · m","powerW" to "功率 · W").forEach {(key,label)->NativeLineChart(label,timeline,key,MaterialTheme.colorScheme.primary,axis=if(axis=="distanceKm") ChartAxis.DISTANCE else ChartAxis.ELAPSED)}
     NativeScatter("配速与心率",view.scatter,"paceSecondsPerKm","heartRate")
     NativeBars("训练心率区间 · 分钟",(if(view.coverage.optDouble("heartRateSeconds",0.0)>0) view.zones else emptyList()).map {row->JSONObject().put("label","${row.text("name")} ${row.text("from")}–${row.text("to")} bpm").put("minutes",(row.opt("seconds") as? Number)?.toDouble()?.div(60) ?: JSONObject.NULL)},"minutes","label")
     NativeBars("心率分布 · 分钟",(if(view.coverage.optDouble("heartRateSeconds",0.0)>0) view.distribution else emptyList()).map {row->JSONObject().put("label","${row.text("from")}–${row.text("to")} bpm").put("minutes",(row.opt("seconds") as? Number)?.toDouble()?.div(60) ?: JSONObject.NULL)},"minutes","label")
     SectionTitle("数据覆盖与记录缺口")
-    Metrics(view.coverage,listOf("samples" to "原始采样点数","analyzedSeconds" to "有效区间 秒","heartRateSeconds" to "有心率的有效秒数","paceSeconds" to "有配速的有效秒数","gapSeconds" to "记录断档 秒","pausedSeconds" to "显式暂停 秒","invalidIntervals" to "无效区间"))
+    Metrics(view.coverage,listOf("samples" to "原始采样点数","analyzedSeconds" to "有效区间","heartRateSeconds" to "有心率的有效时长","paceSeconds" to "有配速的有效时长","gapSeconds" to "记录断档时长","pausedSeconds" to "显式暂停时长","invalidIntervals" to "无效区间"))
     Text("可用传感器流："+(detail.optJSONArray("availableStreams")?.let {a->(0 until a.length()).joinToString("、"){a.optString(it)}} ?: "未记录"),style=MaterialTheme.typography.bodySmall)
     SegmentTable("公里分段与 GAP",view.splits);SegmentTable("计圈",view.laps)
     if(view.splits.isEmpty()) Text("暂无公里分段；缺失配速与 GAP 保持未知。")
@@ -115,36 +132,61 @@ import kotlin.math.max
 @Composable fun NativeBars(title:String,rows:List<JSONObject>,valueKey:String,labelKey:String="date") {
     val values=ChartData.values(rows,valueKey)
     val known=values.filterNotNull()
-    var selected by remember(rows.toString(),valueKey){mutableIntStateOf(-1)}
+    var selected by remember(rows.toString(),valueKey){mutableIntStateOf(rows.indexOfLast {DashboardData.number(it,valueKey)!=null}.coerceAtLeast(0))}
     val color=MaterialTheme.colorScheme.primary
-    Card(Modifier.fillMaxWidth()) {Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
-        Text(title,style=MaterialTheme.typography.titleMedium)
+    val format=when {title.contains("分钟")->ChartValueFormat("分钟",1);title.endsWith("· 次")->ChartValueFormat("次",0);else->ChartValueFormat.forMetric(title,valueKey)}
+    ChartPanel(title) {
         if(known.isEmpty()) Text("暂无足够的实际记录") else {
             val upper=known.max().coerceAtLeast(1.0)
-            Canvas(Modifier.fillMaxWidth().height(140.dp).semantics {contentDescription="$title，${known.size} 条有效记录，缺失值保持空白。"}.pointerInput(rows,valueKey){detectTapGestures {p->selected=(p.x/size.width*rows.size).toInt().coerceIn(0,rows.lastIndex)}}) {
-                val width=size.width/rows.size
-                values.forEachIndexed {index,value->if(value!=null){val height=(value/upper*size.height).toFloat();drawRect(color,Offset(index*width+width*.1f,size.height-height),Size(width*.8f,height))}}
+            val grid=MaterialTheme.colorScheme.outlineVariant
+            Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                ChartYAxis(upper,0.0,format,144.dp)
+                Canvas(Modifier.weight(1f).height(144.dp).semantics {contentDescription="$title，${known.size} 条有效记录，缺失值保持空白。下方可逐条选择。"}.pointerInput(rows,valueKey){detectTapGestures {p->selected=(p.x/size.width*rows.size).toInt().coerceIn(0,rows.lastIndex)}}) {
+                    (0..3).forEach {i->val y=size.height*i/3;drawLine(grid,Offset(0f,y),Offset(size.width,y))}
+                    val width=size.width/rows.size
+                    values.forEachIndexed {index,value->if(value!=null){val height=(value.coerceAtLeast(0.0)/upper*size.height).toFloat();drawRect(color.copy(alpha=if(index==selected) 1f else .55f),Offset(index*width+width*.16f,size.height-height),Size(width*.68f,max(height,1.dp.toPx())))}}
+                }
             }
-            ChartRangeLabels(rows.first().text(labelKey),rows.last().text(labelKey))
-            if(selected in rows.indices) Text("${rows[selected].text(labelKey)} · ${values[selected]?.let {"%.2f".format(it)} ?: "缺失"}",style=MaterialTheme.typography.bodySmall)
-            Text("点按查看记录 · 最大值 ${"%.2f".format(known.max())}",style=MaterialTheme.typography.labelSmall)
+            val first=if(labelKey=="date") ChartPresentation.axisLabel(rows.first(),0) else rows.first().text(labelKey)
+            val last=if(labelKey=="date") ChartPresentation.axisLabel(rows.last(),rows.lastIndex) else rows.last().text(labelKey)
+            ChartRangeLabels(first,last)
+            val label=if(labelKey=="date") ChartPresentation.axisLabel(rows[selected],selected,full=true) else rows[selected].text(labelKey)
+            ChartSelection(rows,selected,{selected=it},"$label · ${format.label(values[selected])}")
+            if(valueKey.contains("pace",true)) Text("配速越小越快；每根柱对应一个真实区间。",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
         }
-    }}
+    }
 }
 
 @Composable private fun NativeScatter(title:String,rows:List<JSONObject>,xKey:String,yKey:String) {
     val points=rows.mapNotNull {row->val x=(row.opt(xKey) as? Number)?.toDouble();val y=(row.opt(yKey) as? Number)?.toDouble();if(x!=null && y!=null && x.isFinite() && y.isFinite()) x to y else null}
     val color=MaterialTheme.colorScheme.secondary
-    Card(Modifier.fillMaxWidth()) {Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
-        Text(title,style=MaterialTheme.typography.titleMedium)
+    val grid=MaterialTheme.colorScheme.outlineVariant
+    val paceFormat=ChartValueFormat("/km",0,ChartValueKind.PACE)
+    val heartFormat=ChartValueFormat("bpm",0)
+    ChartPanel(title) {
         if(points.isEmpty()) Text("暂无同时记录配速与心率的有效样本") else {
             val minX=points.minOf {it.first};val maxX=points.maxOf {it.first};val minY=points.minOf {it.second};val maxY=points.maxOf {it.second}
-            Canvas(Modifier.fillMaxWidth().height(180.dp).semantics {contentDescription="$title，${points.size} 个有效点，横轴秒每公里，纵轴每分钟心率。"}) {
-                points.forEach {(x,y)->drawCircle(color.copy(alpha=.5f),2.5.dp.toPx(),Offset(((x-minX)/(maxX-minX).coerceAtLeast(1.0)*size.width).toFloat(),(size.height-(y-minY)/(maxY-minY).coerceAtLeast(1.0)*size.height).toFloat()))}
+            val (lowX,highX)=ChartPresentation.range(points.map {it.first})
+            val (lowY,highY)=ChartPresentation.range(points.map {it.second})
+            Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                ChartYAxis(highY,lowY,heartFormat,180.dp)
+                Canvas(Modifier.weight(1f).height(180.dp).semantics {contentDescription="$title，${points.size} 个有效点。横轴配速 ${paceFormat.label(minX)} 至 ${paceFormat.label(maxX)}，纵轴心率 ${heartFormat.label(minY)} 至 ${heartFormat.label(maxY)}。"}) {
+                    (0..3).forEach {i->
+                        val x=size.width*i/3;val y=size.height*i/3
+                        drawLine(grid,Offset(x,0f),Offset(x,size.height));drawLine(grid,Offset(0f,y),Offset(size.width,y))
+                    }
+                    points.forEach {(x,y)->drawCircle(color.copy(alpha=.55f),3.dp.toPx(),Offset(((x-lowX)/(highX-lowX)*size.width).toFloat(),(size.height-(y-lowY)/(highY-lowY)*size.height).toFloat()))}
+                }
             }
-            Text("配速 ${"%.1f".format(minX)}–${"%.1f".format(maxX)} 秒/km · 心率 ${"%.0f".format(minY)}–${"%.0f".format(maxY)} bpm · ${points.size} 点",style=MaterialTheme.typography.bodySmall)
+            Row(Modifier.fillMaxWidth().padding(start=52.dp),horizontalArrangement=Arrangement.SpaceBetween) {
+                Text(paceFormat.label(lowX),style=MaterialTheme.typography.labelSmall)
+                Text(paceFormat.label((lowX+highX)/2),style=MaterialTheme.typography.labelSmall)
+                Text(paceFormat.label(highX),style=MaterialTheme.typography.labelSmall)
+            }
+            Text("横轴配速 · 越向左越快",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("${points.size} 个有效样本 · 心率 ${heartFormat.value(minY)}–${heartFormat.value(maxY)} bpm",style=MaterialTheme.typography.bodySmall)
         }
-    }}
+    }
 }
 
 @Composable private fun RunningCsvExport(vm:AppModel,rows:List<JSONObject>,page:Int) {

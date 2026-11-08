@@ -21,10 +21,9 @@ import java.util.Locale
     NativeData(vm,"/api/v1/health/workspace") {data->PageColumn {
         val today=healthReferenceDate(data.text("timezone", ""))
         val dateLabel=runCatching {LocalDate.parse(today).format(DateTimeFormatter.ofPattern("M月d日 EEEE",Locale.CHINA))}.getOrDefault(today)
-        PageHeader(dateLabel,"健康趋势","")
+        PageHeader("","健康趋势",dateLabel)
         val weight=data.optJSONObject("weight")?.array("records")?.firstOrNull()
         val sleep=data.array("sleep").firstOrNull()
-        val daily=data.array("daily").firstOrNull()
         Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min),horizontalArrangement=Arrangement.spacedBy(10.dp)) {
             OverviewMetric("最近体重",healthValue(weight?.opt("weightKg"),1)+" kg",healthDate(weight?.text("date",""),today),Icons.Default.MonitorWeight,"overview-weight",Modifier.weight(1f).fillMaxHeight(),openWeighing)
             OverviewMetric("睡眠",healthDuration(sleep?.opt("totalMinutes")),healthDate(sleep?.text("date",""),today),Icons.Default.Bedtime,"overview-sleep",Modifier.weight(1f).fillMaxHeight()){vm.select(1)}
@@ -57,12 +56,12 @@ import java.util.Locale
 
 @Composable private fun OverviewMetric(title:String,value:String,date:String,icon:ImageVector,tag:String,modifier:Modifier,onClick:()->Unit) {
     Card(onClick=onClick,modifier=modifier,colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.surface)) {
-        Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
+        Column(Modifier.padding(14.dp),verticalArrangement=Arrangement.spacedBy(5.dp)) {
             Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(7.dp)) {
                 Icon(icon,null,Modifier.size(18.dp),tint=MaterialTheme.colorScheme.secondary)
                 Text(title,style=MaterialTheme.typography.labelLarge,color=MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Text(value,Modifier.testTag(tag),style=MaterialTheme.typography.headlineSmall)
+            Text(value,Modifier.testTag(tag),style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.SemiBold)
             Text(date,style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }

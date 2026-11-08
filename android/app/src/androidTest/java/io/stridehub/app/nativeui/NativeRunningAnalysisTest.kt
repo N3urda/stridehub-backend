@@ -18,12 +18,12 @@ class NativeRunningAnalysisTest {
     @Test fun populatedServerAnalysisHasNativeScatterZonesDistributionCoverageAndSplits() {
         val data=fixture("native-running-detail-populated")
         compose.setContent {MaterialTheme {PageColumn {RunningAnalysisContent(data)}}}
-        compose.onNodeWithText("最快完整公里 秒/km").assertExists()
+        compose.onNodeWithText("最快完整公里配速").assertExists()
         compose.onNodeWithText("配速与心率").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("训练心率区间 · 分钟").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("心率分布 · 分钟").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("记录断档 秒").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("显式暂停 秒").assertExists()
+        compose.onNodeWithText("记录断档时长").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("显式暂停时长").assertExists()
         compose.onNodeWithText("公里分段与 GAP").performScrollTo().assertIsDisplayed()
     }
     @Test fun missingServerAnalysisExplainsMissingSensorsAndDoesNotInventPlots() {
