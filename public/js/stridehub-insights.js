@@ -37,11 +37,11 @@
         state.sleepRecords = records; renderCoverage();
         const sleep = newest(records); const duration = $('latest-sleep-duration'); duration.replaceChildren();
         if (sleep) {
-            $('latest-sleep-date').textContent = `${sleep.date} · 最近一晚已记录睡眠`;
+            $('latest-sleep-date').textContent = `${sleep.date} · ${sleep.sourceLabel || sleep.source} · 最近一晚已记录睡眠`;
             if (Number.isFinite(sleep.totalMinutes)) duration.append(document.createTextNode(Math.floor(sleep.totalMinutes / 60)), node('span', '', '小时'), document.createTextNode(Math.round(sleep.totalMinutes % 60)), node('span', '', '分'));
             else duration.append(node('span', '', '总时长未提供'));
             $('latest-sleep-window').textContent = `${time(sleep.startedAt, state.zone)} 入睡 · ${time(sleep.endedAt, state.zone)} 醒来`;
-        } else { duration.append(document.createTextNode('—'), node('span', '', '尚无记录')); $('latest-sleep-date').textContent = '这段时间还没有睡眠记录'; $('latest-sleep-window').textContent = '手表同步到 Zepp 后，在这里同步即可查看。'; }
+        } else { duration.append(document.createTextNode('—'), node('span', '', '尚无记录')); $('latest-sleep-date').textContent = '这段时间还没有睡眠记录'; $('latest-sleep-window').textContent = '请在身体与恢复页面同步小米或 Zepp 睡眠。'; }
         stages($('sleep-stage-bar'), $('sleep-stage-legend'), sleep);
         const values = records.filter(r => Number.isFinite(r.totalMinutes));
         $('sleep-average').textContent = values.length ? `${values.length} 晚 · 平均 ${minutes(Math.round(values.reduce((n, r) => n + r.totalMinutes, 0) / values.length))}` : '缺失的夜晚保持空白';

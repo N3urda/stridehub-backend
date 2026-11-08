@@ -154,7 +154,7 @@
             const covered = new Set(records.map(record => record.date)).size;
             output('#sleep-range', `当前显示：${rangeLabel(state.sleepRange)} · ${dayCount(state.sleepRange)} 天中有 ${covered} 天留有记录，${measured.length} 条有睡眠时长。空缺日期不代表没有睡眠，不计入平均。`);
         }
-        if (records.length) { const latest = records[0]; metric(summary, '期间最近一晚', minutes(latest.totalMinutes), `${latest.date} · Zepp / Amazfit`); metric(summary, '有时长记录的平均时长', measured.length ? minutes(Math.round(measured.reduce((n,r) => n + r.totalMinutes, 0) / measured.length)) : '未知', `${measured.length} 条记录有时长，空缺日期不参与`); }
+        if (records.length) { const latest = records[0]; metric(summary, '期间最近一晚', minutes(latest.totalMinutes), `${latest.date} · ${latest.sourceLabel || latest.source}`); metric(summary, '有时长记录的平均时长', measured.length ? minutes(Math.round(measured.reduce((n,r) => n + r.totalMinutes, 0) / measured.length)) : '未知', `${measured.length} 条记录有时长，空缺日期不参与`); }
         let visual = $('#body-sleep-visual');
         if (!visual) { visual = node('div', 'body-sleep-visual'); visual.id = 'body-sleep-visual'; summary.before(visual); }
         visual.replaceChildren();
@@ -165,7 +165,7 @@
             const bar = node('div', 'stage-bar'), legend = node('div', 'stage-legend'); window.StrideHubData?.stages(bar, legend, latest); visual.append(head, bar, legend, node('p', 'subtle', '各阶段累计时长；不代表阶段发生顺序。')); visual.hidden = false;
         } else visual.hidden = true;
         const chart = $('#sleep-chart');
-        if (!measured.length) chart.replaceChildren(node('p', 'health-empty', '这段时间暂无可用睡眠时长。可以扩大日期范围，或完成 Zepp 同步后重试。'));
+        if (!measured.length) chart.replaceChildren(node('p', 'health-empty', '这段时间暂无可用睡眠时长。可以扩大日期范围，或完成小米 / Zepp 同步后重试。'));
         else {
             const shownRange = state.sleepRange || {from: range.elements.from.value, to: range.elements.to.value};
             const sorted = [...measured].sort((a,b) => a.date.localeCompare(b.date)); const from = Date.parse(shownRange.from), to = Date.parse(shownRange.to);
@@ -176,7 +176,12 @@
         }
         for (const record of records.slice(0, state.sleepShown)) {
             const row = node('article', 'health-record'); const content = node('div', 'health-record-content');
-            content.append(node('p', 'health-record-title', `${record.date} · ${minutes(record.totalMinutes)}`), node('p', 'health-record-meta', `${displayTime(record.startedAt)} 入睡 — ${displayTime(record.endedAt)} 醒来 · 设备时区 ${record.timeZone || '未知'} · Zepp / Amazfit`));
+            content.append(node('p', 'health-record-title', `${record.date} · ${minutes(record.totalMinutes)}`), node('p', 'health-record-meta', `${displayTime(record.startedAt)} 入睡 — ${displayTime(record.endedAt)} 醒来 · 设备时区 ${record.timeZone || '未知'} · ${record.sourceLabel || record.source}`));
+            if (record.contributingSources?.length > 1) content.append(node('p', 'health-record-meta', '互补来源：' + record.contributingSources.map(source => source === 'mi_fitness' ? '小米运动健康' : 'Zepp').join('、')));
+            const extraLabels = {wakeCount: '清醒次数', restingHeartRate: '静息心率', averageHeartRate: '平均心率', averageSpO2: '平均血氧', averageRespiratoryRate: '平均呼吸频率'};
+            for (const [key, origin] of Object.entries(record.fieldSources || {})) {
+                if (origin.source !== record.source && extraLabels[key]) content.append(node('p', 'health-record-meta', `${extraLabels[key]}由 ${origin.source === 'mi_fitness' ? '小米运动健康' : 'Zepp'} 补充`));
+            }
             const stages = node('div', 'sleep-stages'); for (const [key,label] of [['deepMinutes','深睡'],['lightMinutes','浅睡'],['remMinutes','REM'],['awakeMinutes','清醒']]) stages.append(node('span','',`${label} ${record[key] == null ? '未知' : record[key] + ' 分'}`)); content.append(stages);
             content.append(node('p', 'health-record-meta', `睡眠评分 ${record.score ?? '未知'} · 静息心率 ${record.restingHeartRate == null ? '未知' : record.restingHeartRate + ' 次/分'} · 夜间清醒次数 ${record.wakeCount ?? '未知'}`)); row.append(content); target.append(row);
         }
@@ -260,6 +265,7 @@
         if (results[1].status === 'fulfilled') { state.sleeps = results[1].value.records; state.sleepRange = requested; renderSleep(); output('#sleep-record-status', ''); }
         else { errors.push('睡眠读取失败。'); output('#sleep-record-status', `未能载入 ${rangeLabel(requested)}。${state.sleepRange ? '仍显示 ' + rangeLabel(state.sleepRange) + ' 的上次结果。' : '尚无已载入结果。'}${results[1].reason.message}`, true); }
         output('#health-status', errors.join(' ') || '', errors.length > 0); $('#health-refresh').disabled = false;
+        app.dispatchEvent(new CustomEvent('health-records-refreshed', {detail: state.requestedRange}));
         await statusCheck;
     }
     form.addEventListener('input', () => { state.dirty = true; form.elements.systolic.setCustomValidity(''); updateEditor(); }); form.addEventListener('change', () => { state.dirty = true; form.elements.systolic.setCustomValidity(''); updateEditor(); }); form.addEventListener('submit', save);

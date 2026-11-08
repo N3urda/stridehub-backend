@@ -10,7 +10,7 @@ use App\Infrastructure\Time\Clock\Clock;
 /** Read-only observations. They never replace a self-report or grant training clearance. */
 final readonly class DailyHealthObservations
 {
-    public function __construct(private BloodPressureService $bloodPressure, private SleepService $sleep, private Clock $clock, private TrainingService $training)
+    public function __construct(private BloodPressureService $bloodPressure, private SleepService $sleep, private Clock $clock, private TrainingService $training, private ?MiFitnessService $miFitness = null)
     {
     }
 
@@ -25,6 +25,6 @@ final readonly class DailyHealthObservations
             $sleep = null;
         }
 
-        return ['bloodPressure' => $pressure, 'sleep' => $sleep, 'sleepSync' => $this->sleep->status()];
+        return ['bloodPressure' => $pressure, 'sleep' => $sleep, 'sleepSync' => $this->sleep->status(), 'miFitnessSync' => $this->miFitness?->status()];
     }
 }
