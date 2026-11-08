@@ -1,6 +1,8 @@
 (() => {
     'use strict';
     const {node, svg, request, dateInZone, shiftDay, num, status, metric} = window.StrideHubData;
+    const visuals = window.StrideHubCharts;
+    const nutrientColors = {energyKcal: '#247F75', proteinGrams: '#437FC1', carbohydrateGrams: '#DAA143', fatGrams: '#AC6B91'};
     const nutrientNames = {energyKcal: '能量', proteinGrams: '蛋白质', carbohydrateGrams: '碳水', fatGrams: '脂肪'};
     const mealNames = {breakfast: '早餐', lunch: '午餐', dinner: '晚餐', snack: '加餐', fuel: '运动补给', other: '其他'};
     const sourceNames = {unknown: '未填写', label: '食品标签', database: '食物数据库', estimate: '估算'};
@@ -127,13 +129,17 @@
         $('nutrition-prev').disabled = state.busy || state.loading || date <= state.data.from;
         $('nutrition-next').disabled = state.busy || state.loading || date >= state.data.to;
         $('nutrition-metrics').replaceChildren();
-        for (const [key, label] of Object.entries(nutrientNames)) {
-            const value = day?.actualLogged[key], target = day?.targets[key], partial = value == null && day?.knownSubtotal[key] != null;
-            const detail = partial ? `已知小计 ${num(day.knownSubtotal[key], 1)} · ${day.coverage[key]}/${day.mealCount} 餐有数值` : `目标 ${num(target, 1)} · 记录与目标差 ${num(day?.delta[key], 1)}`;
-            metric($('nutrition-metrics'), label + ' · 已记录', num(value, 1), key === 'energyKcal' ? 'kcal' : 'g', detail);
-            const card = $('nutrition-metrics').lastElementChild;
-            if (value != null && target > 0) { const bar = node('progress'); bar.max = target; bar.value = Math.min(value, target); bar.setAttribute('aria-label', `${label}已记录 ${num(value, 1)}，目标 ${num(target, 1)}`); card.append(bar); }
-        }
+        metric($('nutrition-metrics'), '已记录能量', num(day?.actualLogged.energyKcal), 'kcal', day?.actualLogged.energyKcal == null && day?.knownSubtotal.energyKcal != null ? `已知小计 ${num(day.knownSubtotal.energyKcal)} kcal · 部分餐次缺少数值` : `目标 ${num(day?.targets.energyKcal)} kcal`);
+        metric($('nutrition-metrics'), '记录餐次', meals.length, '餐', `${day?.estimatedMeals || 0} 餐含估算`);
+        visuals.comparison($('nutrition-target-chart'), Object.entries(nutrientNames).map(([key, label]) => ({
+            label: label + (day?.actualLogged[key] == null && day?.knownSubtotal[key] != null ? ' · 已知小计' : ''),
+            value: day?.actualLogged[key] ?? day?.knownSubtotal[key] ?? null,
+            target: day?.targets[key] ?? null, unit: key === 'energyKcal' ? 'kcal' : 'g', color: nutrientColors[key]
+        })), {label: '已记录营养与目标'});
+        const macroKeys = ['proteinGrams', 'carbohydrateGrams', 'fatGrams'];
+        const completeMacros = macroKeys.every(key => Number.isFinite(day?.actualLogged[key]));
+        visuals.ring($('nutrition-macro-chart'), macroKeys.map(key => ({label: nutrientNames[key], value: completeMacros ? day.actualLogged[key] * (key === 'fatGrams' ? 9 : 4) : null, color: nutrientColors[key]})), {unit: 'kcal', label: '已记录营养素供能构成'});
+        $('nutrition-macro-note').textContent = completeMacros ? '由蛋白质、碳水和脂肪克数换算，不等同于食品标注的总能量。' : meals.length ? '三项营养素记录尚不完整，暂不计算构成比例。' : '记录一餐的营养素后显示构成。';
         $('nutrition-coverage').textContent = `已记录 ${meals.length} 餐 · ${day?.estimatedMeals || 0} 餐含估算` + (meals.length && day?.actualLogged.energyKcal == null ? ' · 部分餐次缺少能量数值' : '');
         const p = data.plans.find(p => p.id === day?.planId), target = $('nutrition-plan'); target.replaceChildren();
         if (!p) { target.append(node('p', 'empty-note', '当天尚未保存生效的饮食计划。'), node('p', 'subtle small', '已有饮食记录仍可查看；保存计划后会在此对照。')); }
@@ -152,7 +158,14 @@
             card.append(node('p', 'meal-nutrients', `${num(m.nutrients.energyKcal)} kcal · 蛋白质 ${num(m.nutrients.proteinGrams, 1)} g`), controls('meal', 'meals', m));
             $('day-meals').append(card);
         }
-        if (redrawChart) chart($('nutrition-chart'), data.days.map(d => ({date: d.date, target: d.targets.energyKcal, actual: d.actualLogged.energyKcal})), [{key: 'target', label: '计划目标', color: '#a6b2cf', dashed: true}, {key: 'actual', label: '已记录摄入', color: '#328775'}], {zero: true, unit: 'kcal', selectedDate: date, onSelect: date => selectDay(date, false)});
+        if (redrawChart) {
+            const inspect = row => selectDay(typeof row === 'string' ? row : row.date, false);
+            visuals.bars($('nutrition-chart'), data.days.map(d => ({date: d.date, target: d.targets.energyKcal, actual: d.actualLogged.energyKcal})), {series: [{key: 'actual', label: '已记录摄入', color: '#247F75'}, {key: 'target', label: '计划目标', color: '#A8B4C6'}], unit: 'kcal', label: '每天已记录能量与计划目标', onSelect: inspect});
+            visuals.bars($('nutrition-macros-chart'), data.days.map(d => {
+                const complete = macroKeys.every(key => Number.isFinite(d.actualLogged[key]));
+                return {date: d.date, ...Object.fromEntries(macroKeys.map(key => [key, complete ? d.actualLogged[key] * (key === 'fatGrams' ? 9 : 4) : null]))};
+            }), {series: macroKeys.map(key => ({key, label: nutrientNames[key], color: nutrientColors[key]})), stacked: true, unit: 'kcal', label: '每日三大营养素供能构成', onSelect: inspect});
+        }
         $('meal-count').textContent = `${data.meals.length} 餐`;
         table($('meals-table'), ['日期 / 餐次', '食物 / 份量', 'kcal', '蛋白质 g', '碳水 g', '脂肪 g', '来源', '操作'], data.meals.map(m => [
             `${m.date} ${mealNames[m.mealType]}`, `${m.foods}${m.portion ? ' · ' + m.portion : ''}`, ...Object.keys(nutrientNames).map(k => num(m.nutrients[k], 1)), sourceNames[m.nutritionSource] + (m.sourceLabel ? ' · ' + m.sourceLabel : ''), controls('meal', 'meals', m),
@@ -173,23 +186,38 @@
                 if (p.date >= state.data.from && p.date <= state.data.to) points.set(p.date, {...points.get(p.date), date: p.date, target: p.weightKg});
             }
         }
-        chart($('weight-data-chart'), [...points.values()].sort((a, b) => a.date.localeCompare(b.date)), [{key: 'weightKg', label: '实测体重', color: '#8294d4'}, {key: 'average7DaysKg', label: '七日实测均值', color: '#56a68e'}, {key: 'target', label: '当前目标点', color: '#cb9b61', dashed: true}], {unit: 'kg'});
+        const weightDays = [];
+        for (let date = state.data.from; date <= state.data.to; date = shiftDay(date, 1)) weightDays.push({date, ...points.get(date)});
+        visuals.trend($('weight-data-chart'), weightDays, {series: [{key: 'weightKg', label: '实测体重', color: '#437FC1'}, {key: 'average7DaysKg', label: '七日实测均值', color: '#247F75'}, {key: 'target', label: '当前目标点', color: '#C28B35', dashed: true}], unit: 'kg', label: '体重实测、七日均值与目标'});
         $('weight-goals').replaceChildren();
         if (!goals.length) $('weight-goals').append(node('p', 'empty-note', '尚未设置减重目标。填写目标后展示进度，不会自动生成目标值。'));
         [...goals].sort((a, b) => Number(b.status === 'active') - Number(a.status === 'active') || b.startDate.localeCompare(a.startDate)).forEach(g => {
             const card = node('div', 'goal-card'); card.append(node('h3', '', `${g.title} · ${stateNames[g.status]}`), node('p', 'subtle', `${g.startDate} → ${g.endDate} · ${g.startWeightKg} → ${g.targetWeightKg} kg`));
-            const p = g.progress; card.append(node('p', '', p.measuredAt ? `${p.measuredAt} 实测 ${num(p.currentWeightKg, 2)} kg · 距目标 ${num(p.remainingKg, 2)} kg · 进度 ${num(p.percent, 1)}%` : '目标期间暂无实测体重'));
-            if (p.measuredAt) card.append(node('p', 'subtle small', '进度截至上述测量日期；达到目标后仍由你确认完成。'));
-            if (p.percent != null) { const bar = node('progress'); bar.max = 100; bar.value = Math.max(0, Math.min(100, p.percent)); bar.setAttribute('aria-label', '目标完成进度'); card.append(bar); }
-            g.milestones.forEach(m => card.append(node('p', 'subtle', `阶段目标 ${m.date} · ${num(m.weightKg, 2)} kg`)));
-            if (g.notes) card.append(node('p', 'subtle', g.notes));
+            const p = g.progress; card.append(node('p', '', p.measuredAt ? `${p.measuredAt} 实测 ${num(p.currentWeightKg, 2)} kg · 距目标 ${num(p.remainingKg, 2)} kg` : '目标期间暂无实测体重'));
+            const progress = node('div'); card.append(progress);
+            visuals.comparison(progress, [{label: '目标进度', value: p.percent, target: 100, unit: '%', color: '#247F75'}], {label: g.title + '进度'});
+            if (g.milestones.length || g.notes) {
+                const details = node('details', 'data-disclosure'); details.append(node('summary', '', '阶段目标与备注'));
+                g.milestones.forEach(m => details.append(node('p', 'subtle', `${m.date} · ${num(m.weightKg, 2)} kg`)));
+                if (g.notes) details.append(node('p', 'subtle', g.notes));
+                card.append(details);
+            }
             card.append(controls('goal', 'weight-goals', g)); $('weight-goals').append(card);
         });
         table($('weight-data-table'), ['日期', '实测 kg', '七日均值 kg', '样本天数', '来源 / 备注'], [...trend].reverse().map(r => [r.date, num(r.weightKg, 2), num(r.average7DaysKg, 2), r.sampleDays, `${r.sourceLabel || r.source} ${r.notes}`]));
         $('measurement-summary').replaceChildren();
         const waist = state.data.measurements.find(r => r.waistCm != null), fat = state.data.measurements.find(r => r.bodyFatPercent != null);
-        metric($('measurement-summary'), '最近腰围', num(waist?.waistCm, 1), 'cm', waist?.date || '所选范围未记录');
-        metric($('measurement-summary'), '最近体脂率', num(fat?.bodyFatPercent, 1), '%', fat?.date || '所选范围未记录');
+        metric($('measurement-summary'), '手动 / 导入腰围', num(waist?.waistCm, 1), 'cm', waist?.date || '所选范围无另行记录');
+        metric($('measurement-summary'), '手动 / 导入体脂率', num(fat?.bodyFatPercent, 1), '%', fat?.date || '手机估算请看下方体成分');
+        const measurementDays = [];
+        for (let date = state.data.from; date <= state.data.to; date = shiftDay(date, 1)) {
+            const entries = state.data.measurements.filter(r => r.date === date);
+            measurementDays.push({date, waistCm: entries.find(r => Number.isFinite(r.waistCm))?.waistCm ?? null, bodyFatPercent: entries.find(r => Number.isFinite(r.bodyFatPercent))?.bodyFatPercent ?? null});
+        }
+        for (const [id, key, label, unit, color] of [['waist-chart', 'waistCm', '腰围', 'cm', '#437FC1'], ['body-fat-chart', 'bodyFatPercent', '体脂率', '%', '#AC6B91']]) {
+            $(id).hidden = !measurementDays.some(r => Number.isFinite(r[key]));
+            if (!$(id).hidden) visuals.trend($(id), measurementDays, {series: [{key, label, color}], unit, label: label + '变化'});
+        }
         table($('measurements-table'), ['日期', '来源', '腰围 cm', '体脂率 %', '操作'], state.data.measurements.map(r => [r.date, r.sourceLabel || (r.source === 'user' ? '手动记录' : '导入'), num(r.waistCm, 1), num(r.bodyFatPercent, 1), controls('measurement', 'measurements', r)]));
     }
     const validDate = value => /^\d{4}-\d{2}-\d{2}$/.test(value || '') && Number.isFinite(Date.parse(value)) && new Date(value).toISOString().slice(0, 10) === value;
@@ -273,6 +301,7 @@
             document.querySelectorAll('.data-form [type=date]').forEach(el => { if (!el.value && !state.drafts.has(el.form.id.replace('-form', ''))) el.value = el.name === 'endDate' ? shiftDay(data.today, 60) : data.today; });
             if ($('nutrition-date')) { const input = $('nutrition-date'); input.min = data.from; input.max = data.to; if (!validDate(input.value) || input.value < data.from || input.value > data.to) input.value = data.today >= data.from && data.today <= data.to ? data.today : data.to; state.selectedDay = input.value; }
             app.dataset.view === 'nutrition' ? renderNutrition() : renderWeight();
+            if (app.dataset.view === 'weight') document.dispatchEvent(new CustomEvent('body-composition-range', {detail: {from: data.from, to: data.to, timezone: data.timezone}}));
             updateRangeState();
             status($('data-status'), '');
         } catch (e) { if (generation === state.generation) status($('data-status'), e.message + ' 当前内容未刷新，保留上次读取的记录。', true); }

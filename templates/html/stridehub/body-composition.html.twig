@@ -1,0 +1,7 @@
+<section id="body-composition" class="hub-surface health-panel composition-panel" data-base="{{ relativeUrl('/admin/health/api')|e('html_attr') }}" data-csrf="{{ csrf_token('health')|e('html_attr') }}" aria-labelledby="composition-title">
+    <div class="composition-heading"><div><p class="soft-label">BODY COMPOSITION / 身体组成</p><h2 id="composition-title">体成分与计算指标</h2><p class="subtle">体重来自称重记录；体脂、肌肉、水分等为设备或公式估算。参考高低来自采集时的秤算法，不代表疾病诊断。</p></div><button id="composition-refresh" type="button" class="hub-button">刷新体成分</button></div>
+    <p id="composition-status" role="status" aria-live="polite">正在读取体成分…</p>
+    <div class="composition-history"><label for="composition-capture">查看一次测量<select id="composition-capture" disabled><option>等待记录</option></select></label><button type="button" id="composition-more" class="hub-button" hidden>读取更早测量</button></div>
+    <div id="composition-content"></div>
+    <details class="composition-height"><summary>BMI 身高依据 · 可选择体检报告</summary><p class="subtle small">选择报告身高后，只额外计算 BMI。历史采集资料、原 BMI 和其他估算值完整保留，体脂不会重新计算。</p><form id="composition-height-form"><label for="composition-height-choice">选择身高来源<select id="composition-height-choice" disabled></select></label><button type="submit" class="hub-button" disabled>保存身高依据</button></form><p id="composition-height-source" class="small"></p><p id="composition-height-status" role="status" aria-live="polite"></p></details>
+</section>

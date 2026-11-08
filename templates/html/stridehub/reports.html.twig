@@ -1,0 +1,46 @@
+{% extends 'html/stridehub/shell.html.twig' %}
+{% set activeNav = 'reports' %}
+{% set pageKicker = 'HEALTH REPORTS' %}
+{% set pageTitle = '体检报告' %}
+{% set pageSubtitle = '把检查结果留在这里，也把日常变化接着记下去。' %}
+{% block stylesheets %}
+    <link rel="stylesheet" href="{{ relativeUrl(asset('css/stridehub-reports.css'))|e('html_attr') }}">
+{% endblock %}
+{% block head_scripts %}
+    <script defer src="{{ relativeUrl(asset('js/stridehub-data.js'))|e('html_attr') }}"></script>
+    <script defer src="{{ relativeUrl(asset('js/stridehub-reports.js'))|e('html_attr') }}"></script>
+{% endblock %}
+{% block page_actions %}<button type="button" class="report-button" id="reports-refresh">刷新记录</button>{% endblock %}
+{% block page_content %}
+<div id="reports-app" data-api-base="{{ relativeUrl('/admin/health/api')|e('html_attr') }}" data-health-url="{{ relativeUrl('/admin/health')|e('html_attr') }}" data-weight-url="{{ relativeUrl('/admin/weight')|e('html_attr') }}" data-training-url="{{ relativeUrl('/admin/training/today')|e('html_attr') }}" data-csrf="{{ csrf_token('health')|e('html_attr') }}">
+    <nav class="report-jump" aria-label="本页导航"><a href="#report-library">报告档案</a><a href="#report-tracking">日常跟踪</a><a href="#report-plans">跟踪与复查事项</a></nav>
+    <p id="reports-status" class="report-notice" role="status" aria-live="polite">正在读取报告与日常记录…</p>
+    <noscript><p class="report-notice">请开启 JavaScript 以浏览报告与日常跟踪记录。</p></noscript>
+    <section class="report-panel" id="report-library" aria-labelledby="report-library-title">
+        <div class="report-section-title"><div><h2 id="report-library-title">我的报告档案</h2><p id="reports-count" class="report-muted">全部已保存的报告</p></div><span class="report-tag">保留原始结果</span></div>
+        <div id="reports-list" class="report-list" aria-label="选择体检报告"></div>
+        <article id="report-detail" hidden>
+            <header class="report-detail-heading"><div><h3 id="report-title"></h3><p id="report-source" class="report-muted"></p><p id="report-review" class="report-muted"></p></div><div id="report-attachment" class="report-actions" role="status" aria-live="polite"></div></header>
+            <div class="report-filters">
+                <label class="report-search">搜索检查项目<input id="report-search" type="search" placeholder="项目名称、结果或参考范围" autocomplete="off"></label>
+                <label class="report-filter-check"><input id="report-abnormal" type="checkbox">只看报告标记异常</label>
+                <label>对照较早报告<select id="report-compare"><option value="">不对照</option></select></label>
+            </div>
+            <p id="report-result-count" class="report-muted" aria-live="polite"></p>
+            <div id="report-findings" class="report-table-scroll" role="region" tabindex="0" aria-label="原始检查结果，可横向滚动"></div>
+            <p id="report-comparison-note" class="report-muted" hidden>对照按项目名称匹配。检查方法和参考范围可能不同；单位不一致或同名项目不唯一时，不计算数值变化。</p>
+            <div id="report-narratives" class="report-narratives"></div>
+        </article>
+    </section>
+    <section class="report-panel" id="report-tracking" aria-labelledby="report-tracking-title">
+        <div class="report-section-title"><div><h2 id="report-tracking-title">日常跟踪</h2><p id="report-tracking-range" class="report-muted">最近 30 天的实际记录，每项保留测量日期。</p></div><a class="report-text-link" href="{{ relativeUrl('/admin/health')|e('html_attr') }}">全部身体记录 ↗</a></div>
+        <div id="report-tracking-cards" class="report-tracking-grid"></div>
+        <p class="report-muted report-footnote">这里展示日常记录；体检当日的结果保留在上方报告中。缺少测量显示“未记录”，设备数据保留实际采集日期。血压平均值仅描述已记录读数。</p>
+    </section>
+    <section class="report-panel" id="report-plans" aria-labelledby="report-plans-title">
+        <div class="report-section-title"><div><h2 id="report-plans-title">跟踪与复查事项</h2><p class="report-muted">查看已保存的安排，完成后留下记录。</p></div><a class="report-text-link" href="{{ relativeUrl('/admin/plans')|e('html_attr') }}">我的计划 ↗</a></div>
+        <p id="report-plan-status" class="report-notice" role="status" aria-live="polite" hidden></p>
+        <div id="report-plan-list"></div>
+    </section>
+</div>
+{% endblock %}

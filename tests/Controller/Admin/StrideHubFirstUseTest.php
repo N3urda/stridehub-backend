@@ -36,10 +36,10 @@ final class StrideHubFirstUseTest extends AdminWebTestCase
     {
         $this->withImportMode($mode);
         $this->client->loginUser($this->adminUser());
-        foreach (['/admin/insights', '/admin/health', '/admin/plans', '/admin/running', '/admin/nutrition', '/admin/weight', '/admin/training', '/admin/training/today', '/admin/upload', '/admin/app'] as $path) {
+        foreach (['/admin/insights', '/admin/health', '/admin/health/reports', '/admin/plans', '/admin/running', '/admin/nutrition', '/admin/weight', '/admin/training', '/admin/training/today', '/admin/upload', '/admin/app'] as $path) {
             $crawler = $this->client->request('GET', $path);
             self::assertResponseIsSuccessful($path);
-            self::assertCount(6, $crawler->filter('.hub-primary-nav a'), $path);
+            self::assertCount(7, $crawler->filter('.hub-primary-nav a'), $path);
         }
         $this->assertNoInventedProfile();
     }
@@ -48,7 +48,7 @@ final class StrideHubFirstUseTest extends AdminWebTestCase
     public function testWorkspacePagesAndBrowserApisStillRequireLogin(ImportMode $mode): void
     {
         $this->withImportMode($mode);
-        foreach (['/admin/upload', '/admin/importStatus', '/admin', '/admin/insights', '/admin/health', '/admin/plans', '/admin/running', '/admin/nutrition', '/admin/weight', '/admin/training/today', '/admin/app', '/admin/health/api/weight', '/admin/health/api/plans', '/admin/health/api/workspace', '/admin/health/api/workouts', '/admin/running/api/overview', '/admin/training/api/profile'] as $path) {
+        foreach (['/admin/upload', '/admin/importStatus', '/admin', '/admin/insights', '/admin/health', '/admin/health/reports', '/admin/plans', '/admin/running', '/admin/nutrition', '/admin/weight', '/admin/training/today', '/admin/app', '/admin/health/api/weight', '/admin/health/api/plans', '/admin/health/api/workspace', '/admin/health/api/workouts', '/admin/running/api/overview', '/admin/training/api/profile'] as $path) {
             $this->client->request('GET', $path);
             self::assertResponseRedirects('/admin/login', message: $path);
         }

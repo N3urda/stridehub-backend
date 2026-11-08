@@ -3,7 +3,7 @@
     <form id="catalog-range" class="data-range"><label>开始日期<input name="from" type="date" required></label><label>结束日期<input name="to" type="date" required></label><button type="submit" class="hub-button">查看统计</button></form>
     <p id="catalog-status" class="hub-notice" role="status">正在读取…</p>
     <div id="catalog-metrics" class="compact-metrics"></div>
-    <div id="catalog-chart" class="data-chart"></div>
-    <div id="catalog-table" class="data-table-scroll"></div>
+    <div class="viz-grid-layout running-catalog-visuals"><section><div class="viz-heading"><h2>每周距离</h2></div><div id="catalog-chart" class="data-chart"></div></section><section><div class="viz-heading"><h2>运动时间构成</h2></div><div id="catalog-types"></div></section><section class="viz-wide"><div class="viz-heading"><h2>运动日历</h2><p>按运动时长着色</p></div><div id="catalog-calendar"></div></section></div>
+    <details class="data-disclosure" id="catalog-records"><summary>运动记录与来源核对</summary><div id="catalog-table" class="data-table-scroll"></div></details>
     <p class="subtle small">同一次运动的多个来源经确认后只计一次。存在待核对重复时累计值留空。单次传感器曲线保留在下方来源详情中。</p>
 </section>

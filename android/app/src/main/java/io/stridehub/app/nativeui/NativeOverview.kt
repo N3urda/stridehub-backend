@@ -21,51 +21,26 @@ import java.util.Locale
     NativeData(vm,"/api/v1/health/workspace") {data->PageColumn {
         val today=healthReferenceDate(data.text("timezone", ""))
         val dateLabel=runCatching {LocalDate.parse(today).format(DateTimeFormatter.ofPattern("M月d日 EEEE",Locale.CHINA))}.getOrDefault(today)
-        PageHeader(dateLabel,"身体近况","把身体的变化，放回每天的生活里。")
+        PageHeader(dateLabel,"健康趋势","")
         val weight=data.optJSONObject("weight")?.array("records")?.firstOrNull()
         val sleep=data.array("sleep").firstOrNull()
         val daily=data.array("daily").firstOrNull()
-        Card(Modifier.fillMaxWidth(),colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.surface)) {
-            Column(Modifier.padding(20.dp),verticalArrangement=Arrangement.spacedBy(14.dp)) {
-                Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
-                    Icon(Icons.Default.MonitorWeight,null,Modifier.size(22.dp),tint=MaterialTheme.colorScheme.primary)
-                    Spacer(Modifier.width(9.dp))
-                    Text("最近体重",Modifier.weight(1f),style=MaterialTheme.typography.titleMedium)
-                    Text(healthDate(weight?.text("date",""),today),style=MaterialTheme.typography.labelMedium,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Row(verticalAlignment=Alignment.Bottom,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                    Text(healthValue(weight?.opt("weightKg"),1),Modifier.testTag("overview-weight"),style=MaterialTheme.typography.displaySmall)
-                    Text("kg",Modifier.padding(bottom=6.dp),style=MaterialTheme.typography.titleMedium,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Text(if(weight==null) "从第一次称重开始，慢慢看见变化。" else "服务器中最近保存的记录 · 本机记录可在称重页查看",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                Button(onClick=openWeighing,modifier=Modifier.fillMaxWidth().heightIn(min=50.dp).testTag("overview-weighing"),shape=MaterialTheme.shapes.medium) {
-                    Icon(Icons.Default.Add,null,Modifier.size(20.dp));Spacer(Modifier.width(8.dp));Text("开始称重")
-                }
-            }
-        }
-        Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min),horizontalArrangement=Arrangement.spacedBy(12.dp)) {
+        Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min),horizontalArrangement=Arrangement.spacedBy(10.dp)) {
+            OverviewMetric("最近体重",healthValue(weight?.opt("weightKg"),1)+" kg",healthDate(weight?.text("date",""),today),Icons.Default.MonitorWeight,"overview-weight",Modifier.weight(1f).fillMaxHeight(),openWeighing)
             OverviewMetric("睡眠",healthDuration(sleep?.opt("totalMinutes")),healthDate(sleep?.text("date",""),today),Icons.Default.Bedtime,"overview-sleep",Modifier.weight(1f).fillMaxHeight()){vm.select(1)}
-            OverviewMetric("步数",healthValue(daily?.optJSONObject("activity")?.opt("steps")),healthDate(daily?.text("date",""),today),Icons.Default.DirectionsWalk,"overview-steps",Modifier.weight(1f).fillMaxHeight()){vm.select(1)}
         }
-        Surface(onClick={vm.select(1)},shape=MaterialTheme.shapes.medium,color=MaterialTheme.colorScheme.surface) {
-            Row(Modifier.fillMaxWidth().padding(16.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)) {
-                Icon(Icons.Default.FavoriteBorder,null,Modifier.size(20.dp),tint=MaterialTheme.colorScheme.tertiary)
-                Column(Modifier.weight(1f)) {
-                    Text("静息心率",style=MaterialTheme.typography.labelLarge)
-                    Text(if(daily?.optJSONObject("heartRate")?.isNull("restingBpm")!=false) "尚无测量数据" else healthDate(daily.text("date",""),today),style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Text(healthValue(daily?.optJSONObject("heartRate")?.opt("restingBpm")),Modifier.testTag("overview-heart-rate"),style=MaterialTheme.typography.titleLarge)
-                Text("bpm",style=MaterialTheme.typography.labelMedium,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                Icon(Icons.Default.ChevronRight,null,Modifier.size(18.dp),tint=MaterialTheme.colorScheme.onSurfaceVariant)
-            }
+        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(10.dp)) {
+            Button(onClick=openWeighing,modifier=Modifier.weight(1f).testTag("overview-weighing")){Icon(Icons.Default.MonitorWeight,null,Modifier.size(18.dp));Spacer(Modifier.width(6.dp));Text("开始称重")}
+            OutlinedButton(onClick={vm.push(route("today"))},modifier=Modifier.weight(1f)){Text("今日安排")}
         }
         val trend=data.optJSONObject("weight")?.array("trend").orEmpty()
-        if(trend.isNotEmpty()) NativeLineChart("体重趋势 · kg",trend,"weightKg",MaterialTheme.colorScheme.primary)
-        SectionTitle("今天做什么","记录之外，也给今天留一点安排")
-        FeatureActionCard("今日安排与执行反馈","查看计划，留下今天的完成情况",Icons.Default.Today,{vm.push(route("today"))},emphasized=true)
+        NativeLineChart("体重趋势 · kg",trend,"weightKg",ChartPalette.weight)
+        DailyBars("每日步数",DashboardData.daily(data.array("daily"),"activity","steps"),"value","步",onOpen={vm.push(route("data","day",id=it.text("date")))})
+        SleepStackChart(data.array("sleep")){vm.push(route("data","sleep",payload=it))}
+        NativeLineChart("静息心率 · bpm",DashboardData.daily(data.array("daily"),"heartRate","restingBpm"),"value",androidx.compose.ui.graphics.Color(0xFFBA4E6B))
         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(10.dp)) {
-            OutlinedButton(onClick={vm.push(route("records","meals"))},modifier=Modifier.weight(1f).heightIn(min=48.dp)){Text("饮食记录")}
-            OutlinedButton(onClick={vm.push(route("records","check-ins"))},modifier=Modifier.weight(1f).heightIn(min=48.dp)){Text("身体感受")}
+            OutlinedButton(onClick={vm.push(route("nutrition"))},modifier=Modifier.weight(1f)){Text("饮食与营养")}
+            OutlinedButton(onClick={vm.select(1)},modifier=Modifier.weight(1f)){Text("全部身体指标")}
         }
         SectionTitle("下一项训练")
         UpcomingSession(vm,today)
@@ -74,10 +49,9 @@ import java.util.Locale
             TextButton(onClick={vm.select(2)}) {Text("查看全部")}
         }
         val workouts=data.optJSONObject("workouts")?.array("records").orEmpty()
-        if(workouts.isEmpty()) FeatureActionCard("从一次运动开始","同步设备记录，或导入已有运动文件",Icons.Default.DirectionsRun,{vm.select(2)})
-        else workouts.take(3).forEach {WorkoutCard(vm,it)}
-        val sync=data.optJSONObject("sync")
-        FeatureActionCard("数据与同步",sync?.let {"${statusLabel(it.text("state"))} · 查看同步记录与设备连接"} ?: "连接设备，让记录持续汇集",Icons.Default.Sync,{vm.push(route("sync"))})
+        if(workouts.isEmpty()) Text("暂无运动记录",style=MaterialTheme.typography.bodySmall)
+        else workouts.take(2).forEach {WorkoutCard(vm,it)}
+        ActionRow("数据与同步",Icons.Default.Sync){vm.push(route("sync"))}
     }}
 }
 

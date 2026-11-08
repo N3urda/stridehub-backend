@@ -40,6 +40,14 @@ public final class NasReplayTest extends AndroidTestCase {
             db.delete("sync_queue",null,null);db.delete("measurement_derivations",null,null);db.delete("legacy_imports",null,null);db.delete("measurements",null,null);
         }
     }
+    private void saveQueued(LocalStore store,Measurement measurement){
+        android.content.SharedPreferences preferences=getContext().getSharedPreferences("nas_sync",0);
+        String binding=preferences.getString("binding","");preferences.edit().remove("binding").commit();
+        try{store.save(measurement);}finally{preferences.edit().putString("binding",binding).commit();}
+        android.content.ContentValues owner=new android.content.ContentValues();owner.put("sync_owner",NasSync.queueOwner(getContext()));
+        store.getWritableDatabase().update("measurements",owner,"id=?",new String[]{Long.toString(measurement.id)});
+        NasSync.enqueueIfBound(store);
+    }
     private String row(LocalStore store,long id,String column){try(Cursor c=store.getReadableDatabase().rawQuery("SELECT "+column+" FROM sync_queue WHERE measurement_id=?",new String[]{""+id})){assertTrue(c.moveToFirst());return c.getString(0);}}
     public void testUncertainReceiptFrozenReplayRestartRevocationAndSwitch()throws Exception {
         try(ServerSocket server=new ServerSocket(0)){
@@ -47,7 +55,7 @@ public final class NasReplayTest extends AndroidTestCase {
             long id;String frozen;
             try(LocalStore store=new LocalStore(getContext())){
                 store.getWritableDatabase().delete("sync_queue",null,null);
-                Measurement m=Measurement.create(null,System.currentTimeMillis(),71.2,null,0,"test",null,null);store.save(m);id=m.id;frozen=row(store,id,"payload");
+                Measurement m=Measurement.create(null,System.currentTimeMillis(),71.2,null,0,"test",null,null);saveQueued(store,m);id=m.id;frozen=row(store,id,"payload");
             }
             ((android.app.job.JobScheduler)getContext().getSystemService(android.content.Context.JOB_SCHEDULER_SERVICE)).cancel(7341);
             Thread network=new Thread(()->{try{serve(server,0);serve(server,200);serve(server,401);}catch(Exception e){networkError=e;}});network.start();
@@ -71,8 +79,8 @@ public final class NasReplayTest extends AndroidTestCase {
             long first,second;
             try(LocalStore store=new LocalStore(getContext())){
                 store.getWritableDatabase().delete("sync_queue",null,null);
-                Measurement a=Measurement.create(null,java.time.Instant.parse("2026-10-21T08:30:00Z").toEpochMilli(),71.2,null,0,"test",null,null);store.save(a);first=a.id;
-                Measurement b=Measurement.create(null,a.measuredAt+123,71.3,null,0,"test",null,null);store.save(b);second=b.id;
+                Measurement a=Measurement.create(null,java.time.Instant.parse("2026-10-21T08:30:00Z").toEpochMilli(),71.2,null,0,"test",null,null);saveQueued(store,a);first=a.id;
+                Measurement b=Measurement.create(null,a.measuredAt+123,71.3,null,0,"test",null,null);saveQueued(store,b);second=b.id;
                 assertTrue(new org.json.JSONObject(row(store,first,"payload")).getString("measuredAt").matches(".*T[0-9]{2}:[0-9]{2}:00\\.000(?:Z|[+-][0-9]{2}:[0-9]{2})"));
             }
             ((android.app.job.JobScheduler)getContext().getSystemService(android.content.Context.JOB_SCHEDULER_SERVICE)).cancel(7341);

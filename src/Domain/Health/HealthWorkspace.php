@@ -21,6 +21,7 @@ final readonly class HealthWorkspace
         private ZeppDataService $zepp,
         private HealthPlanService $plans,
         private Clock $clock,
+        private BodyCompositionReadModel $composition,
         private ?MiFitnessService $miFitness = null,
         private ?MiFitnessDataService $miFitnessData = null,
     ) {
@@ -82,6 +83,7 @@ final readonly class HealthWorkspace
         return ['from' => $from, 'to' => $to, 'today' => $today, 'timezone' => $zone->getName(), 'generatedAt' => $this->clock->getCurrentDateTimeImmutable()->format(DATE_ATOM),
             'profile' => $profile, 'healthContext' => $this->context->get(), 'sleep' => $sleep, 'daily' => $daily,
             'bloodPressure' => $this->pressure->list($from, $to), 'measurements' => $this->data->list('measurements', $from, $to),
+            'bodyComposition' => $this->composition->summary($from, $to),
             'weight' => ['records' => $weightRows, 'version' => $weights['version'], 'unit' => 'kg', 'trend' => $trends, 'goals' => $goals],
             'nutrition' => ['days' => $days, 'plans' => $plans, 'meals' => $meals, 'methodology' => 'actualLogged 仅表示已记录餐次，不代表全天摄入。任一餐缺失该营养值时合计为 null，已知小计单独保留。补给仅在 meals 中记录一次时计入，旧 fuel-logs 不重复累计。'],
             'workouts' => $workouts, 'sessions' => $this->training->list('sessions', $from, $to),

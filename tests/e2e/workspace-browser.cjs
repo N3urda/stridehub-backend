@@ -22,7 +22,7 @@ async function api(route, method = 'GET', body) {
     assert.equal((await fetch(base + '/api/v1/health/workspace')).status, 401);
     browser = await chromium.launch({headless: true, executablePath: process.env.CHROMIUM_EXECUTABLE || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'});
     const page = await browser.newPage({viewport: {width: 1440, height: 1100}, timezoneId: 'America/Los_Angeles', hasTouch: true});
-    const errors = []; page.on('pageerror', e => { errors.push(e.message); console.error('Browser error:', e.message); }); page.on('dialog', d => d.accept());
+    const errors = []; page.on('pageerror', e => { errors.push(e.message); console.error('Browser error:', e.stack || e.message); }); page.on('dialog', d => d.accept());
     await page.goto(base + '/admin/nutrition'); await page.locator('[name=_username]').fill('DEMO'); await page.locator('[name=_password]').fill(password);
     await Promise.all([page.waitForURL(/\/admin\/nutrition/), page.locator('button[type=submit]').click()]);
     await page.waitForLoadState('networkidle');
@@ -115,9 +115,10 @@ async function api(route, method = 'GET', body) {
     await page.locator('[data-open-editor=measurement]').click();
     await page.locator('#measurement-form [name=waistCm]').fill('85.2');
     await page.locator('#measurement-form button[type=submit]').click(); await page.locator('#measurement-status').getByText('已保存并核验。').waitFor();
+    await page.locator('#measurement-editor [data-close-editor]').click();
+    await page.getByText('查看与编辑测量记录', {exact: true}).click();
     assert.match(await page.locator('#measurements-table').innerText(), /85.2/);
     const workspace = (await api('health/workspace')).data; assert.equal(workspace.weight.records.length, 1); assert.equal(workspace.measurements[0].bodyFatPercent, null);
-    await page.locator('#measurement-editor [data-close-editor]').click();
     report('weight, goals and measurements save from dialogs, preserving unknown body fat');
     await page.evaluate(() => scrollTo(0, 0));
     await page.screenshot({path: path.join(output, 'weight-desktop.png'), fullPage: true});
@@ -167,7 +168,7 @@ async function api(route, method = 'GET', body) {
             await page.setViewportSize({width, height: 900});
             assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, route + ' overflows ' + width);
         }
-        assert.equal(await page.locator('.hub-primary-nav a').count(), 6);
+        assert.equal(await page.locator('.hub-primary-nav a').count(), 7);
         await page.evaluate(() => scrollTo(0, 0));
         await page.screenshot({path: path.join(output, route + '-mobile.png'), fullPage: true});
     }

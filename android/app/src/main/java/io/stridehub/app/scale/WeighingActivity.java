@@ -57,10 +57,26 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Collections;
 
-public final class WeighingActivity extends ComponentActivity implements ScaleClient.Listener {
+public class WeighingActivity extends ComponentActivity implements ScaleClient.Listener {
     private int PAPER=0xfff2f5f9, INK=0xff132b46, MUTED=0xff57657a, GREEN=0xff4666ed, SOFT=0xffe8ecfc, LINE=0xffe1e5ef;
     private int SURFACE=Color.WHITE, ON_ACCENT=Color.WHITE;
     private boolean darkTheme;
+    private boolean weighingVisible = true;
+    protected boolean embeddedWeighing() { return false; }
+    private void refreshAppearance() {
+        darkTheme=resolveDarkTheme(this);
+        int[] colors=NativeAppearance.weighingColors(darkTheme);
+        PAPER=colors[0];INK=colors[1];MUTED=colors[2];GREEN=colors[3];SOFT=colors[4];LINE=colors[5];SURFACE=colors[6];ON_ACCENT=colors[7];
+        if(shell!=null) shell.setBackgroundColor(PAPER);
+        if(nav!=null) nav.setBackgroundColor(PAPER);
+    }
+    public View weighingView() { return shell; }
+    public void setWeighingVisible(boolean visible) {
+        if (weighingVisible == visible) return;
+        weighingVisible = visible;
+        if (visible) { refreshAppearance(); render(); scroll.post(() -> scroll.scrollTo(0,pageScroll[page])); maybeAutoStart(); }
+        else { pageScroll[page] = scroll.getScrollY(); pauseCapture(); }
+    }
     private final int[] pageScroll=new int[4];
     private static final int PERMISSIONS=51, ENABLE_BT=52, EXPORT=53, IMPORT=54;
     private LocalStore store;
@@ -85,11 +101,18 @@ public final class WeighingActivity extends ComponentActivity implements ScaleCl
     private AlertDialog deviceDialog;
     private LinearLayout deviceList;
     private final LinkedHashMap<String,ScaleClient.Device> found=new LinkedHashMap<>();
+    private final List<Runnable> syncLabels=new ArrayList<>();
+    private final Runnable syncChanged=()->{if(foreground&&!isFinishing()&&!isDestroyed())for(Runnable update:syncLabels)update.run();};
+    private TextView syncText(java.util.function.Supplier<String> value,float size){
+        TextView label=text(value.get(),size,MUTED,false);
+        syncLabels.add(()->label.setText(value.get()));return label;
+    }
 
     @Override public void onCreate(Bundle saved) {
         darkTheme=resolveDarkTheme(this);
         setTheme(darkTheme?android.R.style.Theme_Material_NoActionBar:android.R.style.Theme_Material_Light_NoActionBar);
         super.onCreate(saved);
+        weighingVisible = !embeddedWeighing();
         int[] colors=NativeAppearance.weighingColors(darkTheme);
         PAPER=colors[0];INK=colors[1];MUTED=colors[2];GREEN=colors[3];SOFT=colors[4];LINE=colors[5];SURFACE=colors[6];ON_ACCENT=colors[7];
         if(saved!=null){int[] positions=saved.getIntArray("pageScroll");if(positions!=null)System.arraycopy(positions,0,pageScroll,0,Math.min(4,positions.length));}
@@ -117,10 +140,10 @@ public final class WeighingActivity extends ComponentActivity implements ScaleCl
         scroll=new ScrollView(this); scroll.setFillViewport(true); scroll.setClipToPadding(false);
         content=column(); content.setPadding(dp(20),dp(12),dp(20),dp(28)); scroll.addView(content);
         shell.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
-        WeighingShell.install(this,shell);
+        if (!embeddedWeighing()) WeighingShell.install(this,shell);
     }
     private void render() {
-        records=store.all(); content.removeAllViews(); statusLabel=null; stageTitle=null; measureButton=null; liveValue=null; liveCaption=null; liveFat=null; liveBmi=null; liveSource=null;liveDetail=null;liveReading=null;liveMetrics=null;preparation=null;
+        syncLabels.clear();records=store.all(); content.removeAllViews(); statusLabel=null; stageTitle=null; measureButton=null; liveValue=null; liveCaption=null; liveFat=null; liveBmi=null; liveSource=null;liveDetail=null;liveReading=null;liveMetrics=null;preparation=null;
         if(page==0) renderHome(); else if(page==1) renderTrend(); else if(page==2) renderHistory(); else renderSettings();
         nav.removeAllViews(); String[] titles={"称重","趋势","记录","设置"};
         for(int i=0;i<titles.length;i++) { final int target=i; Button item=button(titles[i],false); item.setTextColor(page==i?GREEN:MUTED); item.setBackground(interactive(page==i?SOFT:PAPER,16)); item.setTypeface(null,page==i?Typeface.BOLD:Typeface.NORMAL);item.setSelected(page==i);item.setContentDescription(titles[i]+(page==i?"，当前页面":"")); LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,-2,1); p.setMargins(dp(2),0,dp(2),0); nav.addView(item,p); item.setOnClickListener(v->{pageScroll[page]=scroll.getScrollY();page=target;render();scroll.post(()->scroll.scrollTo(0,pageScroll[page]));maybeAutoStart();}); }
@@ -158,7 +181,9 @@ public final class WeighingActivity extends ComponentActivity implements ScaleCl
         liveMetrics.addView(fat,new LinearLayout.LayoutParams(0,-2,1));liveMetrics.addView(bmi,new LinearLayout.LayoutParams(0,-2,1));
         liveMetrics.setVisibility(!live&&shown!=null&&(shown.bodyFatPercent!=null||shown.bmi!=null)?View.VISIBLE:View.GONE);add(liveReading,liveMetrics,0,16);
         String source=pendingReview!=null?reviewExplanation:live?"等待稳定结果 · 尚未保存":saved!=null?sourceLabel(saved)+" · 已保存到本机\n"+io.stridehub.app.sync.NasSync.rowStatus(store,saved.id):"稳定后自动保存到手机。";
-        liveSource=text(source,12,MUTED,false);liveSource.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);add(liveReading,liveSource,0,20);hero.addView(liveReading);
+        liveSource=text(source,12,MUTED,false);
+        if(saved!=null&&!live&&pendingReview==null){TextView savedSource=liveSource;Measurement savedRow=saved;syncLabels.add(()->savedSource.setText(sourceLabel(savedRow)+" · 已保存到本机\n"+io.stridehub.app.sync.NasSync.rowStatus(store,savedRow.id)));}
+        liveSource.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);add(liveReading,liveSource,0,20);hero.addView(liveReading);
         measureButton=button(primaryLabel(),!client.isBusy()||pendingReview!=null);hero.addView(measureButton,new LinearLayout.LayoutParams(-1,-2));measureButton.setOnClickListener(v->primaryAction());
         if(pendingReview!=null){Button discard=button("忽略这条，继续等待",false);add(hero,discard,8,0);discard.setOnClickListener(v->{pendingReview=null;currentWeight=null;client.discardPendingMeasurement();render();});}
         if(saved!=null){final Measurement row=saved;liveDetail=button("查看这次记录的身体指标",false);add(hero,liveDetail,8,0);liveDetail.setOnClickListener(v->showDetail(row));}
@@ -171,7 +196,7 @@ public final class WeighingActivity extends ComponentActivity implements ScaleCl
             add(history,text(formatTime(latest.measuredAt),12,MUTED,false),8,16);
             LinearLayout summary=row();summary.setGravity(Gravity.BOTTOM);summary.addView(text(format(latest.weightKg)+" kg",30,INK,true),new LinearLayout.LayoutParams(0,-2,1));
             if(latest.bodyFatPercent!=null)summary.addView(text("体脂  "+format(latest.bodyFatPercent)+" %",13,MUTED,false));history.addView(summary);
-            add(history,text(sourceLabel(latest)+" · "+io.stridehub.app.sync.NasSync.rowStatus(store,latest.id),12,MUTED,false),12,0);
+            add(history,syncText(()->sourceLabel(latest)+" · "+io.stridehub.app.sync.NasSync.rowStatus(store,latest.id),12),12,0);
             history.setBackground(interactive(SURFACE,22));history.setClickable(true);history.setFocusable(true);history.setContentDescription("查看最近已保存记录，"+format(latest.weightKg)+" 千克，"+formatTime(latest.measuredAt));history.setOnClickListener(v->showDetail(previous));add(content,history,0,12);
         } else if(latest==null) {
             LinearLayout guidance=column();guidance.setPadding(dp(4),0,dp(4),0);guidance.addView(text("从一条记录开始",16,INK,true));
@@ -314,13 +339,13 @@ public final class WeighingActivity extends ComponentActivity implements ScaleCl
         String day="";
         for(int i=0;i<Math.min(historyLimit,records.size());i++) { Measurement m=records.get(i); if(!m.localDay.equals(day)) { day=m.localDay; add(content,text(day,12,MUTED,true),23,10); }
             LinearLayout r=card(); r.setPadding(dp(18),dp(18),dp(18),dp(18)); LinearLayout top=row();top.setGravity(Gravity.CENTER_VERTICAL); TextView weight=text(format(m.weightKg)+" kg",25,INK,true); top.addView(weight,new LinearLayout.LayoutParams(0,-2,1)); if(m.bodyFatPercent!=null)top.addView(text("体脂 "+format(m.bodyFatPercent)+" %",13,MUTED,false)); r.addView(top);
-            add(r,text(new SimpleDateFormat("HH:mm",Locale.CHINA).format(m.measuredAt)+"  ·  "+sourceLabel(m)+"   ›",12,MUTED,false),7,0);add(r,text("本机已保存 · "+io.stridehub.app.sync.NasSync.rowStatus(store,m.id),12,MUTED,false),6,0);r.setBackground(interactive(SURFACE,22)); r.setClickable(true); r.setFocusable(true); r.setContentDescription(formatTime(m.measuredAt)+"，体重 "+format(m.weightKg)+" 千克，"+(m.bodyFatPercent==null?"体脂未知":"体脂率 "+format(m.bodyFatPercent)+"%，")+"本机已保存，"+io.stridehub.app.sync.NasSync.rowStatus(store,m.id)+"，查看详情"); r.setOnClickListener(v->showDetail(m)); add(content,r,0,9);
+            add(r,text(new SimpleDateFormat("HH:mm",Locale.CHINA).format(m.measuredAt)+"  ·  "+sourceLabel(m)+"   ›",12,MUTED,false),7,0);add(r,syncText(()->"本机已保存 · "+io.stridehub.app.sync.NasSync.rowStatus(store,m.id),12),6,0);r.setBackground(interactive(SURFACE,22)); r.setClickable(true); r.setFocusable(true); r.setContentDescription(formatTime(m.measuredAt)+"，体重 "+format(m.weightKg)+" 千克，"+(m.bodyFatPercent==null?"体脂未知":"体脂率 "+format(m.bodyFatPercent)+"%，")+"本机已保存，"+io.stridehub.app.sync.NasSync.rowStatus(store,m.id)+"，查看详情"); r.setOnClickListener(v->showDetail(m)); add(content,r,0,9);
         }
         if(historyLimit<records.size()) { Button more=button("继续查看更早记录",false); content.addView(more); more.setOnClickListener(v->{int y=scroll.getScrollY();historyLimit+=50;render();scroll.post(()->scroll.scrollTo(0,y));}); }
     }
     private void renderSettings() {
         intro("设备与数据", "管理你的体脂秤、个人资料与记录备份。");
-        LinearLayout syncStatus=card();syncStatus.addView(text("NAS 同步",18,INK,true));add(syncStatus,text(io.stridehub.app.sync.NasSync.status(this),13,MUTED,false),10,16);
+        LinearLayout syncStatus=card();syncStatus.addView(text("NAS 同步",18,INK,true));add(syncStatus,syncText(()->io.stridehub.app.sync.NasSync.status(this),13),10,16);
         Button pairNas=button("配对 NAS 并上传本机历史",false);add(syncStatus,pairNas,0,8);
         pairNas.setOnClickListener(v->{try {
             if(!io.stridehub.app.NativeSession.signedIn(this)){toast("请先登录 StrideHub，再配对 NAS。称重仍可离线使用。");return;}
@@ -330,9 +355,9 @@ public final class WeighingActivity extends ComponentActivity implements ScaleCl
                 io.stridehub.app.sync.NasSync.pair(this,message->runOnUiThread(()->{if(!isFinishing()&&!isDestroyed()){toast(message);render();}}));
             }).show();
         }catch(Exception e){toast("请返回 StrideHub 设置服务器并登录");}});
-        Button syncNas=button("同步 / 网络恢复后重试",false);add(syncStatus,syncNas,0,8);syncNas.setOnClickListener(v->io.stridehub.app.sync.NasSync.sync(this,message->runOnUiThread(()->{if(!isFinishing()&&!isDestroyed()){toast(message);render();}})));
+        Button syncNas=button("立即同步 / 重试",false);add(syncStatus,syncNas,0,8);syncNas.setOnClickListener(v->io.stridehub.app.sync.NasSync.sync(this,message->runOnUiThread(()->{if(!isFinishing()&&!isDestroyed()){toast(message);render();}})));
         Button disconnectNas=button("断开 NAS（保留已上传副本）",false);add(syncStatus,disconnectNas,0,8);disconnectNas.setOnClickListener(v->{io.stridehub.app.sync.NasSync.disconnect(this);render();});
-        syncStatus.addView(actionRow("同步说明与故障处理","本机记录和 NAS 副本分别保留",()->showMessage("同步与数据保留","同步错误或设备撤销时，请检查 NAS 后断开并重新配对；日记录冲突请在 NAS 检查手工日记录。删除本机记录会取消待同步，已上传 NAS 副本需在 NAS 管理端删除。")));
+        syncStatus.addView(actionRow("同步说明与故障处理","本机记录和 NAS 副本分别保留",()->showMessage("同步与数据保留","配对后，保存测量会立即自动同步。断网时先保存在本机，联网后由系统重试；重新打开 App 也会补传。系统限制后台运行时，可允许后台运行或点击立即同步。设备撤销需确认后重新配对；日记录冲突请检查 NAS 手工日记录。删除本机记录会取消待同步，已上传副本需在 NAS 管理端删除。")));
         add(content,syncStatus,0,16);
         Profile p=store.profile(); LinearLayout profile=card(); profile.addView(text("个人资料",18,INK,true));
         add(profile,text(p==null?"填写身高、出生日期与性别，用于身体成分估算。配对 NAS 后会随测量快照上传。":p.heightCm+" cm  ·  "+(p.male?"男":"女")+"  ·  "+p.ageAt(System.currentTimeMillis())+" 岁\n出生日期  "+p.birthDate,13,MUTED,false),12,16);
@@ -481,7 +506,7 @@ public final class WeighingActivity extends ComponentActivity implements ScaleCl
         try{return location!=null && (location.isProviderEnabled(LocationManager.GPS_PROVIDER)||location.isProviderEnabled(LocationManager.NETWORK_PROVIDER));}catch(Exception e){return false;}
     }
     private void maybeAutoStart(){
-        if(!foreground||page!=0||permissionPending||client.isBusy()||sessionFinished||!autoResume||manualDialog!=null)return;
+        if(!foreground||!weighingVisible||page!=0||permissionPending||client.isBusy()||sessionFinished||!autoResume||manualDialog!=null)return;
         if(store.device()==null)return;
         Profile profile=store.profile();
         if(profile==null||profile.validationError(System.currentTimeMillis())!=null){status="请先补充身体资料，再开始称重。";render();return;}
@@ -491,6 +516,7 @@ public final class WeighingActivity extends ComponentActivity implements ScaleCl
         beginScan(profile);
     }
     private void startMeasurement() {
+        if (!weighingVisible) return;
         autoResume=true;sessionFinished=false;
         Profile profile=store.profile();
         if(profile==null||profile.validationError(System.currentTimeMillis())!=null){showProfile(this::startMeasurement);return;}
@@ -614,10 +640,10 @@ public final class WeighingActivity extends ComponentActivity implements ScaleCl
         TextView body=text(client.diagnostics(),12,INK,false);body.setTextIsSelectable(true);body.setPadding(dp(22),dp(12),dp(22),dp(12));ScrollView wrapper=new ScrollView(this);wrapper.addView(body);
         new AlertDialog.Builder(this).setTitle("连接诊断 · 本机").setView(wrapper).setNegativeButton("关闭",null).setPositiveButton("导出文本",(d,w)->requestExport("diagnostics")).show();
     }
-    @Override protected void onStart(){super.onStart();foreground=true;if(store!=null&&shell!=null)render();}
+    @Override protected void onStart(){super.onStart();foreground=true;io.stridehub.app.sync.NasSync.addListener(syncChanged);if(store!=null&&shell!=null)render();io.stridehub.app.sync.NasSync.onForeground(this);}
     @Override protected void onResume(){
         super.onResume();
-        if(externalSettings){
+        if(externalSettings && weighingVisible){
             externalSettings=false;permissionPending=false;
             // Returning from Settings is not consent to show the same permission prompt again.
             if(hasBlePermissions()&&bluetoothEnabled()&&locationReady())startMeasurement();
@@ -625,11 +651,14 @@ public final class WeighingActivity extends ComponentActivity implements ScaleCl
         }else maybeAutoStart();
     }
     @Override protected void onStop() {
-        foreground=false;boolean interrupted=client.isBusy();client.stop();currentWeight=null;pendingReview=null;
+        foreground=false;io.stridehub.app.sync.NasSync.removeListener(syncChanged);io.stridehub.app.sync.NasSync.onBackground(this);pauseCapture();super.onStop();
+    }
+    private void pauseCapture() {
+        boolean interrupted=client.isBusy();client.stop();currentWeight=null;pendingReview=null;
         if(deviceDialog!=null&&deviceDialog.isShowing())deviceDialog.dismiss();deviceList=null;pickerStatus=null;
         if(sessionFinished){captureState=ScaleClient.State.SAVED;status="测量完成，已保存到本机。";}
         if(interrupted&&!sessionFinished){captureState=ScaleClient.State.IDLE;status=autoResume?"接收已暂停，返回称重页会继续等待。":"已暂停接收。";}
-        updateAwake();super.onStop();
+        updateAwake();
     }
     @Override protected void onDestroy(){client.stop();store.close();super.onDestroy();}
     @Override protected void onSaveInstanceState(Bundle out){super.onSaveInstanceState(out);pageScroll[page]=scroll.getScrollY();out.putIntArray("pageScroll",pageScroll);out.putInt("page",page);out.putInt("days",days);out.putString("metric",selectedMetric.name());out.putInt("weightAverageDays",weightAverageDays);out.putBoolean("forcePicker",forcePicker);out.putString("exportKind",exportKind);out.putLong("lastSavedId",lastSavedId);out.putBoolean("autoResume",autoResume);out.putBoolean("externalSettings",externalSettings);out.putBoolean("permissionPending",permissionPending);out.putBoolean("sessionFinished",sessionFinished);if(manualDialog!=null&&manualDialog.isShowing()){out.putBoolean("manualOpen",true);out.putString("manualWeight",manualWeight.getText().toString());out.putString("manualFat",manualFat.getText().toString());out.putLong("manualTime",manualTime.getTimeInMillis());}}

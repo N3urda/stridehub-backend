@@ -71,3 +71,7 @@ The kind of road every cyclist and runner loves.
 Start off by showing some ❤️ and give this repo a star. 
 When you are done, head over to the [documentation](https://docs.dreeve.app) to get started with the installation and configuration of Dreeve.
 
+
+## StrideHub branch policy
+
+`main` is the canonical integration and deployment branch. The former `master` history and deployed Android 0.4.0/chart work are integrated into `main`; new changes and releases should target `main`.

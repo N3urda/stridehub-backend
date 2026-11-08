@@ -49,13 +49,14 @@ import java.util.UUID
 }
 @Composable fun RecordEditor(vm:AppModel,r:JSONObject) {
     val form=Forms.get(r.getString("kind"));val repo=vm.repository ?: return
-    val initial=r.optJSONObject("payload") ?: Forms.initial(form.fields).put("version",0).put("id",UUID.randomUUID().toString())
+    val initialText=rememberSaveable(r.toString()) {(r.optJSONObject("payload") ?: Forms.initial(form.fields).put("version",0).put("id",UUID.randomUUID().toString())).toString()}
+    val initial=remember(initialText){JSONObject(initialText)}
     val identity=initial.text("id",r.optString("id")).ifBlank { if(form.kind=="weight") initial.text("date") else "default" }
     val draftKey="${form.kind}:$identity"
     var text by rememberSaveable(draftKey) {mutableStateOf(initial.toString())}
-    var draftLoaded by remember {mutableStateOf(false)};var error by remember {mutableStateOf<String?>(null)};var busy by remember {mutableStateOf(false)};var confirmDelete by remember {mutableStateOf(false)};var latest by remember {mutableStateOf<JSONObject?>(null)}
+    var draftLoaded by rememberSaveable(draftKey) {mutableStateOf(false)};var error by remember {mutableStateOf<String?>(null)};var busy by remember {mutableStateOf(false)};var confirmDelete by remember {mutableStateOf(false)};var latest by remember {mutableStateOf<JSONObject?>(null)}
     var restored by remember {mutableStateOf(false)};val scope=rememberCoroutineScope()
-    LaunchedEffect(draftKey) {repo.cache.draft(repo.account,draftKey)?.let {text=it.payload;restored=true};draftLoaded=true}
+    LaunchedEffect(draftKey) {if(!draftLoaded) {repo.cache.draft(repo.account,draftKey)?.let {text=it.payload;restored=true};draftLoaded=true}}
     LaunchedEffect(text,draftLoaded) {if(draftLoaded) {delay(300);repo.saveDraft(draftKey,text)}}
     val data=remember(text){JSONObject(text)}
     fun path(value:JSONObject=data):String = if(form.singleton) form.path else form.path+"/"+encoded(if(form.kind=="weight") value.getString("date") else identity)

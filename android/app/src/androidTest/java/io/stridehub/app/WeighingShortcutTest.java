@@ -18,8 +18,9 @@ public final class WeighingShortcutTest extends ActivityInstrumentationTestCase2
         Activity weighing=null;
         try {
             MainActivity main=getActivity();
-            weighing=monitor.waitForActivityWithTimeout(5000);
-            assertNotNull("Shortcut opens native weighing",weighing);
+            getInstrumentation().waitForIdleSync();
+            runTestOnUiThread(()->assertEquals("Shortcut selects the in-place weighing tab",4,new androidx.lifecycle.ViewModelProvider(main).get(io.stridehub.app.nativeui.AppModel.class).getTab()));
+            assertEquals("Shortcut must not create a second activity",0,monitor.getHits());
             getInstrumentation().waitForIdleSync();
             runTestOnUiThread(()->assertFalse(NativeUiTestSupport.containsWebSurface(main.getWindow().getDecorView())));
             assertFalse(NativeSession.signedIn(main));

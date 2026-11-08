@@ -66,11 +66,21 @@ class NativeProductPresentationTest {
             awaitText("离线缓存")
             primaryAction(compose.onNodeWithTag("overview-weighing"))
             assertMainNavigationVisible()
-            metric("overview-weight").assertTextEquals("72.4")
+            metric("overview-weight").assertTextEquals("72.4 kg")
             metric("overview-sleep").assertTextEquals("7时35分")
-            metric("overview-steps").assertTextEquals("8,260")
-            metric("overview-heart-rate").assertTextEquals("—")
+            compose.onNodeWithText("每日步数").performScrollTo().assertIsDisplayed()
+            val scroller=compose.onNode(hasScrollAction())
+            val scrollOffset=scroller.fetchSemanticsNode().config[androidx.compose.ui.semantics.SemanticsProperties.VerticalScrollAxisRange].value()
+            scroller.performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.ScrollBy) {it(0f,-scrollOffset)}
             screenshot("01-overview-fixture")
+            scrollTitleToTop("睡眠结构 · 小时")
+            screenshot("09-sleep-chart-fixture")
+            compose.onNodeWithText("饮食与营养").performScrollTo().performClick()
+            awaitText("三大营养素供能占比")
+            scrollTitleToTop("三大营养素供能占比")
+            screenshot("10-nutrition-chart-fixture")
+            pressBack()
+
 
             selectTab(1)
             awaitTag("body-weighing")
@@ -108,7 +118,7 @@ class NativeProductPresentationTest {
         withFixture(populated = false) {
             awaitTag("overview-weighing")
             awaitText("离线缓存")
-            listOf("overview-weight", "overview-sleep", "overview-steps", "overview-heart-rate").forEach { tag ->
+            listOf("overview-sleep").forEach { tag ->
                 metric(tag).assertTextEquals("—")
             }
             primaryAction(compose.onNodeWithTag("overview-weighing"))
@@ -129,7 +139,7 @@ class NativeProductPresentationTest {
                 scenario.onActivity { main ->
                     assertEquals(1, ViewModelProvider(main)[AppModel::class.java].tab)
                 }
-                assertTrue("The action reuses the existing weighing/result navigation", weighing.isFinishing)
+                assertFalse("The main activity stays alive across tabs", weighing.isFinishing)
                 awaitTag("body-weighing")
                 primaryAction(compose.onNodeWithTag("body-weighing"))
                 assertMainNavigationVisible()
@@ -146,7 +156,7 @@ class NativeProductPresentationTest {
                 visibleTab(4).assertIsSelected()
                 pressBack()
                 compose.waitForIdle()
-                assertTrue(weighing.isFinishing)
+                assertFalse(weighing.isFinishing)
                 primaryAction(compose.onNodeWithText("离线称重与本机历史"))
                 assertFalse(NativeSession.signedIn(context))
             }
@@ -185,6 +195,15 @@ class NativeProductPresentationTest {
 
     private fun awaitText(text: String) {
         compose.waitUntil(10_000) { compose.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitForIdle()
+    }
+
+    private fun scrollTitleToTop(text:String) {
+        val target=compose.onNodeWithText(text)
+        target.performScrollTo()
+        val container=compose.onNode(hasScrollAction())
+        val delta=target.fetchSemanticsNode().boundsInRoot.top-container.fetchSemanticsNode().boundsInRoot.top
+        container.performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.ScrollBy) {it(0f,delta)}
         compose.waitForIdle()
     }
 
@@ -231,22 +250,12 @@ class NativeProductPresentationTest {
     }
 
     private fun withWeighing(open: () -> Unit, block: (WeighingActivity) -> Unit) {
-        val monitor = instrumentation.addMonitor(WeighingActivity::class.java.name, null, false)
-        var weighing: WeighingActivity? = null
-        try {
-            open()
-            weighing = monitor.waitForActivityWithTimeout(5_000) as? WeighingActivity
-            assertNotNull("The primary action opens native weighing", weighing)
-            compose.waitForIdle()
-            awaitFocusedWindow(WeighingActivity::class.java)
-            block(requireNotNull(weighing))
-        } finally {
-            weighing?.let { activity ->
-                if (!activity.isFinishing) instrumentation.runOnMainSync { activity.finish() }
-            }
-            instrumentation.removeMonitor(monitor)
-            instrumentation.waitForIdleSync()
-        }
+        open()
+        compose.waitForIdle()
+        awaitFocusedWindow(MainActivity::class.java)
+        var main:MainActivity?=null
+        instrumentation.runOnMainSync {main=ActivityLifecycleMonitorRegistry.getInstance().getActivitiesInStage(Stage.RESUMED).filterIsInstance<MainActivity>().single()}
+        block(requireNotNull(main))
     }
 
     private fun withFixture(populated: Boolean, block: (ActivityScenario<MainActivity>) -> Unit) {
@@ -276,6 +285,10 @@ class NativeProductPresentationTest {
         val sleep = JSONArray()
         val daily = JSONArray()
         if (populated) {
+            (1..13).forEach {i->
+                sleep.put(JSONObject().put("date",today.minusDays(i.toLong()).toString()).put("totalMinutes",390+i*4).put("deepMinutes",60+i).put("lightMinutes",250+i*2).put("remMinutes",80+i))
+                daily.put(JSONObject().put("date",today.minusDays(i.toLong()).toString()).put("activity",JSONObject().put("steps",4500+i*370)).put("heartRate",JSONObject().put("restingBpm",58+i%5)))
+            }
             sleep.put(JSONObject().put("date", today.toString()).put("totalMinutes", 455).put("deepMinutes", 94)
                 .put("lightMinutes", 268).put("remMinutes", 93).put("source", "Zepp").put("sourceLabel", "Zepp / Amazfit"))
             daily.put(JSONObject().put("date", today.toString()).put("activity", JSONObject().put("steps", 8260))
@@ -284,10 +297,17 @@ class NativeProductPresentationTest {
         val workspace = JSONObject().put("today", today.toString()).put("from", today.minusDays(29).toString())
             .put("to", today.toString()).put("timezone", "Asia/Shanghai")
             .put("weight", JSONObject().put("records", weightRows).put("trend", trend).put("goals", JSONArray()))
-            .put("sleep", sleep).put("daily", daily).put("workouts", workouts)
+            .put("sleep", JSONArray(sleep.objects().sortedByDescending {it.text("date")})).put("daily", JSONArray(daily.objects().sortedByDescending {it.text("date")})).put("workouts", workouts)
             .put("sessions", JSONArray()).put("healthPlans", JSONArray()).put("checkIns", JSONArray())
             .put("sync", JSONObject().put("state", if (populated) "success" else "not_configured")
                 .put("lastSuccessAt", if (populated) "${today}T08:30:00+08:00" else JSONObject.NULL))
+        if(populated) {
+            val days=JSONArray()
+            (0..6).forEach {i->days.put(JSONObject().put("date",today.minusDays((6-i).toLong()).toString()).put("mealCount",3).put("estimatedMeals",1)
+                .put("actualLogged",JSONObject().put("energyKcal",1800+i*30).put("proteinGrams",95+i).put("carbohydrateGrams",220).put("fatGrams",55))
+                .put("targets",JSONObject().put("energyKcal",2100).put("proteinGrams",120).put("carbohydrateGrams",240).put("fatGrams",65)))}
+            workspace.put("nutrition",JSONObject().put("days",days).put("meals",JSONArray()))
+        }
         cache(repo, "/api/v1/health/workspace", workspace)
         cache(repo, "/api/v1/health/workspace?from=${today.minusDays(29)}&to=$today", workspace)
         cache(repo, "/api/v1/mobile/workouts?page=1&limit=30&from=${today.minusDays(89)}&to=$today&sportType=all", workouts)

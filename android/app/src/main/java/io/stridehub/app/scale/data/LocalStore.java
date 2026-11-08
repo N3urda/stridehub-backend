@@ -22,9 +22,11 @@ import java.time.ZoneId;
 
 public final class LocalStore extends SQLiteOpenHelper {
     private final SharedPreferences preferences;
+    private final Context context;
     private boolean importing;
     public LocalStore(Context context) {
-        super(context,"tinyyumi.db",null,6);
+        super(context,"tinyyumi.db",null,7);
+        this.context=context.getApplicationContext();
         preferences=context.getSharedPreferences("local_profile",Context.MODE_PRIVATE);
     }
     @Override public void onCreate(SQLiteDatabase db) {
@@ -43,10 +45,12 @@ public final class LocalStore extends SQLiteOpenHelper {
         if(oldVersion<4)createSync(db);
         else if(oldVersion<5){db.execSQL("ALTER TABLE sync_queue ADD COLUMN server TEXT NOT NULL DEFAULT ''");backfillIdentity(db);}
         if(oldVersion>=4&&oldVersion<6)db.execSQL("ALTER TABLE sync_queue ADD COLUMN claim_generation TEXT");
+        if(oldVersion>=4&&oldVersion<7)db.execSQL("ALTER TABLE measurements ADD COLUMN sync_owner TEXT");
     }
     private void createSync(SQLiteDatabase db) {
         db.execSQL("ALTER TABLE measurements ADD COLUMN upload_uuid TEXT");
         db.execSQL("ALTER TABLE measurements ADD COLUMN captured_time TEXT");
+        db.execSQL("ALTER TABLE measurements ADD COLUMN sync_owner TEXT");
         db.execSQL("CREATE TABLE sync_queue (measurement_id INTEGER PRIMARY KEY, uuid TEXT NOT NULL, binding TEXT NOT NULL, server TEXT NOT NULL, payload TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', detail TEXT, claim_generation TEXT)");
         backfillIdentity(db);
     }
@@ -83,14 +87,17 @@ public final class LocalStore extends SQLiteOpenHelper {
                 ContentValues values=new ContentValues();values.put("fingerprint",key.toString());values.put("measurement_id",m.id);values.put("original_row",original);
                 db.insertOrThrow("legacy_imports",null,values);inserted++;
             }
-            io.stridehub.app.sync.NasSync.enqueueIfBound(this);
-            db.setTransactionSuccessful();return inserted;
+            db.setTransactionSuccessful();
         } finally {importing=false;db.endTransaction();}
+        io.stridehub.app.sync.NasSync.requestAutomatic(context);
+        return inserted;
     }
     public synchronized void save(Measurement m) {
+        String owner=io.stridehub.app.sync.NasSync.queueOwner(context);
         SQLiteDatabase transaction=getWritableDatabase();transaction.beginTransaction();try {
         ContentValues values=new ContentValues();
         values.put("upload_uuid",java.util.UUID.randomUUID().toString());
+        values.put("sync_owner",owner);
         values.put("captured_time",m.capturedTime==null?Measurement.formatCapturedTime(m.measuredAt,java.time.ZoneOffset.UTC):m.capturedTime);
         values.put("measured_at",m.measuredAt);values.put("local_day",m.localDay);values.put("weight",m.weightKg);
         values.put("fat",m.bodyFatPercent);values.put("impedance",m.impedance);values.put("bmi",m.bmi);
@@ -99,9 +106,10 @@ public final class LocalStore extends SQLiteOpenHelper {
         m.id=getWritableDatabase().insertOrThrow("measurements",null,values);
         // Raw capture is durable first. A failed derivation never discards it or prevents the BLE ACK.
         ensureDerived(m);
-        if(!importing)io.stridehub.app.sync.NasSync.enqueueIfBound(this);
         transaction.setTransactionSuccessful();
         }finally{transaction.endTransaction();}
+        // Upload queue construction and network failure cannot roll back the offline capture.
+        if(!importing)io.stridehub.app.sync.NasSync.requestAutomatic(context);
     }
     public synchronized List<Measurement> all() {
         List<Measurement> result=new ArrayList<>();

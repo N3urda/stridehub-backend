@@ -1,6 +1,8 @@
 @file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 package io.stridehub.app.nativeui
 
+import android.view.View
+import androidx.compose.ui.viewinterop.AndroidView
 import android.app.Application
 import android.content.Context
 import android.provider.OpenableColumns
@@ -65,7 +67,7 @@ class AppModel(app:Application, private val state:SavedStateHandle):AndroidViewM
     override fun onCleared() {repository?.cancel();super.onCleared()}
     fun refresh() { revision++ }
     fun loggedIn(repo:NativeRepository) { repository?.cancel();repository=repo;authEpoch++;resetNavigation() }
-    fun resetNavigation() { (0..3).forEach { state["stack$it"]=arrayListOf<String>() };select(0) }
+    fun resetNavigation() { (0..4).forEach { state["stack$it"]=arrayListOf<String>() };select(0) }
     fun action(block:suspend (NativeRepository)->Unit) { if(busy) return;val repo=repository ?: return;busy=true;viewModelScope.launch { try { block(repo);revision++ } catch(e:Exception) { if(e is kotlinx.coroutines.CancellationException) throw e;message=e.message ?: "操作失败，请重试。" } finally { busy=false } } }
     fun logout() {
         val repo=repository ?: return
@@ -82,7 +84,7 @@ class AppModel(app:Application, private val state:SavedStateHandle):AndroidViewM
     }
 
 }
-@Composable fun StrideHubApp(vm:AppModel=viewModel(), openWeighing:()->Unit) {
+@Composable fun StrideHubApp(vm:AppModel=viewModel(), openWeighing:()->Unit, weighingContent:View?=null, onWeighingVisible:(Boolean)->Unit={}) {
     val context=LocalContext.current
     val preferences=context.getSharedPreferences("native-ui",Context.MODE_PRIVATE)
     var theme by rememberSaveable { mutableStateOf(preferences.getString("theme","system") ?: "system") }
@@ -90,15 +92,20 @@ class AppModel(app:Application, private val state:SavedStateHandle):AndroidViewM
     StrideHubTheme(theme) {
         val snackbar=remember { SnackbarHostState() }
         LaunchedEffect(vm.message) { vm.message?.let { snackbar.showSnackbar(it);vm.message=null } }
+        val loginState=rememberSaveableStateHolder()
         val repo=vm.repository
+        val weighing = vm.tab == WEIGHING_TAB && vm.currentRoute.isBlank()
+        DisposableEffect(weighing) { onWeighingVisible(weighing); onDispose { onWeighingVisible(false) } }
         Scaffold(snackbarHost={SnackbarHost(snackbar)},
-            topBar={TopAppBar(title={Text(if(repo==null) "连接 StrideHub" else if(vm.currentRoute.isBlank() && vm.tab==0) "StrideHub" else listOf("总览","身体","运动","计划")[vm.tab],style=MaterialTheme.typography.titleLarge)},navigationIcon={ if(vm.currentRoute.isNotBlank()) IconButton(onClick=vm::pop,enabled=!vm.busy) { Icon(Icons.AutoMirrored.Filled.ArrowBack,"返回") } },actions={ if(repo!=null) { IconButton(onClick=vm::refresh) {Icon(Icons.Default.Refresh,"刷新")};IconButton(onClick={vm.push(route("settings"))}){Icon(Icons.Default.Settings,"设置与更多")}} })},
-            bottomBar={if(repo!=null) StrideHubNavigationBar(vm.tab,{tab -> if(tab==WEIGHING_TAB) openWeighing() else vm.select(tab)},enabled=!vm.busy)}
+            topBar={TopAppBar(title={Text(if(weighing) "称重" else if(repo==null) "连接 StrideHub" else if(vm.currentRoute.isBlank() && vm.tab==0) "StrideHub" else listOf("总览","身体","运动","计划","称重")[vm.tab],style=MaterialTheme.typography.titleLarge)},navigationIcon={ if(vm.currentRoute.isNotBlank() || (repo==null && weighing)) IconButton(onClick={if(repo==null && weighing) vm.select(0) else vm.pop()},enabled=!vm.busy) { Icon(Icons.AutoMirrored.Filled.ArrowBack,"返回") } },actions={ if(repo!=null) { IconButton(onClick=vm::refresh) {Icon(Icons.Default.Refresh,"刷新")};IconButton(onClick={vm.push(route("settings"))}){Icon(Icons.Default.Settings,"设置与更多")}} })},
+            bottomBar={if(repo!=null || weighing) StrideHubNavigationBar(vm.tab,{tab -> if(tab==WEIGHING_TAB) openWeighing() else vm.select(tab)},enabled=!vm.busy)}
         ) { padding ->
-            BackHandler(enabled=vm.busy || vm.currentRoute.isNotBlank()) {if(!vm.busy) vm.pop()}
+            BackHandler(enabled=vm.busy || vm.currentRoute.isNotBlank() || (repo==null && weighing)) {if(!vm.busy) {if(repo==null && weighing) vm.select(0) else vm.pop()}}
+            key(repo?.account,vm.authEpoch) { val holder=rememberSaveableStateHolder()
             Box(Modifier.padding(padding).fillMaxSize()) {
-                if(repo==null) LoginScreen(vm)
-                else key(repo.account,vm.authEpoch) { val holder=rememberSaveableStateHolder();holder.SaveableStateProvider("${repo.account}:${vm.tab}:${vm.currentRoute}") {
+                if(weighing && weighingContent!=null) AndroidView(factory={weighingContent},modifier=Modifier.fillMaxSize())
+                else if(repo==null) loginState.SaveableStateProvider("login") { LoginScreen(vm) }
+                else holder.SaveableStateProvider("${repo.account}:${vm.tab}:${vm.currentRoute}") {
                     if(vm.currentRoute.isBlank()) when(vm.tab) {0->Overview(vm);1->BodyScreen(vm);2->WorkoutsScreen(vm);else->PlansScreen(vm)}
                     else { val r=JSONObject(vm.currentRoute);when(r.optString("type")) {
                         "settings" -> SettingsScreen(vm,theme) { theme=it;preferences.edit().putString("theme",it).apply() }
@@ -115,9 +122,9 @@ class AppModel(app:Application, private val state:SavedStateHandle):AndroidViewM
                         "association" -> AssociationScreen(vm,r)
                         "comparison" -> ComparisonScreen(vm,r.getString("id"))
                     }}
-                }}
+                }
                 if(vm.busy) LinearProgressIndicator(Modifier.align(Alignment.TopCenter).fillMaxWidth())
-            }
+            }}
         }
     }
     }

@@ -3,7 +3,7 @@
     const app = document.getElementById('workout-catalog'); if (!app) return;
     const {node, request, num, metric, status, dateInZone, shiftDay} = window.StrideHubData;
     const {chart, table} = window.StrideHubWorkspaceUI, $ = id => document.getElementById(id), form = $('catalog-range');
-    let busy = false, generation = 0;
+    let busy = false, generation = 0, zone = 'Asia/Shanghai';
     async function mutate(id, method, body, version) {
         if (busy) return;
         busy = true; ++generation;
@@ -21,7 +21,7 @@
             if (!form.elements.to.value) {
                 const profile = await request(app.dataset.base.replace('/health/api', '/training/api') + '/profile');
                 if (current !== generation) return;
-                form.elements.to.value = dateInZone(new Date(), profile.timezone); form.elements.from.value = shiftDay(form.elements.to.value, -89);
+                zone = profile.timezone; form.elements.to.value = dateInZone(new Date(), zone); form.elements.from.value = shiftDay(form.elements.to.value, -89);
             }
             const data = await request(app.dataset.base + '/workouts?' + new URLSearchParams({from: form.elements.from.value, to: form.elements.to.value}));
             if (current !== generation) return;
@@ -30,7 +30,14 @@
             metric($('catalog-metrics'), '总距离', num(s.distanceKm, 1), 'km');
             metric($('catalog-metrics'), '运动时长', num(s.movingSeconds == null ? null : s.movingSeconds / 3600, 1), '小时');
             metric($('catalog-metrics'), '平均心率', num(s.averageHeartRate, 1), 'bpm', '按有心率的运动时长加权');
-            chart($('catalog-chart'), data.weeks, [{key: 'distanceKm', label: '周运动距离', color: '#8294d4'}], {zero: true, unit: 'km'});
+            const charts=window.StrideHubCharts;
+            charts.bars($('catalog-chart'), data.weeks, {series:[{key:'distanceKm',label:'周运动距离',color:'#178b91'}],unit:'km',label:'每周运动距离'});
+            const days=new Map(), types=new Map();
+            for (const row of data.records) { const date=dateInZone(new Date(row.startAt),zone); days.set(date,!Number.isFinite(row.durationMinutes)||(days.has(date)&&days.get(date)===null)?null:(days.get(date)||0)+row.durationMinutes); const type=row.sportType || '其他'; types.set(type,!Number.isFinite(row.durationMinutes)||(types.has(type)&&types.get(type)===null)?null:(types.get(type)||0)+row.durationMinutes); }
+            const labels={Run:'跑步',TrailRun:'越野跑',VirtualRun:'室内跑步',Walk:'步行',Ride:'骑行',Swim:'游泳',Workout:'训练'};
+            charts.ring($('catalog-types'),data.pendingDuplicates ? [] : [...types].map(([label,value])=>({label:labels[label]||label,value})),{unit:'分钟',label:'运动类型时间构成'});
+            charts.heatmap($('catalog-calendar'),data.pendingDuplicates ? [] : window.StrideHubData.calendar(form.elements.from.value,form.elements.to.value,[...days].map(([date,value])=>({date,value})),'value',r=>r.value),{key:'value',unit:'分钟',label:'每日运动时长',onSelect:()=>{$('catalog-records').open=true;}});
+
             table($('catalog-table'), ['开始时间', '运动 / 来源', '距离 km', '时长 min', '心率 bpm', '记录与来源核对'], data.records.map(r => {
                 const controls = node('div');
                 for (const source of r.sources) {

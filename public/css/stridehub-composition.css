@@ -1,0 +1,37 @@
+.composition-panel { margin-block: 1.2rem; min-width: 0; }
+.composition-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:1rem; }
+.composition-heading h2 { margin:.25rem 0 .6rem; }
+.composition-heading p { max-width:75ch; }
+.composition-heading button { flex-shrink:0; }
+.composition-history, .composition-height form { display:flex; align-items:flex-end; gap:.8rem; flex-wrap:wrap; margin-block:1rem; }
+.composition-history label, .composition-height label { display:grid; gap:.4rem; flex:1 1 21rem; min-width:0; }
+.composition-panel select { width:100%; max-width:100%; min-height:44px; padding:.6rem .7rem; border:1px solid var(--hub-border, #d1d9dd); border-radius:10px; color:inherit; background:var(--hub-surface, #fff); font:inherit; }
+.composition-meta, .composition-height-source { overflow-wrap:anywhere; }
+.composition-summary { display:grid; grid-template-columns:repeat(auto-fit,minmax(145px,1fr)); gap:.8rem; margin-block:1rem; }
+.composition-summary-item { padding:1rem; border:1px solid var(--hub-border, #d9e0e4); border-radius:14px; background:var(--hub-surface, #fff); }
+.composition-summary-item strong { display:block; font-size:1.65rem; margin-block:.4rem; font-variant-numeric:tabular-nums; }
+.composition-summary-item p { margin:.2rem 0; }
+.composition-report-bmi { border-color:#8faeaa; }
+.composition-note { padding:.85rem 1rem; border-radius:10px; background:#eef3f3; color:#324e4a; line-height:1.65; }
+.composition-note.warning { background:#fff4dd; color:#79531a; }
+.composition-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(225px,1fr)); gap:.75rem; margin-block:1rem; }
+.composition-metric { border:1px solid var(--hub-border, #d9e0e4); border-radius:12px; padding:1rem; min-width:0; }
+.composition-metric.reference-outside { border-color:#d5b677; background:#fffbf2; }
+.composition-metric h4 { margin:0 0 .6rem; font-size:.95rem; overflow-wrap:anywhere; }
+.composition-value { font-size:1.5rem; font-weight:650; font-variant-numeric:tabular-nums; margin:.3rem 0; overflow-wrap:anywhere; }
+.composition-value span { font-size:.85rem; font-weight:400; margin-left:.35rem; }
+.composition-grade { display:inline-block; font-size:.8rem; line-height:1.5; border-radius:6px; background:#edf0f2; padding:.2rem .45rem; color:#465260; }
+.composition-grade.reference-outside { background:#fff0cf; color:#79531a; }
+.composition-metric p { overflow-wrap:anywhere; }
+.composition-metric .small { line-height:1.6; }
+.composition-height, .composition-raw { border-top:1px solid var(--hub-border, #d9e0e4); padding-top:1rem; margin-top:1rem; }
+.composition-panel summary { cursor:pointer; padding-block:.4rem; font-weight:600; }
+.composition-source-fields { margin:.6rem 0; }
+.composition-source-fields > div { padding:.5rem 0; border-bottom:1px solid var(--hub-border, #e2e7e9); }
+.composition-source-fields dt { font-size:.8rem; opacity:.75; }
+.composition-source-fields dd { margin:.25rem 0; overflow-wrap:anywhere; font-variant-numeric:tabular-nums; }
+.composition-source-fields .composition-source-fields { margin-left:.7rem; padding-left:.7rem; border-left:2px solid var(--hub-border, #d9e0e4); }
+.composition-source-fields .composition-source-fields .composition-source-fields { margin-left:0; padding-left:0; border-left:0; }
+.composition-panel .composition-error { color:#975518; }
+@media(max-width:600px) { .composition-heading { flex-direction:column; } .composition-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:.5rem; } .composition-metric { padding:.8rem; } .composition-metric h4 { font-size:.85rem; } .composition-value { font-size:1.25rem; } .composition-history label,.composition-height label { flex-basis:100%; } }
+@media(max-width:360px) { .composition-grid { grid-template-columns:1fr; } }

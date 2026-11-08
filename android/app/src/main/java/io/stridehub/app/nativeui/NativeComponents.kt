@@ -18,15 +18,15 @@ import androidx.compose.ui.unit.dp
     Box(Modifier.fillMaxSize(),contentAlignment=Alignment.TopCenter) {
         Column(Modifier.widthIn(max=760.dp).fillMaxWidth().fillMaxHeight()
             .verticalScroll(rememberScrollState()).padding(horizontal=20.dp,vertical=12.dp)
-            .padding(bottom=24.dp),verticalArrangement=Arrangement.spacedBy(18.dp),content=content)
+            .padding(bottom=24.dp),verticalArrangement=Arrangement.spacedBy(12.dp),content=content)
     }
 }
 
 @Composable fun PageHeader(eyebrow:String,title:String,subtitle:String) {
     Column(Modifier.fillMaxWidth().padding(top=4.dp,bottom=4.dp),verticalArrangement=Arrangement.spacedBy(7.dp)) {
-        Text(eyebrow,style=MaterialTheme.typography.labelMedium,color=MaterialTheme.colorScheme.primary,fontWeight=FontWeight.Bold)
+        if(eyebrow.isNotBlank() && eyebrow !in listOf("BODY","PLAN","STRIDEHUB")) Text(eyebrow,style=MaterialTheme.typography.labelMedium,color=MaterialTheme.colorScheme.primary,fontWeight=FontWeight.Bold)
         Text(title,style=MaterialTheme.typography.headlineLarge)
-        Text(subtitle,style=MaterialTheme.typography.bodyMedium,color=MaterialTheme.colorScheme.onSurfaceVariant)
+        if(subtitle.isNotBlank()) Text(subtitle,style=MaterialTheme.typography.bodyMedium,color=MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

@@ -118,21 +118,9 @@
         target.append(svg); return {svg, y, left, right};
     }
     function pressureChart(records) {
-        const target = $('#pressure-chart');
-        if (!records.length) { target.replaceChildren(node('p', 'health-empty', '这段时间还没有血压记录。点击“记一次血压”开始记录。')); return; }
-        const sorted = [...records].sort((a,b) => new Date(a.measuredAt) - new Date(b.measuredAt));
-        const start = +new Date(sorted[0].measuredAt), end = +new Date(sorted.at(-1).measuredAt);
-        const max = Math.ceil(Math.max(...records.map(r => r.systolic)) / 20) * 20 + 20;
-        const min = Math.max(0, Math.floor(Math.min(...records.map(r => r.diastolic)) / 20) * 20 - 20);
-        const {svg, y, left, right} = chartFrame(target, '收缩压与舒张压趋势，单位 mmHg；下方逐次记录可读取全部数值。', max, min);
-        const x = r => start === end ? (left + right) / 2 : left + 5 + (+new Date(r.measuredAt) - start) / (end - start) * (right - left - 10);
-        for (const [field, cls] of [['systolic','high'], ['diastolic','low']]) {
-            svg.append(svgNode('polyline', {points: sorted.map(r => `${x(r)},${y(r[field])}`).join(' '), fill: 'none', 'stroke-width': 2, class: cls}));
-            for (const r of sorted) { const dot = svgNode('circle', {cx: x(r), cy: y(r[field]), r: 3, fill: 'white', 'stroke-width': 2, class: cls}); dot.append(svgNode('title', {}, `${displayTime(r.measuredAt)} ${r[field]} mmHg`)); svg.append(dot); }
-        }
-        svg.append(svgNode('text', {x: left, y: 220}, displayTime(sorted[0].measuredAt)), svgNode('text', {x: right, y: 220, 'text-anchor': 'end'}, sorted.length > 1 ? displayTime(sorted.at(-1).measuredAt) : ''));
-        const legend = node('div', 'health-legend'); legend.append(node('span', 'high', '收缩压 / mmHg'), node('span', 'low', '舒张压 / mmHg')); target.append(legend);
+        window.StrideHubCharts.trend($('#pressure-chart'), records.map(r => ({...r, date:r.measuredAt})), {series: [{key:'systolic',label:'收缩压',color:'#ca5c72'},{key:'diastolic',label:'舒张压',color:'#5178b8'}], unit:'mmHg', label:'逐次血压 · 不跨缺失日期连线'});
     }
+
     function renderPressure() {
         const records = state.records; const target = $('#pressure-records'); target.replaceChildren();
         if (state.pressureRange) output('#pressure-range', `当前显示：${rangeLabel(state.pressureRange)} · ${records.length} 次测量。每次测量单独保留。`);
@@ -164,16 +152,8 @@
             const moon = svgNode('svg', {viewBox: '0 0 80 80', class: 'sleep-icon', 'aria-hidden': 'true'}); moon.append(svgNode('path', {d: 'M46 8A31 31 0 1 0 72 53 30 30 0 0 1 46 8Z'})); head.append(text, moon);
             const bar = node('div', 'stage-bar'), legend = node('div', 'stage-legend'); window.StrideHubData?.stages(bar, legend, latest); visual.append(head, bar, legend, node('p', 'subtle', '各阶段累计时长；不代表阶段发生顺序。')); visual.hidden = false;
         } else visual.hidden = true;
-        const chart = $('#sleep-chart');
-        if (!measured.length) chart.replaceChildren(node('p', 'health-empty', '这段时间暂无可用睡眠时长。可以扩大日期范围，或完成小米 / Zepp 同步后重试。'));
-        else {
-            const shownRange = state.sleepRange || {from: range.elements.from.value, to: range.elements.to.value};
-            const sorted = [...measured].sort((a,b) => a.date.localeCompare(b.date)); const from = Date.parse(shownRange.from), to = Date.parse(shownRange.to);
-            const {svg, y, left, right} = chartFrame(chart, '睡眠时长趋势，纵轴为小时；空缺日期保持空白。', Math.max(1, Math.ceil(Math.max(...measured.map(r => r.totalMinutes / 60)))));
-            const width = Math.max(2, Math.min(32, (right - left) * .8 / Math.max(1, (to - from) / 86400000 + 1)));
-            for (const record of sorted) { const x = from === to ? (left + right) / 2 : left + 5 + (Date.parse(record.date) - from) / (to - from) * (right - left - 10); const bar = svgNode('rect', {x: x - width/2, y: y(record.totalMinutes / 60), width, height: 194 - y(record.totalMinutes / 60), rx: 2, class: 'sleep-total'}); bar.append(svgNode('title', {}, `${record.date} ${minutes(record.totalMinutes)}`)); svg.append(bar); }
-            svg.append(svgNode('text', {x: left, y: 220}, shownRange.from.slice(5)), svgNode('text', {x: right, y: 220, 'text-anchor': 'end'}, shownRange.to.slice(5)), svgNode('text', {x: 46, y: 18}, '小时'));
-        }
+        const shownRange = state.sleepRange || {from: range.elements.from.value, to: range.elements.to.value};
+        window.StrideHubCharts.bars($('#sleep-chart'), window.StrideHubCharts.sleepRows(records, shownRange.from, shownRange.to), {series: window.StrideHubCharts.sleepSeries, stacked: true, unit: '小时', label: '每晚睡眠分期 · 累计时长'});
         for (const record of records.slice(0, state.sleepShown)) {
             const row = node('article', 'health-record'); const content = node('div', 'health-record-content');
             content.append(node('p', 'health-record-title', `${record.date} · ${minutes(record.totalMinutes)}`), node('p', 'health-record-meta', `${displayTime(record.startedAt)} 入睡 — ${displayTime(record.endedAt)} 醒来 · 设备时区 ${record.timeZone || '未知'} · ${record.sourceLabel || record.source}`));

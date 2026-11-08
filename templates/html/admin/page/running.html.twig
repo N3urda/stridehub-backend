@@ -21,7 +21,7 @@
 {% block page_content %}
 <div id="running-app" data-api="{{ relativeUrl('admin/running/api')|e('html_attr') }}" data-detail-base="{{ relativeUrl('activities')|e('html_attr') }}">
 <div class="shell">
-        <div class="hero"><div><p class="eyebrow">RUNNING ANALYTICS / 运动记录</p><h1>运动，让积累被看见。</h1><p class="muted">从长期积累到单次复盘，用真实记录读懂你的跑步。</p></div><span class="tag">公里 · 分钟 · bpm</span></div>
+        <div class="hero"><div><p class="eyebrow">RUNNING ANALYTICS / 运动记录</p><h1>运动与训练</h1><p class="muted">运动日历、周度积累与单次复盘。</p></div><span class="tag">公里 · 分钟 · bpm</span></div>
         {% include 'html/stridehub/workout-catalog.html.twig' %}
         {% include 'html/stridehub/workouts.html.twig' %}
         <h2 class="imported-running-heading">文件导入的跑步分析</h2>

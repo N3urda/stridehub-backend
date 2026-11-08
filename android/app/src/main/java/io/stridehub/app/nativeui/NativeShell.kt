@@ -47,12 +47,12 @@ object NativeAppearance {
         surfaceContainerHighest=Color(0xFF293C41),
         outline=Color(0xFF788E8C), outlineVariant=Color(0xFF33474A)
     ) else lightColorScheme(
-        primary=Color(0xFF006D60), onPrimary=Color.White,
-        primaryContainer=Color(0xFFDDF3ED), onPrimaryContainer=Color(0xFF123D35),
+        primary=Color(0xFF087E9B), onPrimary=Color.White,
+        primaryContainer=Color(0xFFE1F1F5), onPrimaryContainer=Color(0xFF123D35),
         secondary=Color(0xFF466784), onSecondary=Color.White,
         secondaryContainer=Color(0xFFE4EEF5), onSecondaryContainer=Color(0xFF233D52),
         tertiary=Color(0xFF875735), onTertiary=Color.White,
-        background=Color(0xFFF3F7F6), onBackground=Color(0xFF182F35),
+        background=Color(0xFFF3F6FA), onBackground=Color(0xFF182F35),
         surface=Color.White, onSurface=Color(0xFF182F35),
         surfaceVariant=Color(0xFFE9F0EE), onSurfaceVariant=Color(0xFF52676B),
         surfaceContainerLowest=Color.White, surfaceContainerLow=Color.White,
