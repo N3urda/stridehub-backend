@@ -32,11 +32,36 @@ final readonly class SleepService
         return $records;
     }
 
+    /** One main sleep per wake date; all original sessions remain available via list().
+     * @return list<array<string,mixed>>
+     */
+    public function daily(?string $from = null, ?string $to = null): array
+    {
+        return $this->selectMain($this->list($from, $to));
+    }
+
+    /** @param list<array<string,mixed>> $records
+     * @return list<array<string,mixed>>
+     */
+    private function selectMain(array $records, bool $sameWakeDate = false): array
+    {
+        $records = array_values(array_filter($records, fn (array $r): bool => !($r['isNap'] ?? false)
+            && (null === ($r['endedAt'] ?? null) || new \DateTimeImmutable($r['endedAt']) <= $this->clock->getCurrentDateTimeImmutable())));
+        $groups = [];
+        foreach ($records as $record) {
+            $groups[$sameWakeDate ? 'requested' : $record['date']][] = $record;
+        }
+        krsort($groups);
+        $days = array_map(SleepReconciler::combine(...), $groups);
+
+        return array_values($days);
+    }
+
     /** @return array<string, mixed>|null */
     public function forDate(string $date, ?string $timezone = null): ?array
     {
         if (null === $timezone) {
-            return $this->list($date, $date)[0] ?? null;
+            return $this->daily($date, $date)[0] ?? null;
         }
         $this->list($date, $date); // Validate the requested date consistently with the history API.
         try {
@@ -55,7 +80,7 @@ final readonly class SleepService
         }));
         usort($candidates, static fn (array $a, array $b): int => new \DateTimeImmutable($b['endedAt']) <=> new \DateTimeImmutable($a['endedAt']));
 
-        return $candidates[0] ?? null;
+        return $this->selectMain($candidates, true)[0] ?? null;
     }
 
     /** @return array<string, mixed> */
@@ -75,7 +100,7 @@ final readonly class SleepService
             'lastAttemptAt' => $lastAttemptAt, 'lastSuccessAt' => $stored['lastSuccessAt'] ?? null,
             'lastError' => !$configured ? null : ('error' === $state && 'syncing' === ($stored['state'] ?? '') ? '上次同步中断。' : ($stored['lastError'] ?? null)),
             'nextAction' => !$configured ? '请在服务器配置 Zepp 授权文件，再点击同步。' : ('error' === $state && 'syncing' === ($stored['state'] ?? '') ? '请点击同步重试。' : ($stored['nextAction'] ?? '点击同步可获取最新数据；手表需先同步到 Zepp 手机 App。')),
-            'recordCount' => count($this->repository->list('sleep')),
+            'recordCount' => count(array_filter($this->repository->list('sleep'), static fn (array $r): bool => 'zepp' === ($r['source'] ?? null))),
             'imported' => $stored['imported'] ?? 0, 'updated' => $stored['updated'] ?? 0, 'unchanged' => $stored['unchanged'] ?? 0, 'skipped' => $stored['skipped'] ?? 0,
         ];
     }

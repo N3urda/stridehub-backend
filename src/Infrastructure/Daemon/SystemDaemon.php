@@ -6,6 +6,7 @@ namespace App\Infrastructure\Daemon;
 
 use App\Console\Cache\PruneRenderCacheConsoleCommand;
 use App\Console\Health\SyncZeppConsoleCommand;
+use App\Console\Health\SyncMiFitnessConsoleCommand;
 use App\Console\Health\SyncZeppWorkoutsConsoleCommand;
 use App\Console\Import\RunAutomationRulesBackfillConsoleCommand;
 use App\Console\Import\RunFileImportConsoleCommand;
@@ -109,6 +110,24 @@ final class SystemDaemon implements Daemon
                     clock: $this->clock,
                     output: $this->getConsoleOutput(),
                     command: sprintf('bin/console %s --if-configured', SyncZeppConsoleCommand::NAME),
+                );
+                $process->start();
+
+                return resolve(true);
+            }
+        );
+
+        $extraConfiguredCronActionsOutput[] = '<info> - syncMiFitness (when connected): 35 * * * *</info>';
+        $actions[] = new Action(
+            key: 'syncMiFitness',
+            mutexTtl: 900,
+            expression: '35 * * * *',
+            performer: function (): PromiseInterface {
+                $process = new CronProcess(
+                    cronActionId: 'syncMiFitness',
+                    clock: $this->clock,
+                    output: $this->getConsoleOutput(),
+                    command: sprintf('bin/console %s --if-configured', SyncMiFitnessConsoleCommand::NAME),
                 );
                 $process->start();
 

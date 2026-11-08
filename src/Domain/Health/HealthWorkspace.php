@@ -21,6 +21,8 @@ final readonly class HealthWorkspace
         private ZeppDataService $zepp,
         private HealthPlanService $plans,
         private Clock $clock,
+        private ?MiFitnessService $miFitness = null,
+        private ?MiFitnessDataService $miFitnessData = null,
     ) {
     }
 
@@ -73,7 +75,7 @@ final readonly class HealthWorkspace
                 'percent' => null === $latest ? null : round(($goal['startWeightKg'] - $latest['weightKg']) / ($goal['startWeightKg'] - $goal['targetWeightKg']) * 100, 1)];
         }
         unset($goal);
-        $sleep = $this->sleep->list($from, $to);
+        $sleep = $this->sleep->daily($from, $to);
         $daily = $this->zepp->list($from, $to);
         $workouts = $this->workouts->overview($from, $to, $zone);
 
@@ -85,7 +87,7 @@ final readonly class HealthWorkspace
             'workouts' => $workouts, 'sessions' => $this->training->list('sessions', $from, $to),
             'checkIns' => $this->training->list('check-ins', $from, $to), 'healthPlans' => $this->plans->list(),
             'coverage' => ['sleepDays' => count($sleep), 'deviceDays' => count($daily), 'weightDays' => count($weightRows), 'meals' => count($meals), 'pendingWorkoutDuplicates' => $workouts['pendingDuplicates']],
-            'sync' => $this->zepp->status(),
+            'miFitnessData' => $this->miFitnessData?->overview($from, $to), 'sync' => $this->zepp->status(), 'miFitnessSync' => $this->miFitness?->status(),
         ];
     }
 }

@@ -23,7 +23,7 @@ Android 客户端源码位于 [`android/`](../../android/README.md)。安装 APK
 - 运动 `/admin/running`：Zepp 云端运动及心率/配速/步频/海拔曲线，原文件导入分析保留但不重复相加。
 - 计划 `/admin/plans`：训练课表与 AI 保存的减重、作息等计划，保留目标、依据和完成状态。
 
-[详细 Zepp 日数据](zepp-data-api.md)、[Zepp 运动及原始传感器](zepp-workouts-api.md)、[健康计划与体重 API](HEALTH-PLANS-AND-WEIGHT.md)。新记录复用已有存储表，无额外数据库迁移；升级代码后需重启应用及 daemon 才会加载新路由/定时任务。daemon 启动且授权存在时，每小时第 15 分钟同步日数据、第 25 分钟同步运动。只启动网页进程不代表后台调度运行。
+[小米全类型数据与多来源规则](mi-fitness.md)、[详细 Zepp 日数据](zepp-data-api.md)、[Zepp 运动及原始传感器](zepp-workouts-api.md)、[健康计划与体重 API](HEALTH-PLANS-AND-WEIGHT.md)。新记录复用已有存储表，无额外数据库迁移；升级代码后需重启应用及 daemon 才会加载新路由/定时任务。daemon 启动且授权存在时，每小时第 15 分钟同步日数据、第 25 分钟同步运动、第 35 分钟同步已配置的小米全类型数据。只启动网页进程不代表后台调度运行。
 
 ## 兼容 HTTP API（新 AI 接入使用 MCP）
 
@@ -144,7 +144,7 @@ Skill 先读取最新数据，按已有授权执行修改；仅要求分析时�
 | `GET /api/v1/health/blood-pressure/{id}` | 读取一条记录及当前版本 |
 | `PUT /api/v1/health/blood-pressure/{id}` | 稳定 ID 创建（`version:0`）或带当前版本局部更新 |
 | `DELETE /api/v1/health/blood-pressure/{id}?version=N` | 带当前版本删除，成功返回 204 |
-| `GET /api/v1/health/sleep?from=YYYY-MM-DD&to=YYYY-MM-DD` | 查询独立的 Zepp 睡眠日记录，返回 `records` |
+| `GET /api/v1/health/sleep?from=YYYY-MM-DD&to=YYYY-MM-DD` | 查询每日主睡眠（按记录完整度互补，无固定来源优先级），返回 `records`；全部来源见 `/sleep/sources` |
 | `GET /api/v1/health/sleep/status` | 查看同步配置、最近成功时间和失败恢复提示 |
 | `POST /api/v1/health/sleep/sync` | 正文 `{"days":30}`，同步最近 1–90 天 |
 

@@ -22,8 +22,8 @@ final readonly class SleepApiRequestHandler
     {
     }
 
-    #[Route('/api/v1/health/sleep{path}', name: 'api_v1_health_sleep', requirements: ['path' => '(?:/status|/sync)?'], defaults: ['path' => ''], priority: 40)]
-    #[Route('/admin/health/api/sleep{path}', name: 'admin_health_sleep_api', requirements: ['path' => '(?:/status|/sync)?'], defaults: ['path' => ''], priority: 40)]
+    #[Route('/api/v1/health/sleep{path}', name: 'api_v1_health_sleep', requirements: ['path' => '(?:/status|/sync|/sources)?'], defaults: ['path' => ''], priority: 40)]
+    #[Route('/admin/health/api/sleep{path}', name: 'admin_health_sleep_api', requirements: ['path' => '(?:/status|/sync|/sources)?'], defaults: ['path' => ''], priority: 40)]
     public function handle(Request $request, string $path): Response
     {
         try {
@@ -34,8 +34,11 @@ final readonly class SleepApiRequestHandler
             if (str_starts_with($request->getPathInfo(), '/admin/') && !$request->isMethod('GET') && !$this->csrf->isTokenValid(new CsrfToken('health', $request->headers->get('X-CSRF-Token')))) {
                 throw new TrainingError('页面校验已过期，请刷新后重试。', 403);
             }
-            if ('' === $path) {
+            if ('/sources' === $path) {
                 return new JsonResponse(['records' => $this->sleep->list($request->query->get('from'), $request->query->get('to'))]);
+            }
+            if ('' === $path) {
+                return new JsonResponse(['records' => $this->sleep->daily($request->query->get('from'), $request->query->get('to'))]);
             }
             if ('/status' === $path) {
                 return new JsonResponse($this->sleep->status());

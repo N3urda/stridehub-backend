@@ -191,9 +191,11 @@
             const pressure = state.data.observations?.bloodPressure;
             const sleep = state.data.observations?.sleep;
             observations.append(node('p', '', pressure ? `今日血压 ${pressure.systolic}/${pressure.diastolic} mmHg · ${format(pressure.measuredAt, true)}${pressure.pulse == null ? '' : ` · 脉搏 ${pressure.pulse} 次/分`}` : '今日血压：尚未记录。'));
-            observations.append(node('p', '', sleep ? `Zepp 睡眠 ${sleep.totalMinutes == null ? '时长未知' : `${Math.floor(sleep.totalMinutes / 60)} 小时 ${Math.round(sleep.totalMinutes % 60)} 分`} · 醒来 ${format(sleep.endedAt, true)}` : '今日醒来的 Zepp 睡眠：暂无可确认的记录。'));
+            observations.append(node('p', '', sleep ? ` ${sleep.sourceLabel || sleep.source} 睡眠 ${sleep.totalMinutes == null ? '时长未知' : `${Math.floor(sleep.totalMinutes / 60)} 小时 ${Math.round(sleep.totalMinutes % 60)} 分`} · 醒来 ${format(sleep.endedAt, true)}` : '今日醒来的睡眠：暂无可确认的记录。'));
             const sync = state.data.observations?.sleepSync;
             if (sync?.lastError) observations.append(node('p', 'muted', `Zepp 同步：${sync.lastError}`));
+            const miSync = state.data.observations?.miFitnessSync;
+            if (miSync?.lastError) observations.append(node('p', 'muted', `小米同步：${miSync.lastError}`));
             observations.append(node('p', 'muted', '自动同步与手填体感分别保留；不会据此自动修改课表。'));
             observations.append(node('div', 'divider'));
         }
