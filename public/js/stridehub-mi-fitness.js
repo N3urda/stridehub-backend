@@ -4,9 +4,13 @@
     if (!app) return;
     const sync = document.getElementById('mi-fitness-sync'), refresh = document.getElementById('mi-fitness-refresh'), status = document.getElementById('mi-fitness-status');
     const sources = document.getElementById('sleep-source-records');
-    let posting = false, generation = 0;
-    async function request(path, body) {
-        const controller = new AbortController(), timer = setTimeout(() => controller.abort(), body ? 900000 : 20000);
+    const connect = document.getElementById('mi-fitness-connect'), pairPanel = document.getElementById('mi-fitness-pair');
+    const pairQr = document.getElementById('mi-fitness-pair-qr'), pairStatus = document.getElementById('mi-fitness-pair-status'), pairExpiry = document.getElementById('mi-fitness-pair-expiry');
+    const pairCancel = document.getElementById('mi-fitness-pair-cancel'), pairRetry = document.getElementById('mi-fitness-pair-retry'), pairClose = document.getElementById('mi-fitness-pair-close');
+    let posting = false, generation = 0, statusGeneration = 0;
+    let configured = false, syncState = '', pairBusy = false, pairActive = false, pairAttempt = null, pairTimer = null, pairGeneration = 0, pairReadGeneration = 0, qrAttempt = null;
+    async function request(path, body, timeout = body ? 900000 : 20000) {
+        const controller = new AbortController(), timer = setTimeout(() => controller.abort(), timeout);
         try {
             const response = await fetch(app.dataset.apiBase + path, {method: body ? 'POST' : 'GET', credentials: 'same-origin', cache: 'no-store', signal: controller.signal,
                 headers: {Accept: 'application/json', ...(body ? {'Content-Type': 'application/json', 'X-CSRF-Token': app.dataset.csrf} : {})}, ...(body ? {body: JSON.stringify(body)} : {})});
@@ -15,13 +19,85 @@
             return data;
         } finally { clearTimeout(timer); }
     }
+    function updateActions() {
+        sync.disabled = posting || pairBusy || pairActive || !configured || syncState === 'syncing';
+        connect.disabled = posting || pairBusy || pairActive || syncState === 'syncing';
+        connect.textContent = configured ? '重新扫码连接' : '连接小米运动健康';
+        pairCancel.disabled = pairBusy;
+        pairRetry.disabled = pairBusy;
+    }
     async function readStatus() {
+        const current = ++statusGeneration;
         try {
             const data = await request('/mi-fitness/status');
+            if (current !== statusGeneration) return;
+            configured = data.configured === true; syncState = data.state;
             const labels = {not_configured: '尚未连接', idle: '等待首次同步', syncing: '正在同步', success: '同步完成', partial: '部分记录未能读取', no_data: '本次未发现记录', error: '同步未完成', auth_required: '需要重新连接'};
             status.textContent = `小米运动健康：${labels[data.state] || data.state}。${data.lastError || data.nextAction} 已保存 ${data.recordCount} 段睡眠。`;
-            sync.disabled = posting || !data.configured || data.state === 'syncing';
-        } catch { status.textContent = '无法读取小米状态，已有记录保留，请刷新重试。'; sync.disabled = true; }
+            updateActions();
+        } catch { if (current === statusGeneration) { status.textContent = '无法读取小米状态，已有记录保留，请刷新重试。'; configured = false; updateActions(); } }
+    }
+    function clearPairTimer() { clearTimeout(pairTimer); pairTimer = null; }
+    function showPairPanel(show) {
+        pairPanel.hidden = !show;
+        connect.setAttribute('aria-expanded', String(show));
+    }
+    function renderPair(data, reveal = false) {
+        pairActive = data.state === 'pending' || data.state === 'starting';
+        pairAttempt = data.attemptId || null;
+        if (pairActive || reveal) showPairPanel(true);
+        const labels = {pending: '等待扫码并在手机上确认授权。', starting: '正在生成二维码…', success: '绑定成功。先在小米运动健康 App 上传数据，再点击“同步小米数据（7 天）”。', expired: '二维码已过期，请重新获取。', cancelled: '已取消本次绑定。', error: '暂时无法完成绑定，请重试。', unavailable: '连接服务尚未就绪，请稍后重试。', not_configured: '尚未绑定小米账号。', idle: '尚未开始绑定。'};
+        pairStatus.textContent = data.message || labels[data.state] || '请刷新连接状态后重试。';
+        if (data.state === 'success') pairStatus.textContent = labels.success;
+        pairExpiry.textContent = '';
+        if (pairActive && data.expiresAt) {
+            const expiry = new Date(data.expiresAt);
+            if (!Number.isNaN(expiry.getTime())) pairExpiry.textContent = `二维码有效至 ${new Intl.DateTimeFormat('zh-CN', {hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23'}).format(expiry)}。`;
+        }
+        pairQr.hidden = data.state !== 'pending' || !pairAttempt;
+        if (!pairQr.hidden && qrAttempt !== pairAttempt) {
+            qrAttempt = pairAttempt;
+            pairQr.src = app.dataset.apiBase + '/mi-fitness/pair/qr?' + new URLSearchParams({attemptId: pairAttempt});
+        } else if (pairQr.hidden) { pairQr.removeAttribute('src'); qrAttempt = null; }
+        pairCancel.hidden = !pairActive;
+        pairRetry.hidden = pairActive || data.state === 'success';
+        pairClose.hidden = pairActive;
+        updateActions();
+    }
+    function schedulePairPoll(current) {
+        clearPairTimer();
+        if (pairActive && current === pairGeneration) pairTimer = setTimeout(() => readPairStatus(current), 3000);
+    }
+    async function readPairStatus(current = pairGeneration) {
+        const read = ++pairReadGeneration;
+        try {
+            const data = await request('/mi-fitness/pair/status');
+            if (current !== pairGeneration || read !== pairReadGeneration) return;
+            const wasActive = pairActive;
+            renderPair(data);
+            if (data.state === 'success' && wasActive) { await readStatus(); document.getElementById('health-refresh').click(); }
+        } catch {
+            if (current !== pairGeneration || read !== pairReadGeneration) return;
+            if (!pairPanel.hidden) pairStatus.textContent = '暂时无法读取绑定状态，正在重试。';
+        }
+        schedulePairPoll(current);
+    }
+    async function startPair() {
+        if (posting || pairBusy || pairActive) return;
+        const current = ++pairGeneration;
+        clearPairTimer(); pairBusy = true;
+        renderPair({state: 'starting'}, true);
+        try {
+            const data = await request('/mi-fitness/pair/start', {}, 60000);
+            if (current !== pairGeneration) return;
+            renderPair(data, true);
+            if (data.state === 'success') await readStatus();
+        } catch (error) {
+            if (current !== pairGeneration) return;
+            renderPair({state: 'error', message: error.message}, true);
+        } finally {
+            if (current === pairGeneration) { pairBusy = false; updateActions(); schedulePairPoll(current); }
+        }
     }
     async function readSources(range) {
         if (!range?.from || !range?.to) return;
@@ -52,7 +128,7 @@
     }
     sync.addEventListener('click', async () => {
         if (posting || sync.disabled) return;
-        posting = true; sync.disabled = true; status.textContent = '正在同步小米最近 7 天睡眠、活动与手环指标，请稍候…';
+        posting = true; updateActions(); status.textContent = '正在同步小米最近 7 天睡眠、活动与手环指标，请稍候…';
         let error = '';
         try { await request('/mi-fitness/sync', {days: 7}); }
         catch (e) { error = e.message + ' 结果请以刷新后的状态为准；历史记录保留。'; }
@@ -101,7 +177,30 @@
     }
     type.addEventListener('change', () => readRecords());
     more.addEventListener('click', () => readRecords(true));
-    refresh.addEventListener('click', () => { readStatus(); if (selectedRange) readData(selectedRange); });
+    connect.addEventListener('click', startPair);
+    pairRetry.addEventListener('click', startPair);
+    pairClose.addEventListener('click', () => showPairPanel(false));
+    pairCancel.addEventListener('click', async () => {
+        if (pairBusy || !pairActive) return;
+        const current = ++pairGeneration;
+        clearPairTimer(); pairBusy = true; updateActions();
+        try {
+            const data = await request('/mi-fitness/pair/cancel', {attemptId: pairAttempt}, 20000);
+            if (current !== pairGeneration) return;
+            renderPair(data, true);
+            if (data.state === 'success') await readStatus();
+        } catch {
+            if (current === pairGeneration) pairStatus.textContent = '取消请求未确认，正在刷新绑定状态。';
+        } finally {
+            if (current === pairGeneration) { pairBusy = false; updateActions(); await readPairStatus(current); }
+        }
+    });
+    pairQr.addEventListener('error', () => {
+        if (pairActive) pairStatus.textContent = '二维码加载失败，请取消后重新获取。';
+    });
+    refresh.addEventListener('click', () => { readStatus(); if (!pairBusy) readPairStatus(); if (selectedRange) readData(selectedRange); });
     app.addEventListener('health-records-refreshed', event => { readSources(event.detail); readData(event.detail); });
-    readStatus();
+    window.addEventListener('pagehide', () => { ++pairGeneration; clearPairTimer(); });
+    window.addEventListener('pageshow', event => { if (event.persisted) { readStatus(); readPairStatus(); } });
+    readStatus(); readPairStatus();
 })();

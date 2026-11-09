@@ -1,0 +1,44 @@
+# Optional Xiaomi connector: use together with docker-compose.yml.
+# The bridge has cloud access but no published host port. Browser requests go
+# through StrideHub's authenticated /admin/health/api/mi-fitness endpoints.
+services:
+    app:
+        environment:
+            MI_FITNESS_CREDENTIALS_FILE: /run/stridehub-mi-fitness/credentials.json
+            MI_FITNESS_PAIRING_FILE: /run/stridehub-mi-fitness/pairing-control.json
+        volumes:
+            - mi-fitness-connection:/run/stridehub-mi-fitness:ro
+        depends_on:
+            mi-fitness:
+                condition: service_healthy
+
+    daemon:
+        environment:
+            MI_FITNESS_CREDENTIALS_FILE: /run/stridehub-mi-fitness/credentials.json
+            MI_FITNESS_PAIRING_FILE: /run/stridehub-mi-fitness/pairing-control.json
+        volumes:
+            - mi-fitness-connection:/run/stridehub-mi-fitness:ro
+        depends_on:
+            mi-fitness:
+                condition: service_healthy
+
+    mi-fitness:
+        build:
+            context: ./
+            dockerfile: docker/mi-fitness/Dockerfile
+        restart: unless-stopped
+        volumes:
+            - mi-fitness-state:/data/mi-fitness
+            - mi-fitness-connection:/run/stridehub-mi-fitness
+        healthcheck:
+            test: ["CMD", "python", "-c", "import socket; socket.create_connection(('127.0.0.1', 8321), timeout=2).close()"]
+            interval: 15s
+            timeout: 5s
+            retries: 5
+            start_period: 20s
+        networks:
+            - statistics-for-strava-network
+
+volumes:
+    mi-fitness-state: {}
+    mi-fitness-connection: {}

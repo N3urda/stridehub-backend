@@ -60,3 +60,8 @@
 @media(max-width:640px){#health-app .section-title{flex-wrap:wrap;align-items:flex-start}#health-app .collection-facts{grid-template-columns:minmax(0,1fr)}#health-app .weight-form{padding:14px}#health-app .collection-summary{gap:3px 8px}#health-app .collection-receipt{font-size:11px;padding:3px 6px}#health-app .collection-summary-meta{font-size:12px}#health-app .collection-device{flex-wrap:wrap}}
 #health-app .weight-layout{grid-template-columns:minmax(0,1fr) minmax(300px,340px)}
 @media(max-width:1050px){#health-app .weight-layout{grid-template-columns:minmax(0,1fr)}}
+
+.mi-fitness-pair{padding:20px;margin:16px 0 24px;border:1px solid var(--line);border-radius:12px;background:#f5f8f3;overflow-wrap:anywhere}
+.mi-fitness-pair h3{font-size:17px;margin:0 0 10px}.mi-fitness-pair p{font-size:14px;line-height:1.7;margin:10px 0}
+.mi-fitness-pair-qr{display:block;width:240px;max-width:100%;height:auto;padding:12px;margin:16px 0;background:#fff;border-radius:8px;box-sizing:border-box}
+.mi-fitness-pair[hidden],.mi-fitness-pair-qr[hidden]{display:none}

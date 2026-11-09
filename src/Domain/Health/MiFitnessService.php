@@ -41,7 +41,7 @@ final readonly class MiFitnessService
             'lastError' => 'syncing' === ($stored['state'] ?? null) && 'error' === $state ? '上次同步中断，请重试。' : ($stored['lastError'] ?? null),
             'recordCount' => count(array_filter($this->repository->list('sleep'), static fn (array $r): bool => 'mi_fitness' === ($r['source'] ?? null))),
             'imported' => $stored['imported'] ?? 0, 'updated' => $stored['updated'] ?? 0, 'unchanged' => $stored['unchanged'] ?? 0, 'skipped' => $stored['skipped'] ?? 0,
-            'nextAction' => $configured ? '先在小米运动健康 App 上传数据，再同步；已有记录始终保留。' : '请在服务器配置小米连接器，详见 mi-fitness 接入文档。'];
+            'nextAction' => $configured ? '先在小米运动健康 App 上传数据，再同步；已有记录始终保留。' : '点击“连接小米运动健康”扫码绑定，绑定后可同步数据。'];
     }
 
     /** @return array<string,mixed> */

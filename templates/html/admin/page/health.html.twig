@@ -30,8 +30,16 @@
         <form id="health-range" class="health-range"><div class="health-range-shortcuts" role="group" aria-label="快捷日期范围"><button type="button" class="button small" data-health-days="7" aria-pressed="false">最近 7 天</button><button type="button" class="button small" data-health-days="30" aria-pressed="false">最近 30 天</button><button type="button" class="button small" data-health-days="90" aria-pressed="true">最近 90 天</button></div><label>开始日期<input type="date" name="from" required></label><label>结束日期<input type="date" name="to" required></label><button class="button" type="submit">查看这段时间</button><p id="health-applied-range" class="muted" role="status" aria-live="polite"></p><p id="health-timezone" class="muted"></p></form>
         <section id="sleep-section" class="health-panel sleep-panel" aria-labelledby="sleep-title">
             <div class="health-section-heading"><div><div class="hub-section-title"><span class="hub-section-icon">{{ icons.icon('sleep') }}</span><h2 id="sleep-title">睡眠 · 多来源互补</h2></div><p class="muted">小米与 Zepp 按记录完整度互补，同一段睡眠只统计一次；原始来源和小睡分别保留。</p></div><button type="button" id="sleep-sync" class="button" disabled>同步 Zepp（90 天）</button></div>
-            <div class="form-actions"><button type="button" id="mi-fitness-sync" class="button" disabled>同步小米数据（7 天）</button><button type="button" id="mi-fitness-refresh" class="button">刷新小米状态</button></div>
+            <div class="form-actions"><button type="button" id="mi-fitness-connect" class="button primary" aria-controls="mi-fitness-pair" aria-expanded="false">连接小米运动健康</button><button type="button" id="mi-fitness-sync" class="button" disabled>同步小米数据（7 天）</button><button type="button" id="mi-fitness-refresh" class="button">刷新小米状态</button></div>
             <p id="mi-fitness-status" role="status" aria-live="polite">正在读取小米连接状态…</p>
+            <section id="mi-fitness-pair" class="mi-fitness-pair" aria-labelledby="mi-fitness-pair-title" hidden>
+                <h3 id="mi-fitness-pair-title">扫码连接小米运动健康</h3>
+                <p>用本人的小米账号或米家 App 扫码，并在手机上确认授权。绑定后可同步最近 7 天数据。</p>
+                <img id="mi-fitness-pair-qr" class="mi-fitness-pair-qr" width="240" height="240" alt="小米账号绑定二维码" referrerpolicy="no-referrer" hidden>
+                <p id="mi-fitness-pair-status" role="status" aria-live="polite"></p>
+                <p id="mi-fitness-pair-expiry" class="muted"></p>
+                <div class="form-actions"><button type="button" id="mi-fitness-pair-cancel" class="button" hidden>取消绑定</button><button type="button" id="mi-fitness-pair-retry" class="button" hidden>重新获取二维码</button><button type="button" id="mi-fitness-pair-close" class="button" hidden>收起</button></div>
+            </section>
             <details class="health-history"><summary>所有来源与小睡（不重复计入趋势）</summary><div id="sleep-source-records"></div></details>
             <div id="sleep-status" role="status" class="form-status" aria-live="polite">正在读取同步状态…</div>
             <p id="sleep-sync-result" class="health-sync-result" hidden></p>
